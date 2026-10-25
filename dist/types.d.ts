@@ -76,6 +76,8 @@ interface ChatInput {
     /** Model and request state, reported on every change */
     onStatus?: (snapshot: ChatStatusSnapshot) => void;
 }
+/** Model preload request, a subset of ChatInput */
+type ChatPreloadInput = Pick<ChatInput, `model` | `limits` | `logging` | `onStatus`>;
 /** Stop the current request, its model load, or free the loaded model */
 type CancelChat = () => void;
 /** wllama wasm assets used by the CPU engine */
@@ -87,16 +89,22 @@ interface WllamaAssets {
     /** URL of the wllama compat worker script */
     compatWorker: string;
 }
+/** Request state that builds one status snapshot */
+interface ChatState {
+    /** Whether a reply is streaming right now */
+    requesting: boolean;
+    phase: LlmPhase;
+    /** Download or load progress, 0..100 */
+    percent: number;
+    /** Last request error, cleared when a reply starts */
+    error?: string;
+}
 /** One live chat request */
-interface ActiveCall {
+interface ActiveCall extends ChatState {
     token: number;
     input: ChatInput;
     controller: AbortController;
-    percent: number;
-    phase: LlmPhase;
-    requesting: boolean;
     cancelled: boolean;
-    error?: string;
 }
 /** Engine and backend overrides used by tests */
 interface RuntimeDeps {
@@ -267,4 +275,4 @@ interface EngineRunParams {
     /** Whether the caller stopped the generation */
     stopped: () => boolean;
 }
-export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, CancelChat, WllamaAssets, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeChatParams, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeChatParams, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };

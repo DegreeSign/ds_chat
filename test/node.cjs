@@ -2,6 +2,7 @@
 // Usage: yarn build && node test/node.cjs
 const {
     createChat,
+    preloadModel,
     ChatModelId,
     ChatStatus,
     LlmRole,
@@ -66,6 +67,25 @@ const main = async () => {
     assertEqual(empty.length >= 1, true, `empty prompt status`);
     assertEqual(empty[empty.length - 1].requesting, false, `empty not requesting`);
 
+    const preloadStatuses = [];
+    const preloaded = await preloadModel({
+        model: ChatModelId.qwen3_vl_2b,
+        limits: { maxThreads: 1 },
+        onStatus: snapshot => preloadStatuses.push(snapshot),
+    });
+    assertEqual(preloaded, false, `no preload without an engine`);
+    assertEqual(preloadStatuses.length >= 1, true, `preload status emitted`);
+    assertEqual(
+        preloadStatuses[preloadStatuses.length - 1].status,
+        LlmStatus.unsupported,
+        `preload unsupported`,
+    );
+    assertEqual(
+        preloadStatuses[preloadStatuses.length - 1].ready,
+        false,
+        `preload not ready`,
+    );
+
     createChat({
         model: ChatModelId.qwen3_vl_2b,
         messages: [user(`hello`)],
@@ -74,6 +94,7 @@ const main = async () => {
 
     const esm = await import(`../dist/node/chat.node.min.mjs`);
     assertEqual(typeof esm.createChat, `function`, `esm createChat`);
+    assertEqual(typeof esm.preloadModel, `function`, `esm preloadModel`);
     assertEqual(esm.ChatStatus.offline, ChatStatus.offline, `esm enum`);
     assertEqual(esm.LlmRole.user, LlmRole.user, `esm named export`);
     assertEqual(esm.ChatModelId.qwen3_vl_2b, ChatModelId.qwen3_vl_2b, `esm model id`);

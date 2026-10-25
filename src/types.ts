@@ -89,6 +89,9 @@ interface ChatInput {
     onStatus?: (snapshot: ChatStatusSnapshot) => void,
 }
 
+/** Model preload request, a subset of ChatInput */
+type ChatPreloadInput = Pick<ChatInput, `model` | `limits` | `logging` | `onStatus`>;
+
 /** Stop the current request, its model load, or free the loaded model */
 type CancelChat = () => void;
 
@@ -102,16 +105,23 @@ interface WllamaAssets {
     compatWorker: string,
 }
 
+/** Request state that builds one status snapshot */
+interface ChatState {
+    /** Whether a reply is streaming right now */
+    requesting: boolean,
+    phase: LlmPhase,
+    /** Download or load progress, 0..100 */
+    percent: number,
+    /** Last request error, cleared when a reply starts */
+    error?: string,
+}
+
 /** One live chat request */
-interface ActiveCall {
+interface ActiveCall extends ChatState {
     token: number,
     input: ChatInput,
     controller: AbortController,
-    percent: number,
-    phase: LlmPhase,
-    requesting: boolean,
     cancelled: boolean,
-    error?: string,
 }
 
 /** Engine and backend overrides used by tests */
@@ -280,6 +290,8 @@ export type {
     LlmLimits,
     ChatStatusSnapshot,
     ChatInput,
+    ChatPreloadInput,
+    ChatState,
     CancelChat,
     WllamaAssets,
     ActiveCall,

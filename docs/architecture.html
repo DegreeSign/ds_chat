@@ -382,13 +382,13 @@
     <header id="bar">
         <div class="brand">
             <h1>@degreesign/chat</h1>
-            <p class="meta" id="meta">one-shot on-device chat</p>
+            <p class="meta" id="meta">one-shot on-device chat · preload</p>
         </div>
         <div class="bands" id="bands"></div>
         <div class="tools">
             <input id="search" type="search" placeholder="find a function" autocomplete="off"
                 spellcheck="false">
-            <button id="flow" title="Number the createChat pipeline">flow</button>
+            <button id="flow" title="Number the send pipeline">flow</button>
             <button id="fit" title="Fit the whole map">fit</button>
             <button id="minus" title="Zoom out">-</button>
             <span id="zoom">100%</span>
@@ -419,12 +419,12 @@
             <h2>Reading the map</h2>
             <div class="card empty" style="font-size:11px">
                 Bands run top to bottom in dependency order: the host passes one
-                <b>ChatInput</b>, <b>createChat</b> binds its callbacks to the
-                shared runtime, the runtime lazily imports an engine, and the
-                engine streams the reply back. Hover brightens one function and
-                its neighbours, click pins it, and the panel lists every caller
-                and every callee plus the shortest path back to
-                <b>createChat</b>.
+                <b>ChatInput</b> or a smaller <b>ChatPreloadInput</b>,
+                <b>createChat</b> binds its callbacks to the shared runtime, the
+                runtime lazily imports an engine, and the engine streams the
+                reply back. Hover brightens one function and its neighbours,
+                click pins it, and the panel lists every caller and every callee
+                plus the shortest path back to the public entry.
             </div>
         </aside>
     </div>
@@ -440,7 +440,7 @@ const BANDS = [
     {
         id: `entry`,
         title: `2 · public entry, enums and types`,
-        hint: `createChat is the only runtime export`,
+        hint: `createChat and preloadModel are the runtime exports`,
     },
     {
         id: `runtime`,
@@ -482,10 +482,10 @@ const n = (file, id, line, label, sig, note = ``) =>
 const e = (from, to, kind) => EDGES.push({ from, to, kind });
 
 f(`host`, `host`, `host app`, `host app`, 0);
-f(`entry`, `entry`, `index.ts`, `src/index.ts`, 17);
+f(`entry`, `entry`, `index.ts`, `src/index.ts`, 18);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 48);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 302);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 186);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 314);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 245);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 241);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 31);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 362);
@@ -497,9 +497,9 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 9);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 11);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 11);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1158);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1271);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
-f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 86);
+f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 107);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 204);
 f(`vwebpack`, `test`, `webpack.config.cjs`, `test/webpack.config.cjs`, 41);
 f(`vassets`, `test`, `assets.ts`, `test/assets.ts`, 8);
@@ -512,23 +512,35 @@ f(`tsconfig`, `build`, `tsconfig.json`, `tsconfig.json`, 0);
 n(`host`, `input`, 0, `ChatInput`,
     `model · messages · limits · reasoning · logging · callbacks`,
     `One request, assembled and owned by the host app, images included`);
+n(`host`, `preload`, 0, `ChatPreloadInput`,
+    `model · limits · logging · onStatus`,
+    `Model preload request, the subset of ChatInput that createChat does not own`);
 n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
     `Returned by createChat; cancels the call or frees the model`);
 
 // entry, enums and types
-n(`entry`, `exports`, 1, `public exports`, `createChat + 6 enums`,
-    `Only createChat and the public types leave the package`);
-n(`chat`, `createChat`, 184, `createChat`, `(input: ChatInput) => CancelChat`,
+n(`entry`, `exports`, 1, `public exports`, `createChat · preloadModel + 6 enums`,
+    `Only createChat, preloadModel and the public types leave the package`);
+n(`chat`, `createChat`, 241, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
-n(`chat`, `createChatOn`, 19, `createChatOn`,
+n(`chat`, `createChatOn`, 50, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
     `Testable factory over one runtime`);
-n(`chat`, `emitStatus`, 26, `emitStatus`, `(call: ActiveCall) => void`,
-    `Derive availability and image support, publish one snapshot`);
-n(`chat`, `run`, 51, `run`, `(call: ActiveCall) => Promise<void>`,
+n(`chat`, `statusSnapshot`, 22, `statusSnapshot`,
+    `(service, model, state) => ChatStatusSnapshot`,
+    `Derive availability and image support, build one snapshot for chat or preload`);
+n(`chat`, `emitStatus`, 57, `emitStatus`, `(call: ActiveCall) => void`,
+    `Publish the snapshot for one live call`);
+n(`chat`, `run`, 61, `run`, `(call: ActiveCall) => Promise<void>`,
     `Resolve the model, load it, strip unsupported images, stream`);
-n(`chat`, `cancel`, 154, `cancel`, `(call: ActiveCall) => void`,
+n(`chat`, `cancel`, 164, `cancel`, `(call: ActiveCall) => void`,
     `Stale no-op, abort the stream, cancel the load, or unload`);
+n(`chat`, `createPreloadOn`, 195, `createPreloadOn`,
+    `(service: Runtime) => (input: ChatPreloadInput) => Promise<boolean>`,
+    `Testable preload factory over one runtime`);
+n(`chat`, `preloadModel`, 243, `preloadModel`,
+    `(input: ChatPreloadInput) => Promise<boolean>`,
+    `Download and load a model before the first chat, bound to the singleton`);
 n(`enums`, `enums`, 2, `enums`, `6 exported enums`,
     `LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, ChatModelId`);
 n(`types`, `records`, 11, `records`,
@@ -542,10 +554,13 @@ n(`types`, `snapshots`, 54, `ChatStatusSnapshot`,
 n(`types`, `input`, 73, `ChatInput · CancelChat`,
     `(input: ChatInput) => CancelChat`,
     `The whole public input and the only return value`);
-n(`types`, `call`, 106, `ActiveCall · Runtime`,
-    `token · input · controller · percent · phase · requesting`
+n(`types`, `preload`, 92, `ChatPreloadInput`,
+    `Pick<ChatInput, model | limits | logging | onStatus>`,
+    `The model preload subset a host may call before the first chat`);
+n(`types`, `call`, 108, `ChatState · ActiveCall · Runtime`,
+    `token · input · controller · requesting · phase · percent`
     + ` · load · chat · unload · cancelLoad · model`,
-    `One live call and the on-device runtime it drives`);
+    `One request state, one live call and the runtime it drives`);
 n(`types`, `params`, 160, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · signal`,
@@ -733,12 +748,12 @@ n(`harness`, `streamOf`, 115, `streamOf`, `(...chunks) => AsyncIterable`,
     `One scripted engine stream`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 138, `definitions`, `32 deferred cases`,
-    `exports, limits, prompt, images, stream, runtime, chat, threads, square`);
-n(`harness`, `main`, 1145, `main`, `() => Promise<void>`,
+n(`harness`, `definitions`, 138, `definitions`, `37 deferred cases`,
+    `exports, limits, prompt, images, stream, runtime, preload, chat, threads, square`);
+n(`harness`, `main`, 1258, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 24, `main`, `() => Promise<void>`,
-    `Requires both node entries, proves createChat works without a DOM`);
+    `Requires both node entries, proves createChat and preloadModel run without a DOM`);
 n(`drive`, `getJson`, 54, `getJson`, `(url) => Promise<unknown>`,
     `Reads CDP targets from the debug port`);
 n(`drive`, `serve`, 71, `serve`, `() => Promise<Server>`,
@@ -767,7 +782,7 @@ n(`webpack`, `nodeEsmConfig`, 120, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.1.0`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.2.0`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` exports point at dist/browser, dist/node cjs and dist/node esm`);
 n(`tsconfig`, `tsconfig`, 1, `tsconfig.json`, `strict, ES2022, CommonJS`,
@@ -775,11 +790,14 @@ n(`tsconfig`, `tsconfig`, 1, `tsconfig.json`, `strict, ES2022, CommonJS`,
 
 // host to entry
 e(`entry.exports`, `chat.createChat`, `type`);
+e(`entry.exports`, `chat.preloadModel`, `type`);
 e(`host.input`, `chat.createChatOn`, `type`);
+e(`host.preload`, `chat.createPreloadOn`, `type`);
 e(`host.cancel`, `chat.createChat`, `type`);
 
 // createChat wiring
 e(`chat.createChat`, `llm.runtime`, `call`);
+e(`chat.preloadModel`, `llm.runtime`, `call`);
 e(`chat.createChatOn`, `emitStatus`, `inner`);
 e(`chat.createChatOn`, `chat.run`, `inner`);
 e(`chat.createChatOn`, `chat.cancel`, `inner`);
@@ -792,11 +810,17 @@ e(`chat.run`, `load`, `call`);
 e(`chat.run`, `llm.chat`, `call`);
 e(`chat.cancel`, `llm.unload`, `call`);
 e(`chat.cancel`, `cancelLoad`, `call`);
-e(`chat.emitStatus`, `ready`, `call`);
-e(`chat.emitStatus`, `isLoading`, `call`);
-e(`chat.emitStatus`, `llm.model`, `call`);
-e(`chat.emitStatus`, `supportsImages`, `call`);
-e(`chat.emitStatus`, `types.snapshots`, `type`);
+e(`chat.emitStatus`, `chat.statusSnapshot`, `call`);
+e(`chat.createPreloadOn`, `chat.statusSnapshot`, `inner`);
+e(`chat.createPreloadOn`, `findLlmModel`, `call`);
+e(`chat.createPreloadOn`, `resolveLimits`, `call`);
+e(`chat.createPreloadOn`, `load`, `call`);
+e(`chat.createPreloadOn`, `types.preload`, `type`);
+e(`chat.createPreloadOn`, `types.call`, `type`);
+e(`chat.statusSnapshot`, `ready`, `call`);
+e(`chat.statusSnapshot`, `isLoading`, `call`);
+e(`chat.statusSnapshot`, `supportsImages`, `call`);
+e(`chat.statusSnapshot`, `types.snapshots`, `type`);
 e(`chat.run`, `supportsImages`, `call`);
 e(`chat.run`, `types.records`, `type`);
 e(`chat.run`, `types.call`, `type`);
@@ -857,7 +881,7 @@ e(`buildMessages`, `enums.enums`, `type`);
 e(`buildMessages`, `userContent`, `call`);
 e(`buildMessages`, `mergeContent`, `call`);
 e(`userContent`, `types.contentParts`, `type`);
-e(`mergeContent`, `contentParts`, `call`);
+e(`engine.mergeContent`, `engine.contentParts`, `call`);
 e(`replyOptions`, `limits`, `type`);
 e(`streamReply`, `createThinkSplitter`, `call`);
 e(`streamReply`, `logs`, `call`);
@@ -878,6 +902,7 @@ e(`types.params`, `enums.enums`, `type`);
 e(`types.runtimeContract`, `types.records`, `type`);
 e(`types.input`, `types.records`, `type`);
 e(`types.input`, `enums.enums`, `type`);
+e(`types.preload`, `types.input`, `type`);
 e(`types.snapshots`, `enums.enums`, `type`);
 e(`types.call`, `types.input`, `type`);
 
@@ -919,8 +944,8 @@ e(`wllama.unload`, `dropWllama`, `call`);
 e(`wllama.startLLM`, `wllama.cpuThreads`, `call`);
 
 // image resizing relations
-e(`images.resizeImages`, `images.resizeImageUrl`, `call`);
-e(`images.resizeImageUrl`, `images.maxSide`, `call`);
+e(`images.resizeImages`, `images.resizeUrl`, `call`);
+e(`images.resizeUrl`, `images.maxSide`, `call`);
 
 // loader and assets
 e(`loadWllama`, `ggufWeights`, `store`);
@@ -929,7 +954,9 @@ e(`assetsNodeEsm.defaultWllamaAssets`, `assetsNodePaths.wllamaAssetsAt`, `call`)
 
 // verification relations
 e(`harness.definitions`, `createChat`, `call`);
+e(`harness.definitions`, `chat.preloadModel`, `call`);
 e(`harness.definitions`, `createChatOn`, `call`);
+e(`harness.definitions`, `createPreloadOn`, `call`);
 e(`harness.definitions`, `createRuntime`, `call`);
 e(`harness.definitions`, `buildMessages`, `call`);
 e(`harness.definitions`, `createThinkSplitter`, `call`);
@@ -952,6 +979,7 @@ e(`harness.main`, `harness.definitions`, `call`);
 e(`harness.definitions`, `harness.test`, `call`);
 e(`harness.definitions`, `harness.assertions`, `call`);
 e(`vnode.main`, `createChat`, `call`);
+e(`vnode.main`, `chat.preloadModel`, `call`);
 e(`drive.run`, `harness.main`, `call`);
 e(`drive.run`, `drive.serve`, `call`);
 e(`drive.run`, `drive.getJson`, `call`);
@@ -1269,7 +1297,7 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
     };
 
     const pathToRoot = id => {
-        const target = `entry.createChat`;
+        const target = `entry.exports`;
         const prev = new Map([[id, null]]);
         const queue = [id];
         while (queue.length) {
@@ -1331,7 +1359,7 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
             ? chain.map(item => item === id
                 ? `<b>${esc(NODE_BY_ID.get(item).label)}</b>`
                 : esc(NODE_BY_ID.get(item).label)).join(` → `)
-            : `not reachable from createChat`;
+            : `not reachable from the entry`;
         return `<h2>${esc(band.title)}</h2>`
             + `<div class="card"><div class="path">${esc(file.path)}`
             + `${node.line ? ` · L` + node.line : ``}</div>`
@@ -1339,7 +1367,7 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
             + `<div class="sig">${esc(node.sig)}</div>`
             + (node.note ? `<div class="note">${esc(node.note)}</div>` : ``)
             + `</div>`
-            + `<h2>Path to createChat</h2><div class="card">`
+            + `<h2>Path to entry</h2><div class="card">`
             + `<div class="route">${route}</div></div>`
             + `<h2>Called by ${ins.size}</h2><div class="card"><div class="rel">`
             + (ins.size ? linkButtons(ins) : `<div class="empty">No caller</div>`)
@@ -1430,6 +1458,9 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
         send: {
             title: `createChat, one reply end to end`,
             steps: [
+                step([`host.preload`, `chat.preloadModel`, `llm.load`],
+                    ` Optional: a preload starts the same load early, so the`
+                    + ` first send joins it or finds the model ready.`),
                 step([`host.input`, `chat.createChat`],
                     ` The host passes the model, the whole message list, budgets`
                     + ` and the three callbacks.`),

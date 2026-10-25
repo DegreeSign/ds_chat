@@ -1,7 +1,7 @@
 // Browser test harness for @degreesign/chat.
 import * as entry from "../src/index";
-import { createChat } from "../src/index";
-import { createChatOn } from "../src/chat";
+import { createChat, preloadModel } from "../src/index";
+import { createChatOn, createPreloadOn } from "../src/chat";
 import { createRuntime } from "../src/service";
 import {
     buildMessages,
@@ -143,7 +143,9 @@ const definitions: Array<{
             name: `exports`,
             run: () => {
                 assertEqual(typeof createChat, `function`, `createChat`);
+                assertEqual(typeof preloadModel, `function`, `preloadModel`);
                 assertEqual(typeof createChatOn, `function`, `createChatOn`);
+                assertEqual(typeof createPreloadOn, `function`, `createPreloadOn`);
                 assertEqual(typeof createRuntime, `function`, `createRuntime`);
                 const names = Object.keys(entry).sort();
                 assertEqual(
@@ -156,6 +158,7 @@ const definitions: Array<{
                         `LlmRole`,
                         `LlmStatus`,
                         `createChat`,
+                        `preloadModel`,
                     ].join(`,`),
                     `public names`,
                 );
@@ -670,6 +673,116 @@ const definitions: Array<{
                 await first;
                 await second;
                 assertEqual(calls.chat, 2, `second chat ran`);
+            },
+        },
+        {
+            name: `preload/load and reuse`,
+            run: async () => {
+                const
+                    { runtime, calls, limits } = runtimeWith(),
+                    preload = createPreloadOn(runtime),
+                    statuses: ChatStatusSnapshot[] = [],
+                    loaded = await preload({
+                        model: ChatModelId.qwen3_vl_2b,
+                        limits: { maxThreads: 1 },
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(loaded, true, `preloaded`);
+                assertEqual(calls.start, 1, `started once`);
+                assertEqual(limits[0].maxThreads, 1, `preload limits`);
+                assertEqual(
+                    statuses.some(value => value.loading),
+                    true,
+                    `loading emitted`,
+                );
+                const last = statuses[statuses.length - 1];
+                assertEqual(last.ready, true, `ready end`);
+                assertEqual(last.percent, 100, `percent end`);
+                assertEqual(last.phase, LlmPhase.load, `load end`);
+                assertEqual(last.error, undefined, `no error`);
+                createChatOn(runtime)({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                });
+                await waitFor(() => calls.chat == 1, `chat after preload`);
+                assertEqual(calls.start, 1, `no second load`);
+                statuses.length = 0;
+                const reused = await preload({
+                    model: ChatModelId.qwen3_vl_2b,
+                    onStatus: value => statuses.push(value),
+                });
+                assertEqual(reused, true, `reused preload`);
+                assertEqual(calls.start, 1, `reuse skips start`);
+                assertEqual(statuses.length, 1, `one ready status`);
+                assertEqual(statuses[0].ready, true, `reuse ready`);
+            },
+        },
+        {
+            name: `preload/unknown model`,
+            run: async () => {
+                const
+                    { runtime, calls } = runtimeWith(),
+                    statuses: ChatStatusSnapshot[] = [],
+                    loaded = await createPreloadOn(runtime)({
+                        model: `missing` as ChatModelId,
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(loaded, false, `not preloaded`);
+                assertEqual(calls.start, 0, `no start`);
+                assertEqual(statuses[statuses.length - 1].error, `Unknown model`, `error`);
+            },
+        },
+        {
+            name: `preload/start failure`,
+            run: async () => {
+                const
+                    { runtime, calls } = runtimeWith({ failStart: true }),
+                    statuses: ChatStatusSnapshot[] = [],
+                    loaded = await createPreloadOn(runtime)({
+                        model: ChatModelId.qwen3_vl_2b,
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(loaded, false, `failed preload`);
+                assertEqual(calls.start, 1, `one start`);
+                const last = statuses[statuses.length - 1];
+                assertEqual(last.status, LlmStatus.error, `error status`);
+                assertEqual(last.error, `Model not ready`, `error`);
+            },
+        },
+        {
+            name: `preload/unsupported`,
+            run: async () => {
+                const
+                    fake = createFakeEngine({ backend: LlmBackend.cpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: fake.engine },
+                        backend: LlmBackend.none,
+                    }),
+                    statuses: ChatStatusSnapshot[] = [],
+                    loaded = await createPreloadOn(runtime)({
+                        model: ChatModelId.qwen3_vl_2b,
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(loaded, false, `unsupported preload`);
+                assertEqual(fake.calls.start, 0, `no start`);
+                const last = statuses[statuses.length - 1];
+                assertEqual(last.status, LlmStatus.unsupported, `unsupported`);
+                assertEqual(last.availability, ChatStatus.offline, `offline`);
+            },
+        },
+        {
+            name: `preload/public entry`,
+            run: async () => {
+                const
+                    statuses: ChatStatusSnapshot[] = [],
+                    loaded = await preloadModel({
+                        model: `missing` as ChatModelId,
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(loaded, false, `public preload`);
+                assertEqual(statuses.length, 1, `one status`);
+                assertEqual(statuses[0].error, `Unknown model`, `error`);
             },
         },
         {

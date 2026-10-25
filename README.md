@@ -85,12 +85,16 @@ import {
   ChatModelId,
   LlmRole,
   createChat,
+  preloadModel,
 } from "@degreesign/chat";
 
 const messages = [
   { role: LlmRole.system, content: "Answer in two sentences." },
   { role: LlmRole.user, content: "Hello" },
 ];
+
+// Optional: download and load the model before the first send.
+await preloadModel({ model: ChatModelId.qwen3_vl_2b });
 
 const cancel = createChat({
   model: ChatModelId.qwen3_vl_2b,
@@ -106,8 +110,10 @@ const cancel = createChat({
 cancel();
 ```
 
-There is no promise and no controller object. Every result arrives through the
-three callbacks, and `onStatus` reports `requesting: false` when the reply ends.
+There is no promise and no controller object on `createChat`. Every result
+arrives through the three callbacks, and `onStatus` reports `requesting: false`
+when the reply ends. `preloadModel` is the one promise: it resolves once the
+model is loaded, or `false` when it cannot load.
 
 Attach images to a user turn with `images: [dataUrl]`. The package sends them
 only to a model with vision support, center-crops each image to a square,
@@ -120,6 +126,7 @@ the call and appends the assistant message after the last `onResponse`.
 
 ```ts
 createChat(input: ChatInput): CancelChat
+preloadModel(input: ChatPreloadInput): Promise<boolean>
 ```
 
 Call it once per response. A new call aborts the previous stream. When the
@@ -147,6 +154,30 @@ requested model is already loaded, no download or load happens.
 | An older call | Nothing, because a newer call owns the runtime. |
 
 The model stays loaded between calls until a cancel frees it.
+
+### Preload
+
+```ts
+preloadModel(input: ChatPreloadInput): Promise<boolean>
+```
+
+Call it before the first `createChat` to download and load the model early. It
+resolves `true` when the runtime is ready and `false` when the model is unknown,
+unsupported or failed. A later `createChat` for the same model reuses the loaded
+runtime, and either call joins a load already in flight.
+
+`ChatPreloadInput` is the subset of `ChatInput` that a preload needs:
+
+| Field | Description |
+| ----- | ----------- |
+| `model` | `ChatModelId` to download and load. |
+| `limits?` | Partial `LlmLimits`; `maxThreads` applies when the model loads. |
+| `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
+| `onStatus?` | Receives a `ChatStatusSnapshot` on every progress and state change. |
+
+The final snapshot reports `ready: true`, `phase: LlmPhase.load` and
+`percent: 100` on success, or an `error` with `availability: ChatStatus.offline`
+on failure. A preload owns no cancel function; a new load replaces it.
 
 ## Status
 
@@ -274,14 +305,15 @@ assembly, budgets, status state and cancellation.
 
 The wllama engine needs a browser worker and wasm runtime. In Node,
 `createChat` reports `LlmStatus.unsupported` and `ChatStatus.offline` through
-`onStatus`, and the reply callbacks stay silent.
+`onStatus`, and the reply callbacks stay silent. `preloadModel` resolves `false`
+and reports the same unsupported status.
 
 ```js
-const { createChat, ChatModelId, LlmRole } = require("@degreesign/chat");
+const { createChat, preloadModel, ChatModelId, LlmRole } = require("@degreesign/chat");
 ```
 
 ```js
-import { createChat, ChatModelId, LlmRole } from "@degreesign/chat";
+import { createChat, preloadModel, ChatModelId, LlmRole } from "@degreesign/chat";
 ```
 
 The Node entries are `dist/node/chat.node.min.js` for `require` and
@@ -326,6 +358,7 @@ const useReply = () => {
 | Type | Description |
 | ---- | ----------- |
 | `ChatInput` | One request: model, messages, budgets, reasoning and callbacks. |
+| `ChatPreloadInput` | Model, limits, logging and status, the subset `preloadModel` needs. |
 | `CancelChat` | The function returned by `createChat`. |
 | `ChatMessage` | One prompt turn, `role`, `content` and optional `images`. |
 | `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |

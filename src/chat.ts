@@ -2,6 +2,7 @@ import { findLlmModel, supportsImages } from './models';
 import { runtime } from './service';
 import { resolveLlmLimits } from './engines/engine';
 import {
+    ChatModelId,
     ChatStatus,
     LlmPhase,
     LlmRole,
@@ -11,9 +12,39 @@ import type {
     ActiveCall,
     CancelChat,
     ChatInput,
+    ChatPreloadInput,
+    ChatState,
     ChatStatusSnapshot,
     Runtime,
 } from './types';
+
+/** Build one model and request status snapshot */
+const statusSnapshot = (
+    service: Runtime,
+    model: ChatModelId,
+    state: ChatState,
+): ChatStatusSnapshot => {
+    const
+        status = service.status(),
+        catalog = findLlmModel(model),
+        availability = status == LlmStatus.ready
+            ? ChatStatus.online
+            : status == LlmStatus.error || status == LlmStatus.unsupported
+                ? ChatStatus.offline
+                : ChatStatus.away;
+    return {
+        availability,
+        status,
+        backend: service.backend(),
+        supportsImages: catalog ? supportsImages(catalog) : false,
+        ready: service.ready(),
+        loading: service.loading(),
+        requesting: state.requesting,
+        phase: state.phase,
+        percent: state.percent,
+        ...(state.error ? { error: state.error } : {}),
+    };
+};
 
 /** Build a one-shot chat function over one runtime */
 const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
@@ -23,30 +54,9 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
 
     const
         /** Report the current model and request state */
-        emitStatus = (call: ActiveCall) => {
-            const
-                status = service.status(),
-                backend = service.backend(),
-                model = findLlmModel(call.input.model),
-                availability = status == LlmStatus.ready
-                    ? ChatStatus.online
-                    : status == LlmStatus.error || status == LlmStatus.unsupported
-                        ? ChatStatus.offline
-                        : ChatStatus.away,
-                snapshot: ChatStatusSnapshot = {
-                    availability,
-                    status,
-                    backend,
-                    supportsImages: model ? supportsImages(model) : false,
-                    ready: service.ready(),
-                    loading: service.loading(),
-                    requesting: call.requesting,
-                    phase: call.phase,
-                    percent: call.percent,
-                    ...(call.error ? { error: call.error } : {}),
-                };
-            call.input.onStatus?.(snapshot);
-        },
+        emitStatus = (call: ActiveCall) =>
+            call.input.onStatus?.(
+                statusSnapshot(service, call.input.model, call)),
         /** Run one request: load the model, then stream one reply */
         run = async (call: ActiveCall): Promise<void> => {
             const
@@ -181,6 +191,55 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
     };
 };
 
+/** Build a model preload over one runtime */
+const createPreloadOn = (service: Runtime) => async (
+    input: ChatPreloadInput,
+): Promise<boolean> => {
+    const
+        model = findLlmModel(input.model),
+        report = (state: ChatState) =>
+            input.onStatus?.(
+                statusSnapshot(service, input.model, state));
+    if (!model) {
+        report({
+            requesting: false,
+            phase: LlmPhase.download,
+            percent: 0,
+            error: `Unknown model`,
+        });
+        return false;
+    };
+    let
+        error: string | undefined,
+        percent = 0,
+        phase = LlmPhase.download;
+    const
+        wasReady = service.ready() && service.model()?.id == model.id,
+        loaded = await service.load({
+            model,
+            limits: resolveLlmLimits(input.limits),
+            logging: input.logging === true,
+            onProgress: (value, next) => {
+                percent = Math.round(value * 100);
+                phase = next;
+                report({ requesting: false, phase, percent });
+            },
+        }).catch(reason => {
+            error = `${(reason as Error)?.message || `${reason}`}`;
+            return false;
+        });
+    if (loaded) {
+        // reuse reported no progress
+        if (wasReady)
+            report({ requesting: false, phase: LlmPhase.load, percent: 100 });
+        return true;
+    };
+    report({ requesting: false, phase, percent, error: error || `Model not ready` });
+    return false;
+};
+
 const createChat = createChatOn(runtime);
 
-export { createChat, createChatOn };
+const preloadModel = createPreloadOn(runtime);
+
+export { createChat, createChatOn, createPreloadOn, preloadModel };

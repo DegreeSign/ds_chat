@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Add `preloadModel`, a promise that downloads and loads a model before the
+  first `createChat` call, so the first reply starts without a load.
+- Add `ChatPreloadInput`, the subset of `ChatInput` that a preload accepts:
+  `model`, `limits`, `logging` and `onStatus`.
+
 ## 0.1.0
 
 - Replace the facade with one-shot `createChat` calls that return a cancel

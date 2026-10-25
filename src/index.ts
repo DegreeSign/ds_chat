@@ -1,4 +1,4 @@
-export { createChat } from './chat';
+export { createChat, preloadModel } from './chat';
 export {
     LlmRole,
     ChatStatus,
@@ -12,6 +12,7 @@ export type {
     LlmLimits,
     ChatStatusSnapshot,
     ChatInput,
+    ChatPreloadInput,
     CancelChat,
     WllamaAssets,
 } from './types';
