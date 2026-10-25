@@ -41,7 +41,7 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   Never hardcode a host asset path; use `ChatInput.wllama` for overrides.
 - Record `ChangeLog.md` only when the package gains a new export. Fixes,
   performance work and internal changes stay out of it.
-- Keep `docs/index.html` current with every change. Update the file line
+- Keep `docs/architecture.html` current with every change. Update the file line
   counts, node line numbers, added or removed helpers, edges and the send flow
   in the same change, so the map never drifts from the source.
 - Model weights are never stored in the repository. The engines own their

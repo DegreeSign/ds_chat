@@ -8,7 +8,7 @@ loads one model, streams one reply and reports status.
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](#licensing)
 [![node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](#faq)
 [![types](https://img.shields.io/badge/types-included-brightgreen.svg)](#faq)
-[![architecture](https://img.shields.io/badge/architecture-view-blue.svg)](https://degreesign.github.io/ds_chat/)
+[![architecture](https://img.shields.io/badge/architecture-view-blue.svg)](https://degreesign.github.io/ds_chat/architecture.html)
 
 ## Table of contents
 
@@ -318,7 +318,7 @@ The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,
 ## Architecture
 
 An interactive map of the package lives at
-[degreesign.github.io/ds_chat](https://degreesign.github.io/ds_chat/). It covers
+[degreesign.github.io/ds_chat/architecture.html](https://degreesign.github.io/ds_chat/architecture.html). It covers
 the two entries, every source module with line numbers, the helper edges and the
 send flow.
 
