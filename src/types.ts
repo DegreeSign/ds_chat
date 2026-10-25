@@ -180,10 +180,18 @@ interface StoredPart {
     etag: string,
 }
 
+/** One part file of a model, at its byte offset */
+interface StoredFilePart {
+    /** Byte offset of the part in the model file */
+    start: number,
+    /** Bytes stored in the part */
+    size: number,
+}
+
 /** One stored model file, complete or still downloading */
 interface StoredModel extends StoredPart {
-    /** The stored bytes, a snapshot of the file on disk */
-    file: File,
+    /** The stored bytes, a snapshot of the parts on disk */
+    file: Blob,
     /** Whether every byte of the total is stored */
     complete: boolean,
 }
@@ -402,6 +410,7 @@ export type {
     RuntimeLoadWaiter,
     RuntimeChatParams,
     StoredPart,
+    StoredFilePart,
     StoredModel,
     StoredModelMeta,
     ResumePlan,

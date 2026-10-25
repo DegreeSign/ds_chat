@@ -229,9 +229,9 @@ const chatOn = async ({
         },
     });
 
-/** Whether a failed store write comes from the file system, not the network */
+/** Whether a failed store write means this host cannot use a file store */
 const isStoreError = (error: unknown): boolean =>
-    [`QuotaExceededError`, `NotAllowedError`, `NotSupportedError`, `InvalidStateError`]
+    [`NotAllowedError`, `NotSupportedError`]
         .includes((error as DOMException)?.name || ``);
 
 /** Start the GPU runtime, the unified engine entry */

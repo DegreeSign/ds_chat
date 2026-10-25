@@ -12,6 +12,8 @@ declare const replyOptions: (limits: LlmLimits, reasoning: boolean) => {
 declare const 
 /** Resolve one model file on the model host */
 modelUrl: (repo: string, file: string) => string, 
+/** Declared size of one download, zero when the host hides it */
+contentLength: (response: Response) => number, 
 /** Whether any turn carries an image */
 hasImages: (messages: EngineMessage[]) => boolean;
 declare const 
@@ -30,4 +32,4 @@ streamReply: ({ model, logging, onReason, onText, start, stopped, }: StreamReply
 declare const 
 /** Build the prompt and stream one reply through an engine */
 runEngineChat: ({ model, params, start, stopped, }: EngineRunParams) => Promise<string | undefined>;
-export { buildMessages, createThinkSplitter, logChatCall, runEngineChat, streamReply, replyOptions, defaultLlmLimits, resolveLlmLimits, hasImages, modelUrl, };
+export { buildMessages, createThinkSplitter, logChatCall, runEngineChat, streamReply, replyOptions, defaultLlmLimits, resolveLlmLimits, hasImages, modelUrl, contentLength, };

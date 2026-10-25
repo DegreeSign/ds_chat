@@ -57,21 +57,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             if (model.cpu && wasmSupported()) return cpuEngine;
             return undefined;
         },
-        /** Whether the browser reports the origin over its storage quota */
-        isOverQuota = async (): Promise<boolean> => {
-            try {
-                if (typeof navigator == `undefined`) return false;
-                if (!navigator.storage?.estimate) return false;
-                const { quota = 0, usage = 0 } = await navigator.storage.estimate();
-                return !!quota && usage >= quota;
-            } catch { return false; };
-        },
-        /** Whether a failed load ran out of storage quota */
-        isQuotaError = (error: unknown): boolean =>
-            [`quota`, `no space`, `disk full`, `ns_error_dom_quota_reached`].some(part =>
-                `${(error as Error)?.name || ``} ${(error as Error)?.message || `${error}`}`
-                    .toLowerCase().includes(part)
-            ),
         /** Ask the browser to keep the model cache across eviction */
         persistStorage = async () => {
             try {
@@ -193,9 +178,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 if (token != loadToken) return false;
                 const cached = await engine.cached(model);
                 if (token != loadToken) return false;
-                // stale artifacts can push the origin over quota, clear them before downloading
-                if (!cached && await isOverQuota()) await engine.purge();
-                if (token != loadToken) return false;
                 setStatus(LlmStatus.downloading);
                 reportProgress(0, LlmPhase.download);
                 // nothing to download, the model loads straight from the cache
@@ -232,8 +214,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     activeModel = undefined;
                     activeEngine = undefined;
                     if (logging) console.log(`Local model failed`, error);
-                    // a download cut short by the browser quota leaves an unusable cache behind
-                    if (isQuotaError(error)) await engine.purge();
                     setStatus(LlmStatus.error);
                     return false;
                 } finally {

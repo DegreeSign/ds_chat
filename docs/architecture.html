@@ -484,14 +484,14 @@ const e = (from, to, kind) => EDGES.push({ from, to, kind });
 f(`host`, `host`, `host app`, `host app`, 0);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 18);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 50);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 428);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 437);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 248);
-f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 296);
+f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 276);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 44);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 380);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 295);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 351);
-f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 308);
+f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 485);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
 f(`litertLoader`, `engines`, `litertLoader.js`,
@@ -501,7 +501,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1774);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 2011);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 148);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 204);
@@ -572,11 +572,11 @@ n(`types`, `load`, 154, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
     + ` · report · settle`,
     `One load request and one caller waiting on the load it joined`);
-n(`types`, `store`, 174, `StoredPart · StoredModel · StoredModelMeta`
-    + ` · ResumePlan · StoreDownloadParams`,
-    `size · total · etag · complete · file · start · signal`,
-    `What the model file store keeps on disk, where one response resumes and`
-    + ` one download request`);
+n(`types`, `store`, 174, `StoredPart · StoredFilePart · StoredModel`
+    + ` · StoredModelMeta · ResumePlan · StoreDownloadParams`,
+    `size · total · etag · start · complete · file · signal`,
+    `What the model file store keeps in its parts and metadata, where one`
+    + ` response resumes and one download request`);
 n(`types`, `params`, 242, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · signal`,
@@ -601,40 +601,39 @@ n(`types`, `litertParams`, 283, `LitertChatParams · StreamLitertParams`,
 n(`llm`, `createRuntime`, 17, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
     `One module singleton, fake engines in tests`);
 n(`llm`, `probes`, 39, `probes`,
-    `wasmSupported · webgpuSupported · persistStorage`
-    + ` · isOverQuota · isQuotaError`,
+    `wasmSupported · webgpuSupported · persistStorage`,
     `Capability and storage checks, guarded`);
 n(`llm`, `engineFor`, 50, `engineFor`,
     `(model: ChatModel) => LlmEngine | undefined`,
     `Test override, then the model artifact and WebGPU or wasm capability`);
-n(`llm`, `evictPrevious`, 83, `evictPrevious`,
+n(`llm`, `evictPrevious`, 68, `evictPrevious`,
     `(model, engine) => Promise<void>`,
     `Unload the previous model, remove its cache, keep the loaded engine only`);
-n(`llm`, `reportProgress`, 102, `reportProgress`, `(value, phase?) => void`,
+n(`llm`, `reportProgress`, 87, `reportProgress`, `(value, phase?) => void`,
     `Clamp 0..1 and report to every caller waiting on the load`);
-n(`llm`, `setStatus`, 111, `setStatus`, `(next: LlmStatus) => void`,
+n(`llm`, `setStatus`, 96, `setStatus`, `(next: LlmStatus) => void`,
     `Store the engine status for the next snapshot`);
-n(`llm`, `abortLoad`, 115, `abortLoad`, `() => void`,
+n(`llm`, `abortLoad`, 100, `abortLoad`, `() => void`,
     `Bump the load token, abort the engine call and return to idle`);
-n(`llm`, `releaseWaiter`, 123, `releaseWaiter`, `(waiter) => void`,
+n(`llm`, `releaseWaiter`, 108, `releaseWaiter`, `(waiter) => void`,
     `Drop one caller, then abort in a microtask once nobody waits`);
-n(`llm`, `followLoad`, 131, `followLoad`, `(onProgress, signal?) => Promise<boolean>`,
+n(`llm`, `followLoad`, 116, `followLoad`, `(onProgress, signal?) => Promise<boolean>`,
     `Follow the shared load, leave on abort, never restart the download`);
-n(`llm`, `ready`, 160, `ready`, `() => boolean`,
+n(`llm`, `ready`, 145, `ready`, `() => boolean`,
     `Ready status plus a runtime and an active model`);
-n(`llm`, `load`, 163, `load`,
+n(`llm`, `load`, 148, `load`,
     `({ model, limits, assets, logging, signal, onProgress }) => Promise<boolean>`,
     `Join the same load, abandon the wait on abort, abort a different model,`
     + ` pick the engine, evict, cache check, startLLM, keep one runtime`);
-n(`llm`, `unload`, 255, `unload`, `() => Promise<void>`,
+n(`llm`, `unload`, 235, `unload`, `() => Promise<void>`,
     `Abort the load, release the engine, keep the cache`);
-n(`llm`, `chat`, 265, `chat`, `(params) => Promise<string | undefined>`,
+n(`llm`, `chat`, 245, `chat`, `(params) => Promise<string | undefined>`,
     `Serialize one engine turn, then stream on the loaded runtime`);
-n(`llm`, `isLoading`, 279, `isLoading`, `() => boolean`,
+n(`llm`, `isLoading`, 259, `isLoading`, `() => boolean`,
     `Not ready and downloading`);
-n(`llm`, `model`, 290, `runtime.model`, `() => ChatModel | undefined`,
+n(`llm`, `model`, 263, `runtime.model`, `() => ChatModel | undefined`,
     `The model currently loaded on the runtime`);
-n(`llm`, `runtime`, 294, `runtime`, `createRuntime()`,
+n(`llm`, `runtime`, 274, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
@@ -779,38 +778,61 @@ n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `import() of the bundled engine-litert chunk, fetched on demand`);
 
 // model file store
-n(`store`, `dir`, 12, `storeDirName · downloads · unsupported`,
-    `litert-store · Map<string, Promise<StoredModel>> · boolean`,
-    `Directory under the origin private file system, the downloads in`
-    + ` flight and whether this process has no writable file system`);
-n(`store`, `storeName`, 24, `storeName`, `(url) => string`,
-    `Stable file name for one model URL, a hash and the file name`);
-n(`store`, `storeRoot`, 33, `storeRoot`,
+n(`store`, `dir`, 13, `storeDirName · partBytes · maxStalls`
+    + ` · idleTimeout · downloads · unsupported`,
+    `litert-store · 32 MiB · 4 · 30000 · Map<string, Promise<StoredModel>>`
+    + ` · boolean`,
+    `Directory under the origin private file system, the part size, the stall`
+    + ` budget, the downloads in flight and whether this process has no`
+    + ` writable file system`);
+n(`store`, `storeName`, 31, `storeName`, `(url) => string`,
+    `Stable model directory name for one URL, a hash and the file name`);
+n(`store`, `parts`, 40, `partName · partOffset · chainParts`,
+    `(start) => string · (name) => number · (parts) => StoredFilePart[]`,
+    `Name one part by its byte offset, read that offset back, and keep only`
+    + ` the contiguous chain from zero`);
+n(`store`, `storeRoot`, 59, `storeRoot`,
     `() => Promise<FileSystemDirectoryHandle | undefined>`,
     `Open the origin private file system, absent in Node`);
-n(`store`, `storeDir`, 44, `storeDir`,
+n(`store`, `storeDir`, 70, `storeDir`,
     `() => Promise<FileSystemDirectoryHandle | undefined>`,
     `Open the store directory, created on demand`);
-n(`store`, `files`, 52, `readFile · readMeta · writeMeta · removeFrom`,
-    `(dir, name) => Promise<File | StoredModelMeta | void>`,
-    `Read the bytes, read and write the metadata beside them, delete both`);
-n(`store`, `readStored`, 101, `readStored`, `(dir, name) => Promise<StoredModel?>`,
-    `Stored bytes plus metadata, undefined when either is missing`);
-n(`store`, `resumePlan`, 120, `resumePlan`, `(response, part) => ResumePlan?`,
-    `Accept a 206 that continues the stored part and matches its size and`
-    + ` entity tag, restart on anything else`);
-n(`store`, `downloadInto`, 147, `downloadInto`,
+n(`store`, `meta`, 78, `modelDir · parseMeta · readMeta · writeMeta`,
+    `(dir, name) => Promise<FileSystemDirectoryHandle?>`
+    + ` · (handle) => Promise<StoredModelMeta?>`,
+    `Open one model directory, parse its metadata file, read and write the`
+    + ` size and entity tag beside the parts`);
+n(`store`, `parthandling`, 121, `storeEntries · removeParts · readParts`,
+    `(dir) => AsyncIterable · Promise<void> · Promise<Blob?>`,
+    `Iterate one directory, delete stale parts, and compose the contiguous`
+    + ` prefix into one Blob`);
+n(`store`, `readLegacy`, 163, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
+    `Read a model an older version stored as one file and metadata`);
+n(`store`, `removeFrom`, 185, `removeFrom`, `(dir, name) => Promise<void>`,
+    `Delete one model directory, its parts and its metadata`);
+n(`store`, `readStored`, 193, `readStored`, `(dir, name) => Promise<StoredModel?>`,
+    `Stored bytes plus metadata, complete once the parts reach the total`);
+n(`store`, `resumePlan`, 216, `resumePlan`, `(response, part) => ResumePlan?`,
+    `Accept a 206 that continues the parts and matches their size and entity`
+    + ` tag, trust the request when the host hides the range`);
+n(`store`, `storeBody`, 245, `storeBody`,
+    `({ dir, start, skip, total, body, onProgress, onChunk }) => Promise<number>`,
+    `Write one response body into 32 MiB parts, skip a replayed prefix, commit`
+    + ` every part, report absolute progress and reset the idle timer on each`
+    + ` chunk`);
+n(`store`, `downloadInto`, 319, `downloadInto`,
     `(dir, url, signal, onProgress) => Promise<StoredModel>`,
-    `Request only the missing bytes with a closed range, write each chunk`
-    + ` at its offset, keep the part on any failure, record size and etag`);
-n(`store`, `storedModel`, 268, `storedModel`, `(url) => Promise<StoredModel?>`,
+    `Request a bounded range of the missing bytes, retry a stalled or cut`
+    + ` connection from the last committed part, check size and etag, replay a`
+    + ` full body over stored parts and keep every part on any failure`);
+n(`store`, `storedModel`, 444, `storedModel`, `(url) => Promise<StoredModel?>`,
     `Bytes and metadata of one stored model file`);
-n(`store`, `downloadModel`, 273, `downloadModel`,
+n(`store`, `downloadModel`, 449, `downloadModel`,
     `({ url, signal, onProgress }) => Promise<StoredModel?>`,
     `Share one download per URL and store it, undefined without a file system`);
-n(`store`, `removeModel`, 289, `removeModel`, `(url) => Promise<void>`,
+n(`store`, `removeModel`, 465, `removeModel`, `(url) => Promise<void>`,
     `Delete one stored model file and its metadata`);
-n(`store`, `purgeModels`, 295, `purgeModels`, `() => Promise<void>`,
+n(`store`, `purgeModels`, 471, `purgeModels`, `() => Promise<void>`,
     `Delete the whole store directory and every model file in it`);
 
 // image resizing
@@ -904,7 +926,7 @@ n(`webpack`, `nodeEsmConfig`, 131, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.3.3`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.3.4`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1129,18 +1151,33 @@ e(`assetsNodeEsm.defaultLitertAssets`, `assetsNodePaths.litertAssetsAt`, `call`)
 // model file store relations
 e(`store.downloadModel`, `store.downloadInto`, `call`);
 e(`store.downloadModel`, `store.storeDir`, `call`);
-e(`store.downloadModel`, `store.downloads`, `store`);
+e(`store.downloadModel`, `store.dir`, `store`);
 e(`store.downloadInto`, `store.readStored`, `call`);
+e(`store.downloadInto`, `store.readLegacy`, `call`);
+e(`store.downloadInto`, `store.meta`, `call`);
 e(`store.downloadInto`, `store.resumePlan`, `call`);
-e(`store.downloadInto`, `store.files`, `call`);
+e(`store.downloadInto`, `store.storeBody`, `call`);
+e(`store.downloadInto`, `store.parthandling`, `call`);
 e(`store.downloadInto`, `store.storeName`, `call`);
+e(`store.downloadInto`, `store.dir`, `store`);
 e(`store.storeDir`, `store.storeRoot`, `call`);
 e(`store.downloadInto`, `enums.enums`, `type`);
 e(`store.downloadInto`, `types.store`, `type`);
 e(`store.storedModel`, `store.readStored`, `call`);
 e(`store.storedModel`, `store.storeDir`, `call`);
-e(`store.readStored`, `store.files`, `call`);
-e(`store.removeModel`, `store.files`, `call`);
+e(`store.readStored`, `store.meta`, `call`);
+e(`store.readStored`, `store.parthandling`, `call`);
+e(`store.readStored`, `store.readLegacy`, `call`);
+e(`store.readStored`, `types.store`, `type`);
+e(`store.parthandling`, `store.parts`, `call`);
+e(`store.parthandling`, `types.store`, `type`);
+e(`store.parts`, `types.store`, `type`);
+e(`store.readLegacy`, `store.meta`, `call`);
+e(`store.storeBody`, `store.parts`, `call`);
+e(`store.storeBody`, `store.dir`, `store`);
+e(`store.storeBody`, `enums.enums`, `type`);
+e(`store.removeModel`, `store.removeFrom`, `call`);
+e(`store.removeModel`, `store.storeDir`, `call`);
 e(`store.purgeModels`, `store.storeRoot`, `call`);
 e(`store.resumePlan`, `engine.contentLength`, `call`);
 e(`store.resumePlan`, `types.store`, `type`);

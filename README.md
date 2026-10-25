@@ -222,8 +222,8 @@ follow the flag.
 
 The first call downloads the model through its engine and caches it. Later
 calls reuse the loaded runtime. Only one model stays in memory. An interrupted
-download keeps the bytes it stored and resumes on the next attempt, including
-after a reload.
+download keeps every part it committed and resumes from the last one on the
+next attempt, including after a reload.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine.
@@ -301,18 +301,20 @@ same headers.
 
 Each engine keeps its own cache. Loading a model unloads the previous runtime
 and removes the previous model's cache. The CPU engine uses the wllama cache
-manager. The GPU engine stores the single `.litertlm` file in the origin private
-file system under `litert-store`, and reads a Cache Storage entry under
-`litertlm-models` when an older version stored one. A quota failure purges the
-cache of the engine being loaded.
+manager. The GPU engine stores the `.litertlm` file in the origin private file
+system under `litert-store` as numbered parts, and reads a Cache Storage entry
+under `litertlm-models` when an older version stored one. A quota failure keeps
+the parts already stored, so freeing disk lets the next attempt resume.
 
 The GPU engine stores the file before it compiles the model, and one download
 serves every caller. A failed compile, a cancelled call or a repeated
-`createChat` reads the stored file instead of downloading it again. A download
-cut short keeps its bytes and continues from that offset with a range request,
-checking the file size and entity tag so a changed model starts over. Hosts
-without a writable file system still stream from the network and fall back to
-Cache Storage, without resuming.
+`createChat` reads the stored parts instead of downloading them again. A
+download fetches bounded ranges of 32 MB, commits each part as it arrives and
+retries a stalled or cut connection from the last committed byte, so a reload
+loses at most one part. Each attempt checks the file size and entity tag, and a
+changed model starts over. A host that ignores the range replays the stored
+prefix and keeps the parts already stored. Hosts without a writable file system
+still stream from the network and fall back to Cache Storage, without resuming.
 
 A CPU vision model downloads its projector with the model and caches both. A
 GPU vision model keeps its encoder in the single `.litertlm` file.
