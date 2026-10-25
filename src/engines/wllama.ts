@@ -3,9 +3,12 @@ import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
 import { cpuContextWindow } from '../models';
 import {
+    hasImages,
+    modelUrl,
     replyOptions,
     runEngineChat,
 } from './engine';
+import { imageBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
@@ -22,8 +25,6 @@ import type {
 const
     /** Context window requested from the CPU engine, the wasm heap holds weights and cache */
     contextSize = cpuContextWindow,
-    /** Model host */
-    hfBase = `https://huggingface.co`,
     /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`;
 
@@ -104,26 +105,9 @@ const
         || !!entry.metadata?.originalURL?.includes(file),
     /** Every cached file of one model */
     modelFiles = (model: ChatModel): string[] =>
-        [model.cpu.file, ...(model.cpu.mmproj ? [model.cpu.mmproj.file] : [])],
-    /** Resolve one model file on the model host */
-    modelUrl = (repo: string, file: string): string =>
-        `${hfBase}/${repo}/resolve/main/${file}`,
-    /** Decode an image URL into bytes for wllama */
-    imageBuffer = async (url: string): Promise<ArrayBuffer> => {
-        if (!url.startsWith(`data:`))
-            return await (await fetch(url)).arrayBuffer();
-        const
-            comma = url.indexOf(`,`),
-            head = comma >= 0 ? url.slice(0, comma) : ``;
-        if (comma < 0) throw new Error(`Invalid image data`);
-        if (!head.includes(`;base64`))
-            return await (await fetch(url)).arrayBuffer();
-        const
-            binary = atob(url.slice(comma + 1)),
-            bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes.buffer;
-    },
+        model.cpu
+            ? [model.cpu.file, ...(model.cpu.mmproj ? [model.cpu.mmproj.file] : [])]
+            : [],
     /** Map built messages to wllama turns */
     toWllamaMessages = async (
         messages: EngineMessage[],
@@ -147,11 +131,6 @@ const
         };
         return result;
     },
-    /** Whether any turn carries an image */
-    hasImages = (messages: EngineMessage[]): boolean =>
-        messages.some(message =>
-            Array.isArray(message.content)
-            && message.content.some(part => part.type == `image`)),
     /** Stream one reply on a started CPU runtime */
     chatOn = async (
         instance: Wllama,
@@ -188,6 +167,8 @@ const
         assets: overrides,
     }: StartLlmParams): Promise<LlmRuntime> => {
         loggingOn = logging === true;
+        const cpu = model.cpu;
+        if (!cpu) throw new Error(`Model has no CPU artifact`);
         const
             next = resolveAssets(overrides),
             key = assetsKeyOf(next);
@@ -201,10 +182,10 @@ const
         );
         const
             instance = await getWllama(),
-            modelFileUrl = modelUrl(model.cpu.repo, model.cpu.file),
-            projectorFile = model.cpu.mmproj?.file,
+            modelFileUrl = modelUrl(cpu.repo, cpu.file),
+            projectorFile = cpu.mmproj?.file,
             projectorUrl = projectorFile
-                ? modelUrl(model.cpu.repo, projectorFile) : ``;
+                ? modelUrl(cpu.repo, projectorFile) : ``;
         if (signal?.aborted) {
             await dropWllama();
             throw new Error(`Cancelled`);
@@ -213,11 +194,11 @@ const
         if (projectorFile) {
             const
                 entries = await instance.cacheManager.list(),
-                hasModel = entries.some(entry => entryOf(entry, model.cpu.file)),
+                hasModel = entries.some(entry => entryOf(entry, cpu.file)),
                 hasProjector = entries.some(entry => entryOf(entry, projectorFile));
             if (hasModel && !hasProjector)
                 await instance.cacheManager.deleteMany(entry =>
-                    entryOf(entry, model.cpu.file));
+                    entryOf(entry, cpu.file));
         };
         try {
             await instance.loadModelFromUrl(
@@ -276,6 +257,7 @@ const
         startLLM,
         cached: async (model) => {
             try {
+                if (!model.cpu) return false;
                 const
                     instance = await getWllama(),
                     entries = await instance.cacheManager.list();
@@ -291,6 +273,7 @@ const
         },
         remove: async (model: ChatModel) => {
             try {
+                if (!model.cpu) return;
                 const instance = await getWllama();
                 await instance.cacheManager.deleteMany(entry =>
                     modelFiles(model).some(file => entryOf(entry, file)));
@@ -306,8 +289,6 @@ const
 
 export {
     cpuThreads,
-    hasImages,
-    imageBuffer,
     startLLM,
     toWllamaMessages,
     wllamaEngine,

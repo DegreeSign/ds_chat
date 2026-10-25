@@ -56,6 +56,18 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
+"@litert-lm/core@0.19.0-nightly.20261024":
+  version "0.19.0-nightly.20261024"
+  resolved "https://registry.yarnpkg.com/@litert-lm/core/-/core-0.19.0-nightly.20261024.tgz#4816ca6a6572ad7650f4e653e274ec298ab2c2fd"
+  integrity sha512-19SBs65yoxDMGA0DsxUDwxr/cX/Y198Fq0SmQhbfw3fi+TG8tHBY747172U2IZLXh9kCupu3q2udWrHZwDrrZg==
+  dependencies:
+    "@litertjs/wasm-utils" "^2.0.0"
+
+"@litertjs/wasm-utils@^2.0.0":
+  version "2.6.0"
+  resolved "https://registry.yarnpkg.com/@litertjs/wasm-utils/-/wasm-utils-2.6.0.tgz#bdf03498dee34f24d464d389249f308d0c60e7c0"
+  integrity sha512-rxARtl8owf+aPV2TsMiAClYDBaEDemML3PjrzBxIpGCvv6POswR7068Kt0sIkrK5XvKkY2Z+JLcm3a9CHmvuUg==
+
 "@tsconfig/node10@^1.0.7":
   version "1.0.13"
   resolved "https://registry.yarnpkg.com/@tsconfig/node10/-/node10-1.0.13.tgz#56105a9a8c786e8f15e35746879cf2d52275485b"

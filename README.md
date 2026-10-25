@@ -1,8 +1,8 @@
 # @degreesign/chat
 
 One-shot on-device AI chat for browsers, workers and Node, running a wllama CPU
-engine with a wasm fallback. The host owns the messages and the UI; the package
-loads one model, streams one reply and reports status.
+engine or a LiteRT-LM WebGPU engine. The host owns the messages and the UI; the
+package loads one model, streams one reply and reports status.
 
 [![npm version](https://img.shields.io/npm/v/@degreesign/chat.svg)](https://www.npmjs.com/package/@degreesign/chat)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](#licensing)
@@ -32,8 +32,8 @@ loads one model, streams one reply and reports status.
 - On device: model weights download once, then every reply is generated locally.
 - Headless: the package returns text through callbacks and renders no UI.
 - Stateless: the host passes the whole message list and keeps its own history.
-- One engine: CPU through wllama with a wasm fallback, behind one `startLLM`
-  runtime contract.
+- Two engines: CPU through wllama and WebGPU through LiteRT-LM, behind one
+  `startLLM` runtime contract.
 - Images: a user turn can carry image URLs, sent only to a vision model and
   capped by the prompt budgets.
 - Reusable: the loaded model stays in memory for the next call.
@@ -55,20 +55,22 @@ yarn add @degreesign/chat
 pnpm add @degreesign/chat
 ```
 
-`@wllama/wllama` and `@wllama/wllama-compat` are build-time dependencies. The
-engine is bundled into the published build as a dynamic chunk and its wasm
-assets ship beside it, so a consumer installs nothing extra and resolves no
-engine import. Only the model weights are downloaded at runtime.
+`@wllama/wllama`, `@wllama/wllama-compat` and `@litert-lm/core` are build-time
+dependencies. The engines are bundled into the published build as dynamic
+chunks and their wasm assets ship beside them, so a consumer installs nothing
+extra and resolves no engine import. Only the model weights are downloaded at
+runtime.
 
 The build emits:
 
 - `dist/browser/chat.min.mjs`, the ESM browser entry.
-- `dist/browser/engine-wllama.min.mjs`, the bundled engine, fetched only when a
-  model starts.
+- `dist/browser/engine-wllama.min.mjs` and
+  `dist/browser/engine-litert.min.mjs`, the bundled engines, fetched only when
+  a matching model starts.
 - `dist/node/chat.node.min.js` and `chat.node.min.mjs`, the CommonJS and ESM
-  Node entries, with the same engine chunk beside them.
-- `dist/assets/wllama/`, the wllama wasm binaries and compat worker served next
-  to the browser entry.
+  Node entries, with the same engine chunks beside them.
+- `dist/assets/wllama/`, the wllama wasm binaries and compat worker.
+- `dist/assets/litert/`, the LiteRT-LM wasm glue and binary.
 - `dist/index.d.ts`, declarations for every export.
 
 Build from source with `yarn build`; typecheck with `yarn typecheck`; test the
@@ -187,7 +189,7 @@ on failure. A preload owns no cancel function; a new load replaces it.
 | ----- | ----------- |
 | `availability` | `ChatStatus.online`, `.away` or `.offline`, derived from `status`. |
 | `status` | `LlmStatus`: `idle`, `downloading`, `ready`, `error` or `unsupported`. |
-| `backend` | `LlmBackend.cpu` or `.none`. |
+| `backend` | `LlmBackend.cpu`, `.gpu` or `.none`. |
 | `supportsImages` | Whether the requested model accepts images. |
 | `ready` | Whether a model is loaded and accepts a reply. |
 | `loading` | Whether a download or load is in flight. |
@@ -202,20 +204,27 @@ with `requesting: false` marks the end of the call.
 ## Logging
 
 Console output stays off by default. Pass `logging: true` in a call to receive
-the package's censored engine logs and the engine's own logs for that call. The
-flag is per call, so a later call without it goes quiet again.
+the package's censored engine logs and the wllama engine's own logs for that
+call. The flag is per call, so a later call without it goes quiet again.
+LiteRT-LM writes its wasm diagnostics straight to the console and does not
+follow the flag.
 
 ## Models
 
-| `ChatModelId` | Name | Reasoning | Images | CPU |
-| ------------- | ---- | --------- | ------ | --- |
-| `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | Yes |
+| `ChatModelId` | Name | Reasoning | Images | CPU | WebGPU |
+| ------------- | ---- | --------- | ------ | --- | ------ |
+| `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | Yes | No |
+| `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | No | Yes |
 
-The first call downloads the model through the CPU engine and caches it. Later
+The first call downloads the model through its engine and caches it. Later
 calls reuse the loaded runtime. Only one model stays in memory.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
-total download is about 1.5 GB.
+total download is about 1.5 GB. It runs on the CPU engine.
+
+Gemma 4 E2B downloads one `gemma-4-E2B-it.litertlm` file of about 2.6 GB. It
+runs on the WebGPU engine with its vision encoder in the same file, so an
+image prompt does not download a projector.
 
 ## Prompt assembly
 
@@ -247,22 +256,25 @@ user:      {next turn}
 
 ## Engines and assets
 
-The engine is chosen per request:
+The engine is chosen per model:
 
-1. CPU through wllama when a browser exposes `WebAssembly`.
-2. `LlmStatus.unsupported` in Node or in a process without wasm.
+1. WebGPU through LiteRT-LM when the model has a `litert` artifact and the
+   browser exposes `navigator.gpu` and `WebAssembly`.
+2. CPU through wllama when the model has a `cpu` artifact and the process
+   exposes `WebAssembly`.
+3. `LlmStatus.unsupported` otherwise, including Node.
 
-The CPU engine implements the internal `startLLM({ model, limits, signal,
-onProgress })` contract and returns the runtime object with `model`, `backend`,
-`contextSize`, `chat()` and `unload()`. `createChat` starts it for the requested
-model.
+Both engines implement the internal `startLLM({ model, limits, signal,
+onProgress })` contract and return the runtime object with `model`, `backend`,
+`contextSize`, `chat()` and `unload()`. `createChat` starts the engine that
+matches the requested model.
 
 The CPU engine derives a raw thread count from the device, then caps it at
 `limits.maxThreads`, default 2. The cap is applied after the raw maximum, so the
 engine never exceeds the device or the caller budget.
 
-Threads only take effect when the host page is cross-origin isolated. Serve it
-with both headers:
+The CPU engine needs cross-origin isolation for its threads. Serve the page with
+both headers:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
@@ -281,21 +293,30 @@ self hosted. Chromium also accepts
 changed. A page inside an iframe is isolated only when every ancestor sets the
 same headers.
 
-Only one model stays on device. Loading a new model unloads the previous runtime
-and deletes other model caches. A quota failure purges every model cache before
-retrying, so a half written download never blocks the next attempt.
+Each engine keeps its own cache. Loading a model unloads the previous runtime
+and removes the previous model's cache. The CPU engine uses the wllama cache
+manager; the GPU engine stores the single `.litertlm` file in Cache Storage
+under `litertlm-models`. A quota failure purges the cache of the engine being
+loaded. The GPU cache write is best effort: if the browser rejects it, the model
+still loads from the network stream and the next call downloads it again.
 
-A vision model downloads its projector with the model and caches both. A cache
-written before image support is replaced once, so the projector is fetched.
+A CPU vision model downloads its projector with the model and caches both. A
+GPU vision model keeps its encoder in the single `.litertlm` file.
 
-The engine is bundled into `dist/browser` and `dist/node` as a dynamic chunk.
-The package also ships the wllama binaries under `dist/assets/wllama`, and model
-weights remain external.
+Both engines are bundled into `dist/browser` and `dist/node` as dynamic chunks.
+The package ships the wllama binaries under `dist/assets/wllama` and the LiteRT
+wasm under `dist/assets/litert`; model weights remain external.
+
+LiteRT-LM needs WebGPU and the JSPI and relaxed SIMD wasm features, currently
+available in Chromium. It loads a 22.7 MB wasm binary from `dist/assets/litert`
+and the 2.6 GB model file. The GPU engine reports progress while the file
+downloads and 100% of the load phase while the model compiles.
 
 wllama needs the compat worker on the same origin. When the app serves the
 package from `node_modules` in development, auto resolution works. In
 production, copy `dist/assets/wllama` next to the app bundle so the resolved
-asset URLs stay valid.
+asset URLs stay valid. The LiteRT wasm glue finds its binary in the same
+directory, so copy `dist/assets/litert` beside the bundle as well.
 
 ## Node.js
 
@@ -303,10 +324,11 @@ The package imports and runs without a DOM, so it works in scripts, tests, SSR
 and server side orchestration. Everything except inference is available: prompt
 assembly, budgets, status state and cancellation.
 
-The wllama engine needs a browser worker and wasm runtime. In Node,
-`createChat` reports `LlmStatus.unsupported` and `ChatStatus.offline` through
-`onStatus`, and the reply callbacks stay silent. `preloadModel` resolves `false`
-and reports the same unsupported status.
+Both engines need a browser: wllama needs a worker and a wasm runtime, and
+LiteRT-LM needs WebGPU. In Node, `createChat` reports
+`LlmStatus.unsupported` and `ChatStatus.offline` through `onStatus`, and the
+reply callbacks stay silent. `preloadModel` resolves `false` and reports the
+same unsupported status.
 
 ```js
 const { createChat, preloadModel, ChatModelId, LlmRole } = require("@degreesign/chat");
@@ -389,10 +411,11 @@ No. The host passes the full prompt on every call and keeps the reply.
 ### Does it support images?
 
 Yes, on models with vision support. Put image URLs in a user turn's `images`
-array. Qwen3-VL 2B is the shipped model, it accepts images and runs on the CPU
-engine. Each image is center-cropped to a square and resized to 288 x 288
-before the engine sees it. A model without vision drops images when the turn
-also has text; an image-only turn reports `Model does not accept images`.
+array. Qwen3-VL 2B accepts images on the CPU engine and Gemma 4 E2B accepts
+images on the WebGPU engine. Each image is center-cropped to a square and
+resized to 288 x 288 before the engine sees it. A model without vision drops
+images when the turn also has text; an image-only turn reports
+`Model does not accept images`.
 
 ### Does it need a server?
 
@@ -401,20 +424,23 @@ includes no server component.
 
 ### Does it have runtime dependencies?
 
-No runtime dependencies. `@wllama/wllama` and `@wllama/wllama-compat` are
-build-time dependencies, bundled into the dynamic engine chunk and its wasm
-assets, so consumers resolve no engine import and download no engine code beyond
-the chunk they use.
+No runtime dependencies. `@wllama/wllama`, `@wllama/wllama-compat` and
+`@litert-lm/core` are build-time dependencies, bundled into the dynamic engine
+chunks and their wasm assets, so consumers resolve no engine import and
+download no engine code beyond the chunk they use.
 
 ### Where are the models stored?
 
-The CPU engine owns its cache through the wllama cache manager. The package
-stores no model data itself.
+The CPU engine owns its cache through the wllama cache manager. The GPU engine
+stores its model in Cache Storage under `litertlm-models`. The package stores no
+model data itself.
 
 ### Which model should I pick?
 
-Qwen3-VL 2B is the only catalog model. It supports reasoning and images and runs
-on the CPU engine.
+Qwen3-VL 2B supports reasoning and images on the CPU. Gemma 4 E2B supports
+reasoning and images on WebGPU, with much faster image prompts but a larger
+download and a slower first compile. Use Qwen for broad browser support and
+Gemma when the host has Chromium WebGPU.
 
 ## Licensing
 
@@ -424,5 +450,6 @@ listed in `THIRD_PARTIES.md`. See `LICENSE`.
 
 ## Keywords
 
-`@degreesign/chat`, on-device AI chat, local LLM, wllama, wasm, chat controller,
-headless chat, TypeScript, browser, speech friendly replies.
+`@degreesign/chat`, on-device AI chat, local LLM, wllama, litert, webgpu, gemma,
+wasm, chat controller, headless chat, TypeScript, browser, speech friendly
+replies.

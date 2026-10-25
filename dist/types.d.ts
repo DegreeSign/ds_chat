@@ -13,13 +13,20 @@ interface ChatModel {
     /** Whether the model supports chain-of-thought reasoning */
     reasoning: boolean;
     /** wllama (CPU) artifact */
-    cpu: {
+    cpu?: {
         repo: string;
         file: string;
         /** Vision projector, present when the CPU build accepts images */
         mmproj?: {
             file: string;
         };
+    };
+    /** LiteRT-LM (WebGPU) artifact */
+    litert?: {
+        repo: string;
+        file: string;
+        /** Whether the build accepts images */
+        vision: boolean;
     };
 }
 /** Token, prompt and thread budgets of an on-device generation */
@@ -89,6 +96,17 @@ interface WllamaAssets {
     /** URL of the wllama compat worker script */
     compatWorker: string;
 }
+/** LiteRT-LM wasm assets used by the GPU engine */
+interface LitertAssets {
+    /** URL of the LiteRT-LM wasm glue script */
+    script: string;
+    /** URL of the LiteRT-LM wasm binary */
+    wasm: string;
+}
+/** Navigator with the WebGPU entry point, absent in Node */
+interface GpuNavigator extends Navigator {
+    gpu?: object;
+}
 /** Request state that builds one status snapshot */
 interface ChatState {
     /** Whether a reply is streaming right now */
@@ -110,6 +128,7 @@ interface ActiveCall extends ChatState {
 interface RuntimeDeps {
     engines?: {
         cpu?: LlmEngine;
+        litert?: LlmEngine;
     };
     backend?: LlmBackend;
 }
@@ -239,6 +258,28 @@ type EngineMessage = {
     role: `assistant`;
     content: string;
 };
+/** One LiteRT-LM content segment */
+type LitertContentPart = import('@litert-lm/core').ContentPart;
+/** One LiteRT-LM chat turn */
+type LitertMessage = import('@litert-lm/core').Message;
+/** One LiteRT-LM engine */
+type LitertEngine = import('@litert-lm/core').Engine;
+/** The LiteRT-LM module namespace */
+type LitertModule = typeof import('@litert-lm/core');
+/** Params of one LiteRT-LM chat call */
+interface LitertChatParams {
+    engine: LitertEngine;
+    model: ChatModel;
+    mod: LitertModule;
+    params: EngineChatParams;
+}
+/** Params of one LiteRT-LM stream */
+interface StreamLitertParams {
+    engine: LitertEngine;
+    mod: LitertModule;
+    params: EngineChatParams;
+    messages: EngineMessage[];
+}
 /** Streamed delta, reasoning may be inline or structured */
 interface EngineDelta {
     content?: string;
@@ -275,4 +316,4 @@ interface EngineRunParams {
     /** Whether the caller stopped the generation */
     stopped: () => boolean;
 }
-export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeChatParams, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeChatParams, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };

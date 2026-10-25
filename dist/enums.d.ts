@@ -21,6 +21,7 @@ declare enum LlmStatus {
 /** Which engine runs the model on this device */
 declare enum LlmBackend {
     cpu = "cpu",
+    gpu = "gpu",
     none = "none"
 }
 /** Download or load-into-memory phase of a model load */
@@ -30,6 +31,7 @@ declare enum LlmPhase {
 }
 /** Catalog ids of the on-device models */
 declare enum ChatModelId {
-    qwen3_vl_2b = "qwen3-vl-2b"
+    qwen3_vl_2b = "qwen3-vl-2b",
+    gemma4_e2b = "gemma4-e2b"
 }
 export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, ChatModelId, };

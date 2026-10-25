@@ -5,6 +5,7 @@ const {
     preloadModel,
     ChatModelId,
     ChatStatus,
+    LlmBackend,
     LlmRole,
     LlmStatus,
 } = require(`../dist/node/chat.node.min.js`);
@@ -48,6 +49,32 @@ const main = async () => {
     assertEqual(statuses[statuses.length - 1].error, `Model not ready`, `error`);
     assertEqual(cancel(), undefined, `cancel stays silent`);
 
+    const gpuStatuses = [];
+    const gpuReplies = [];
+    createChat({
+        model: ChatModelId.gemma4_e2b,
+        messages: [user(`hello`)],
+        onResponse: text => gpuReplies.push(text),
+        onStatus: snapshot => gpuStatuses.push(snapshot),
+    });
+    await sleep(20);
+    assertEqual(gpuReplies.length, 0, `no gpu reply without webgpu`);
+    assertEqual(
+        gpuStatuses[gpuStatuses.length - 1].status,
+        LlmStatus.unsupported,
+        `gpu unsupported`,
+    );
+    assertEqual(
+        gpuStatuses[gpuStatuses.length - 1].availability,
+        ChatStatus.offline,
+        `gpu offline`,
+    );
+    assertEqual(
+        gpuStatuses[gpuStatuses.length - 1].error,
+        `Model not ready`,
+        `gpu error`,
+    );
+
     const unknown = [];
     createChat({
         model: `missing`,
@@ -86,6 +113,18 @@ const main = async () => {
         `preload not ready`,
     );
 
+    const gpuPreloadStatuses = [];
+    const gpuPreloaded = await preloadModel({
+        model: ChatModelId.gemma4_e2b,
+        onStatus: snapshot => gpuPreloadStatuses.push(snapshot),
+    });
+    assertEqual(gpuPreloaded, false, `no gpu preload without webgpu`);
+    assertEqual(
+        gpuPreloadStatuses[gpuPreloadStatuses.length - 1].status,
+        LlmStatus.unsupported,
+        `gpu preload unsupported`,
+    );
+
     createChat({
         model: ChatModelId.qwen3_vl_2b,
         messages: [user(`hello`)],
@@ -97,7 +136,9 @@ const main = async () => {
     assertEqual(typeof esm.preloadModel, `function`, `esm preloadModel`);
     assertEqual(esm.ChatStatus.offline, ChatStatus.offline, `esm enum`);
     assertEqual(esm.LlmRole.user, LlmRole.user, `esm named export`);
+    assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);
     assertEqual(esm.ChatModelId.qwen3_vl_2b, ChatModelId.qwen3_vl_2b, `esm model id`);
+    assertEqual(esm.ChatModelId.gemma4_e2b, ChatModelId.gemma4_e2b, `esm gemma id`);
     console.log(`NODE_TESTS_OK`, statuses[statuses.length - 1].status);
 };
 

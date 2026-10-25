@@ -36,6 +36,23 @@ const isOffscreen = (
 ): canvas is OffscreenCanvas =>
     typeof OffscreenCanvas != `undefined` && canvas instanceof OffscreenCanvas;
 
+/** Decode an image URL into bytes for an engine */
+const imageBuffer = async (url: string): Promise<ArrayBuffer> => {
+    if (!url.startsWith(`data:`))
+        return await (await fetch(url)).arrayBuffer();
+    const
+        comma = url.indexOf(`,`),
+        head = comma >= 0 ? url.slice(0, comma) : ``;
+    if (comma < 0) throw new Error(`Invalid image data`);
+    if (!head.includes(`;base64`))
+        return await (await fetch(url)).arrayBuffer();
+    const
+        binary = atob(url.slice(comma + 1)),
+        bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+};
+
 /** Center-crop one image URL to a square and resize it for an engine */
 const resizeImageUrl = async (url: string): Promise<string> => {
     if (!url || typeof fetch != `function` || typeof createImageBitmap != `function`)
@@ -97,6 +114,7 @@ const resizeImages = async (
 
 export {
     imageSide,
+    imageBuffer,
     resizeImageUrl,
     resizeImages,
 };

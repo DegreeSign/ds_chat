@@ -14,18 +14,31 @@ const
                 },
             },
         },
+        {
+            id: ChatModelId.gemma4_e2b,
+            reasoning: true,
+            litert: {
+                repo: `litert-community/gemma-4-E2B-it-litert-lm`,
+                file: `gemma-4-E2B-it.litertlm`,
+                vision: true,
+            },
+        },
     ],
     /** Context window requested from the CPU engine, a 32k KV cache needs 3.5 GB */
     cpuContextWindow = 8192,
+    /** Context window requested from the GPU engine, the wasm heap holds the model */
+    litertContextWindow = 4096,
     /** Look up a catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
         id ? llmModels.find(model => model.id == id) : undefined,
     /** Whether a model accepts images */
-    supportsImages = (model: ChatModel): boolean => !!model.cpu.mmproj;
+    supportsImages = (model: ChatModel): boolean =>
+        !!model.cpu?.mmproj || !!model.litert?.vision;
 
 export {
     llmModels,
     cpuContextWindow,
+    litertContextWindow,
     findLlmModel,
     supportsImages,
 };

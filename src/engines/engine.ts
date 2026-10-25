@@ -84,6 +84,18 @@ const replyOptions = (limits: LlmLimits, reasoning: boolean) => ({
 });
 
 const
+    /** Model host */
+    hfBase = `https://huggingface.co`,
+    /** Resolve one model file on the model host */
+    modelUrl = (repo: string, file: string): string =>
+        `${hfBase}/${repo}/resolve/main/${file}`,
+    /** Whether any turn carries an image */
+    hasImages = (messages: EngineMessage[]): boolean =>
+        messages.some(message =>
+            Array.isArray(message.content)
+            && message.content.some(part => part.type == `image`));
+
+const
     /** Reasoning markers emitted inline in the streamed content */
     thinkOpenTags = [
         `<|channel>thought\n`,
@@ -359,4 +371,6 @@ export {
     replyOptions,
     defaultLlmLimits,
     resolveLlmLimits,
+    hasImages,
+    modelUrl,
 };

@@ -10,6 +10,11 @@ declare const replyOptions: (limits: LlmLimits, reasoning: boolean) => {
     max_tokens: number;
 };
 declare const 
+/** Resolve one model file on the model host */
+modelUrl: (repo: string, file: string) => string, 
+/** Whether any turn carries an image */
+hasImages: (messages: EngineMessage[]) => boolean;
+declare const 
 /** Map the host messages to OpenAI-style turns, bounded for local context */
 buildMessages: (messages: ChatMessage[], limits?: LlmLimits) => EngineMessage[], 
 /** Split inline reasoning markers out of the streamed content */
@@ -25,4 +30,4 @@ streamReply: ({ model, logging, onReason, onText, start, stopped, }: StreamReply
 declare const 
 /** Build the prompt and stream one reply through an engine */
 runEngineChat: ({ model, params, start, stopped, }: EngineRunParams) => Promise<string | undefined>;
-export { buildMessages, createThinkSplitter, logChatCall, runEngineChat, streamReply, replyOptions, defaultLlmLimits, resolveLlmLimits, };
+export { buildMessages, createThinkSplitter, logChatCall, runEngineChat, streamReply, replyOptions, defaultLlmLimits, resolveLlmLimits, hasImages, modelUrl, };

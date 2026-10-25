@@ -1,8 +1,10 @@
 import { llmModels } from './models';
+import { litertEngine } from './engines/litert';
 import { wllamaEngine } from './engines/wllama';
 import { LlmBackend, LlmPhase, LlmStatus } from './enums';
 import type {
     ChatModel,
+    GpuNavigator,
     LlmEngine,
     LlmRuntime,
     Runtime,
@@ -14,10 +16,13 @@ import type {
 const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
     const
         /** The CPU engine this runtime can reach, real unless overridden */
-        cpuEngine: LlmEngine = deps.engines?.cpu || wllamaEngine;
+        cpuEngine: LlmEngine = deps.engines?.cpu || wllamaEngine,
+        /** The GPU engine this runtime can reach, real unless overridden */
+        gpuEngine: LlmEngine = deps.engines?.litert || litertEngine;
     let
         runtime: LlmRuntime | undefined,
         activeModel: ChatModel | undefined,
+        activeEngine: LlmEngine | undefined,
         backend: LlmBackend = LlmBackend.none,
         status: LlmStatus = LlmStatus.idle,
         loading: Promise<boolean> | undefined,
@@ -35,13 +40,21 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 || typeof self != `undefined`
                 || typeof Worker != `undefined`)
             && typeof WebAssembly != `undefined`,
-        /** Pick the best available engine, overridable by tests */
-        bestBackend = (): LlmBackend =>
-            deps.backend
-            || (wasmSupported() ? LlmBackend.cpu : LlmBackend.none),
-        /** Delete every on-device model artifact */
-        purgeModelCaches = async () => {
-            await cpuEngine.purge();
+        /** Whether this process can run the GPU (WebGPU) engine */
+        webgpuSupported = (): boolean =>
+            typeof navigator != `undefined`
+            && !!(navigator as GpuNavigator).gpu
+            && typeof WebAssembly != `undefined`,
+        /** Pick the engine for one model, overridable by tests */
+        engineFor = (model: ChatModel): LlmEngine | undefined => {
+            if (deps.backend == LlmBackend.none) return undefined;
+            if (deps.backend == LlmBackend.cpu)
+                return model.cpu ? cpuEngine : undefined;
+            if (deps.backend == LlmBackend.gpu)
+                return model.litert ? gpuEngine : undefined;
+            if (model.litert && webgpuSupported()) return gpuEngine;
+            if (model.cpu && wasmSupported()) return cpuEngine;
+            return undefined;
         },
         /** Whether the browser reports the origin over its storage quota */
         isOverQuota = async (): Promise<boolean> => {
@@ -66,20 +79,23 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             } catch { };
         },
         /** Remove every model except the one being loaded */
-        evictPrevious = async (model: ChatModel) => {
+        evictPrevious = async (model: ChatModel, engine: LlmEngine) => {
             if (activeModel && activeModel.id != model.id) {
                 const
                     previous = activeModel,
+                    previousEngine = activeEngine,
                     current = runtime;
                 runtime = undefined;
                 activeModel = undefined;
+                activeEngine = undefined;
                 await current?.unload();
-                await cpuEngine.remove(previous);
+                await previousEngine?.remove(previous);
             };
             // skip a cold engine
-            if (!await cpuEngine.hasCache()) return;
+            if (!await engine.hasCache()) return;
             for (const other of llmModels)
-                if (other.id != model.id) await cpuEngine.remove(other);
+                if (other.id != model.id && engineFor(other) == engine)
+                    await engine.remove(other);
         },
         /** Report load progress to the active request */
         reportProgress = (value: number, phase?: LlmPhase) => {
@@ -120,18 +136,18 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             const token = ++loadToken;
             const attempt = (async (): Promise<boolean> => {
                 await persistStorage();
-                const which = bestBackend();
+                const engine = engineFor(model);
                 if (token != loadToken) return false;
-                if (which == LlmBackend.none) {
+                if (!engine) {
                     setStatus(LlmStatus.unsupported);
                     return false;
                 };
-                await evictPrevious(model);
+                await evictPrevious(model, engine);
                 if (token != loadToken) return false;
-                const cached = await cpuEngine.cached(model);
+                const cached = await engine.cached(model);
                 if (token != loadToken) return false;
                 // stale artifacts can push the origin over quota, clear them before downloading
-                if (!cached && await isOverQuota()) await purgeModelCaches();
+                if (!cached && await isOverQuota()) await engine.purge();
                 if (token != loadToken) return false;
                 setStatus(LlmStatus.downloading);
                 reportProgress(0, LlmPhase.download);
@@ -140,7 +156,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 const controller = new AbortController();
                 startAbort = controller;
                 try {
-                    const started = await cpuEngine.startLLM({
+                    const started = await engine.startLLM({
                         model,
                         limits,
                         logging,
@@ -157,7 +173,8 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     };
                     runtime = started;
                     activeModel = model;
-                    backend = which;
+                    activeEngine = engine;
+                    backend = engine.backend;
                     setStatus(LlmStatus.ready);
                     reportProgress(1, LlmPhase.load);
                     return true;
@@ -166,9 +183,10 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     // Reset partial engine
                     runtime = undefined;
                     activeModel = undefined;
+                    activeEngine = undefined;
                     if (logging) console.log(`Local model failed`, error);
                     // a download cut short by the browser quota leaves an unusable cache behind
-                    if (isQuotaError(error)) await purgeModelCaches();
+                    if (isQuotaError(error)) await engine.purge();
                     setStatus(LlmStatus.error);
                     return false;
                 } finally {
@@ -194,6 +212,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             const current = runtime;
             runtime = undefined;
             activeModel = undefined;
+            activeEngine = undefined;
             setStatus(LlmStatus.idle);
             await current?.unload();
         },

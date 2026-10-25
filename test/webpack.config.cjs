@@ -13,6 +13,7 @@ module.exports = {
     resolve: { extensions: [".ts", ".js"] },
     // The harness never starts a real engine, so keep the test bundle small.
     externals: {
+        "@litert-lm/core": "commonjs @litert-lm/core",
         "@wllama/wllama/esm/index.js": "commonjs @wllama/wllama/esm/index.js",
     },
     plugins: [

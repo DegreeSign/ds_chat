@@ -24,6 +24,7 @@ enum LlmStatus {
 /** Which engine runs the model on this device */
 enum LlmBackend {
     cpu = `cpu`,
+    gpu = `gpu`,
     none = `none`,
 }
 
@@ -36,6 +37,7 @@ enum LlmPhase {
 /** Catalog ids of the on-device models */
 enum ChatModelId {
     qwen3_vl_2b = `qwen3-vl-2b`,
+    gemma4_e2b = `gemma4-e2b`,
 }
 
 export {

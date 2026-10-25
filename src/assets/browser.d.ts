@@ -1,6 +1,7 @@
-/** Type declarations for the bundled wllama asset resolver */
-import type { WllamaAssets } from '../types';
+/** Type declarations for the bundled engine asset resolvers */
+import type { LitertAssets, WllamaAssets } from '../types';
 
 declare const defaultWllamaAssets: () => WllamaAssets;
+declare const defaultLitertAssets: () => LitertAssets;
 
-export { defaultWllamaAssets };
+export { defaultLitertAssets, defaultWllamaAssets };

@@ -7,6 +7,8 @@ import {
     buildMessages,
     createThinkSplitter,
     defaultLlmLimits,
+    hasImages,
+    modelUrl,
     replyOptions,
     resolveLlmLimits,
     runEngineChat,
@@ -15,16 +17,18 @@ import {
 import {
     cpuContextWindow,
     findLlmModel,
+    litertContextWindow,
     llmModels,
     supportsImages,
 } from "../src/models";
 import {
     cpuThreads,
-    imageBuffer,
     toWllamaMessages,
 } from "../src/engines/wllama";
+import { toLitertMessages } from "../src/engines/litert";
 import {
     imageSide,
+    imageBuffer,
     resizeImageUrl,
     resizeImages,
 } from "../src/engines/images";
@@ -92,15 +96,18 @@ const
         if (!model) throw new Error(`missing model ${id}`);
         return model;
     },
-    /** Build a runtime over one fake CPU engine. */
+    /** Build a runtime over one fake engine. */
     runtimeWith = (options: FakeEngineOptions = {}) => {
         const
-            cpu = createFakeEngine({ backend: LlmBackend.cpu, ...options }),
+            backend = options.backend ?? LlmBackend.cpu,
+            engine = createFakeEngine({ backend, ...options }),
             runtime = createRuntime({
-                engines: { cpu: cpu.engine },
-                backend: LlmBackend.cpu,
+                engines: backend == LlmBackend.gpu
+                    ? { litert: engine.engine }
+                    : { cpu: engine.engine },
+                backend,
             });
-        return { ...cpu, runtime };
+        return { ...engine, runtime };
     },
     /** Build a one-shot chat over one fake CPU engine. */
     chatWith = (options: FakeEngineOptions = {}) => {
@@ -168,23 +175,26 @@ const definitions: Array<{
                 assertEqual(ChatStatus.offline, 2, `offline`);
                 assertEqual(LlmStatus.ready, 2, `ready`);
                 assertEqual(LlmBackend.cpu, `cpu`, `cpu backend`);
+                assertEqual(LlmBackend.gpu, `gpu`, `gpu backend`);
                 assertEqual(LlmPhase.download, `download`, `download phase`);
                 assertEqual(LlmRole.assistant, `assistant`, `assistant role`);
                 assertEqual(ChatModelId.qwen3_vl_2b, `qwen3-vl-2b`, `qwen id`);
+                assertEqual(ChatModelId.gemma4_e2b, `gemma4-e2b`, `gemma id`);
             },
         },
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 1, `catalog size`);
+                assertEqual(llmModels.length, 2, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
+                assertEqual(litertContextWindow, 4096, `gpu window`);
                 assertEqual(
                     modelOf(ChatModelId.qwen3_vl_2b).reasoning,
                     true,
                     `qwen reasoning`,
                 );
                 assertEqual(
-                    modelOf(ChatModelId.qwen3_vl_2b).cpu.mmproj?.file,
+                    modelOf(ChatModelId.qwen3_vl_2b).cpu?.mmproj?.file,
                     `mmproj-Qwen3VL-2B-Thinking-Q8_0.gguf`,
                     `vision projector`,
                 );
@@ -193,6 +203,15 @@ const definitions: Array<{
                     true,
                     `cpu images`,
                 );
+                const gemma = modelOf(ChatModelId.gemma4_e2b);
+                assertEqual(gemma.reasoning, true, `gemma reasoning`);
+                assertEqual(
+                    gemma.litert?.file,
+                    `gemma-4-E2B-it.litertlm`,
+                    `gemma file`,
+                );
+                assertEqual(gemma.litert?.vision, true, `gemma vision`);
+                assertEqual(supportsImages(gemma), true, `gpu images`);
                 const textOnly: ChatModel = {
                     id: ChatModelId.qwen3_vl_2b,
                     reasoning: false,
@@ -202,6 +221,20 @@ const definitions: Array<{
                     supportsImages(textOnly),
                     false,
                     `text images`,
+                );
+                const textOnlyGpu: ChatModel = {
+                    id: ChatModelId.gemma4_e2b,
+                    reasoning: false,
+                    litert: {
+                        repo: `text-only`,
+                        file: `text-only.litertlm`,
+                        vision: false,
+                    },
+                };
+                assertEqual(
+                    supportsImages(textOnlyGpu),
+                    false,
+                    `gpu text images`,
                 );
                 assertEqual(findLlmModel(`missing`), undefined, `unknown model`);
             },
@@ -372,11 +405,31 @@ const definitions: Array<{
                         type: string,
                         text?: string,
                         data?: ArrayBuffer,
+                    }>,
+                    litert = await toLitertMessages(mixed),
+                    litertParts = litert[0].content as Array<{
+                        type: string,
+                        text?: string,
+                        data?: ArrayBuffer,
                     }>;
                 assertEqual(new Uint8Array(buffer)[0], 65, `decoded image`);
                 assertEqual(wllamaParts[0].type, `text`, `wllama text`);
                 assertEqual(wllamaParts[1].type, `image`, `wllama image`);
                 assertEqual(wllamaParts[1].data?.byteLength, 1, `wllama bytes`);
+                assertEqual(litertParts[0].text, `look`, `litert text`);
+                assertEqual(litertParts[1].type, `image`, `litert image`);
+                assertEqual(litertParts[1].data?.byteLength, 1, `litert bytes`);
+                assertEqual(
+                    modelUrl(`repo`, `file.gguf`),
+                    `https://huggingface.co/repo/resolve/main/file.gguf`,
+                    `model url`,
+                );
+                assertEqual(hasImages(mixed), true, `has images`);
+                assertEqual(
+                    hasImages([{ role: LlmRole.user, content: `plain` }]),
+                    false,
+                    `no images`,
+                );
             },
         },
         {
@@ -520,6 +573,60 @@ const definitions: Array<{
                 });
                 assertEqual(reused, true, `reused`);
                 assertEqual(calls.start, 1, `reuse skips start`);
+            },
+        },
+        {
+            name: `runtime/gpu model`,
+            run: async () => {
+                const
+                    { runtime, calls, models } = runtimeWith({
+                        backend: LlmBackend.gpu,
+                    }),
+                    progress: number[] = [],
+                    loaded = await runtime.load({
+                        model: modelOf(ChatModelId.gemma4_e2b),
+                        limits: resolveLlmLimits(),
+                        onProgress: value => progress.push(value),
+                    });
+                assertEqual(loaded, true, `gpu loaded`);
+                assertEqual(runtime.ready(), true, `gpu ready`);
+                assertEqual(runtime.backend(), LlmBackend.gpu, `gpu backend`);
+                assertEqual(calls.start, 1, `gpu started`);
+                assertEqual(models[0].id, ChatModelId.gemma4_e2b, `gpu model`);
+                assertEqual(progress[progress.length - 1], 1, `gpu progress`);
+                const
+                    reasoned: string[] = [],
+                    text: string[] = [],
+                    result = await runtime.chat({
+                        messages: [userMessage(`hi`)],
+                        limits: resolveLlmLimits(),
+                        reasoning: false,
+                        onReason: value => reasoned.push(value),
+                        onText: value => text.push(value),
+                    });
+                assertEqual(result, `reply`, `gpu reply`);
+                assertEqual(text.join(``), `reply`, `gpu text`);
+            },
+        },
+        {
+            name: `runtime/backend selection`,
+            run: async () => {
+                const cpuOnly = runtimeWith({ backend: LlmBackend.cpu });
+                const cpuLoaded = await cpuOnly.runtime.load({
+                    model: modelOf(ChatModelId.gemma4_e2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                assertEqual(cpuLoaded, false, `gpu model on cpu`);
+                assertEqual(cpuOnly.calls.start, 0, `no cpu start`);
+                const gpuOnly = runtimeWith({ backend: LlmBackend.gpu });
+                const gpuLoaded = await gpuOnly.runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                assertEqual(gpuLoaded, false, `cpu model on gpu`);
+                assertEqual(gpuOnly.calls.start, 0, `no gpu start`);
             },
         },
         {
@@ -719,6 +826,27 @@ const definitions: Array<{
             },
         },
         {
+            name: `preload/gpu model`,
+            run: async () => {
+                const
+                    { runtime, calls } = runtimeWith({
+                        backend: LlmBackend.gpu,
+                    }),
+                    statuses: ChatStatusSnapshot[] = [],
+                    loaded = await createPreloadOn(runtime)({
+                        model: ChatModelId.gemma4_e2b,
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(loaded, true, `gpu preloaded`);
+                assertEqual(calls.start, 1, `gpu start`);
+                const last = statuses[statuses.length - 1];
+                assertEqual(last.ready, true, `gpu ready`);
+                assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
+                assertEqual(last.supportsImages, true, `gpu images`);
+                assertEqual(last.error, undefined, `gpu no error`);
+            },
+        },
+        {
             name: `preload/unknown model`,
             run: async () => {
                 const
@@ -855,6 +983,32 @@ const definitions: Array<{
                 assertEqual(only.requests.length, 1, `image only chat`);
                 assertEqual(only.requests[0].messages[0].images?.length, 1, `only image passed`);
                 assertEqual(only.requests[0].messages[0].content, ``, `no text kept`);
+            },
+        },
+        {
+            name: `chat/gpu model`,
+            run: async () => {
+                const
+                    image = `data:image/png;base64,QQ==`,
+                    statuses: ChatStatusSnapshot[] = [],
+                    replies: string[] = [],
+                    { chat, requests } = chatWith({
+                        backend: LlmBackend.gpu,
+                        chatText: `seen`,
+                    });
+                chat({
+                    model: ChatModelId.gemma4_e2b,
+                    messages: [{ role: LlmRole.user, content: `what`, images: [image] }],
+                    onResponse: value => replies.push(value),
+                    onStatus: value => statuses.push(value),
+                });
+                await waitFor(() => replies[replies.length - 1] == `seen`, `gpu reply`);
+                assertEqual(requests.length, 1, `gpu chat`);
+                assertEqual(requests[0].messages[0].images?.[0], image, `gpu image`);
+                const last = statuses[statuses.length - 1];
+                assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
+                assertEqual(last.supportsImages, true, `gpu supports images`);
+                assertEqual(last.error, undefined, `gpu no error`);
             },
         },
         {

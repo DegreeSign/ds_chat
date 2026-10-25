@@ -3,7 +3,7 @@ import * as webpack from "webpack";
 import TerserPlugin from "terser-webpack-plugin";
 
 const
-    /** wllama binaries emitted next to the bundles, shared by every target */
+    /** engine binaries emitted next to the bundles, shared by every target */
     assetRules: webpack.RuleSetRule[] = [
         {
             test: /@wllama\/wllama-compat\/wasm\/wllama\.wasm$/,
@@ -20,11 +20,22 @@ const
             type: `asset/resource`,
             generator: { filename: `../assets/wllama/wllama.wasm` },
         },
+        {
+            test: /@litert-lm\/core\/wasm\/litertlm_wasm_internal\.(js|wasm)$/,
+            type: `asset/resource`,
+            generator: { filename: `../assets/litert/[name][ext]` },
+        },
     ],
     // Shared webpack configuration
     commonConfig: webpack.Configuration = {
         resolve: {
             extensions: [`.ts`, `.js`],
+            alias: {
+                '@degreesign/litert-wasm': path.resolve(
+                    __dirname,
+                    `node_modules/@litert-lm/core/wasm`,
+                ),
+            },
         },
         module: {
             rules: [
