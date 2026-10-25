@@ -1,9 +1,20 @@
-import type { EngineMessage, LlmEngine, LlmRuntime, StartLlmParams, WllamaMessage } from '../types';
+import type { ChatModel, EngineMessage, LlmEngine, LlmRuntime, StartLlmParams, WllamaMessage } from '../types';
 /** CPU threads after the hardware maximum and the caller cap */
 declare const cpuThreads: (cores: number, maxThreads: number) => number;
 declare const 
+/** Every CPU file of one model, its name and remote URL */
+cpuFiles: (model: ChatModel) => Array<{
+    name: string;
+    url: string;
+}>, 
+/** Every CPU file as a Blob, from the store or a resumable download */
+storedBlobs: ({ model, signal, onProgress, }: {
+    model: ChatModel;
+    signal?: AbortSignal;
+    onProgress: StartLlmParams[`onProgress`];
+}) => Promise<Blob[] | undefined>, 
 /** Map built messages to wllama turns */
 toWllamaMessages: (messages: EngineMessage[]) => Promise<WllamaMessage[]>, 
 /** Start the CPU runtime, the unified engine entry */
 startLLM: ({ model, limits, onProgress, signal, logging, assets: overrides, }: StartLlmParams) => Promise<LlmRuntime>, wllamaEngine: LlmEngine;
-export { cpuThreads, startLLM, toWllamaMessages, wllamaEngine, };
+export { cpuFiles, cpuThreads, startLLM, storedBlobs, toWllamaMessages, wllamaEngine, };

@@ -22,17 +22,17 @@ import {
     supportsImages,
 } from "../src/models";
 import {
+    cpuFiles,
     cpuThreads,
+    storedBlobs,
     toWllamaMessages,
 } from "../src/engines/wllama";
 import { cacheModel, toLitertMessages } from "../src/engines/litert";
 import {
     chainParts,
-    downloadModel,
-    purgeModels,
-    removeModel,
+    createModelStore,
+    isStoreError,
     resumePlan,
-    storedModel,
 } from "../src/engines/store";
 import {
     imageSide,
@@ -66,6 +66,8 @@ interface Outcome {
 
 const
     outcomes: Outcome[] = [],
+    testStore = createModelStore(`ds-chat-test-store`),
+    cpuStore = createModelStore(`wllama-store`),
     sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
     /** Run one test and record its outcome. */
     test = async (name: string, run: () => void | Promise<void>) => {
@@ -1631,8 +1633,8 @@ const definitions: Array<{
                     });
                 }) as typeof fetch;
                 try {
-                    await purgeModels();
-                    const saved = await downloadModel({
+                    await testStore.purge();
+                    const saved = await testStore.download({
                         url,
                         onProgress: value => progress.push(value),
                     });
@@ -1648,11 +1650,11 @@ const definitions: Array<{
                     assertEqual(bytes.length, body.length, `stored length`);
                     assertEqual(bytes[1500], body[1500], `stored middle`);
                     assertEqual(bytes[2999], body[2999], `stored tail`);
-                    await removeModel(url);
-                    assertEqual(await storedModel(url), undefined, `removed`);
+                    await testStore.remove(url);
+                    assertEqual(await testStore.stored(url), undefined, `removed`);
                 } finally {
                     globalThis.fetch = original;
-                    await purgeModels();
+                    await testStore.purge();
                 };
             },
         },
@@ -1693,8 +1695,8 @@ const definitions: Array<{
                     });
                 }) as typeof fetch;
                 try {
-                    await purgeModels();
-                    const saved = await downloadModel({ url, onProgress: () => { } });
+                    await testStore.purge();
+                    const saved = await testStore.download({ url, onProgress: () => { } });
                     if (!saved) throw new Error(`store unavailable`);
                     assertEqual(requests.length, 2, `one ignored range`);
                     assertEqual(requests[1].Range, `bytes=1000-2999`, `range ignored`);
@@ -1707,7 +1709,7 @@ const definitions: Array<{
                     assertEqual(bytes[2999], body[2999], `ignored tail`);
                 } finally {
                     globalThis.fetch = original;
-                    await purgeModels();
+                    await testStore.purge();
                 };
             },
         },
@@ -1754,8 +1756,8 @@ const definitions: Array<{
                     });
                 }) as typeof fetch;
                 try {
-                    await purgeModels();
-                    const stopped = await downloadModel({
+                    await testStore.purge();
+                    const stopped = await testStore.download({
                         url,
                         signal: stop.signal,
                         onProgress: () => stop.abort(),
@@ -1764,11 +1766,11 @@ const definitions: Array<{
                         (error: Error) => error.message == `Cancelled`,
                     );
                     assertEqual(stopped, true, `stop ends the download`);
-                    const part = await storedModel(url);
+                    const part = await testStore.stored(url);
                     assertEqual(part?.size, 1000, `kept the stored part`);
                     assertEqual(part?.total, 3000, `kept the total`);
                     assertEqual(part?.complete, false, `part open`);
-                    const saved = await downloadModel({ url, onProgress: () => { } });
+                    const saved = await testStore.download({ url, onProgress: () => { } });
                     if (!saved) throw new Error(`store unavailable`);
                     assertEqual(saved.complete, true, `resumed after stop`);
                     assertEqual(saved.size, 3000, `full size after stop`);
@@ -1779,7 +1781,7 @@ const definitions: Array<{
                     assertEqual(bytes[2999], body[2999], `stopped tail`);
                 } finally {
                     globalThis.fetch = original;
-                    await purgeModels();
+                    await testStore.purge();
                 };
             },
         },
@@ -1837,8 +1839,8 @@ const definitions: Array<{
                     });
                 }) as typeof fetch;
                 try {
-                    await purgeModels();
-                    const saved = await downloadModel({
+                    await testStore.purge();
+                    const saved = await testStore.download({
                         url,
                         onProgress: () => { },
                     });
@@ -1855,7 +1857,7 @@ const definitions: Array<{
                     assertEqual(bytes[1999], 2, `new tail`);
                 } finally {
                     globalThis.fetch = original;
-                    await purgeModels();
+                    await testStore.purge();
                 };
             },
         },
@@ -1902,8 +1904,8 @@ const definitions: Array<{
                     });
                 }) as typeof fetch;
                 try {
-                    await purgeModels();
-                    const saved = await downloadModel({
+                    await testStore.purge();
+                    const saved = await testStore.download({
                         url,
                         onProgress: () => { },
                     });
@@ -1922,7 +1924,166 @@ const definitions: Array<{
                     assertEqual(bytes[size - 1], body[size - 1], `multiple part tail`);
                 } finally {
                     globalThis.fetch = original;
-                    await purgeModels();
+                    await testStore.purge();
+                };
+            },
+        },
+        {
+            name: `store/error names`,
+            run: () => {
+                assertEqual(
+                    isStoreError(new DOMException(``, `NotAllowedError`)),
+                    true,
+                    `not allowed`,
+                );
+                assertEqual(
+                    isStoreError(new DOMException(``, `NotSupportedError`)),
+                    true,
+                    `not supported`,
+                );
+                assertEqual(
+                    isStoreError(new DOMException(``, `QuotaExceededError`)),
+                    false,
+                    `quota is not a store error`,
+                );
+                assertEqual(isStoreError(new Error(`x`)), false, `plain error`);
+            },
+        },
+        {
+            name: `store/cpu files resume`,
+            run: async () => {
+                const
+                    model: ChatModel = {
+                        id: ChatModelId.qwen3_vl_2b,
+                        reasoning: true,
+                        cpu: {
+                            repo: `test/cpu`,
+                            file: `model.gguf`,
+                            mmproj: { file: `mmproj.gguf` },
+                        },
+                    },
+                    textOnly: ChatModel = {
+                        id: ChatModelId.qwen3_vl_2b,
+                        reasoning: false,
+                        cpu: { repo: `test/cpu`, file: `text.gguf` },
+                    },
+                    files = cpuFiles(model),
+                    modelBody = new Uint8Array(3000)
+                        .map((_, index) => index % 251),
+                    projectorBody = new Uint8Array(2000)
+                        .map((_, index) => (index + 7) % 251),
+                    requests: Array<{ url: string, range: string }> = [],
+                    progress: number[] = [],
+                    original = globalThis.fetch;
+                assertEqual(files.length, 2, `cpu file count`);
+                assertEqual(files[0].url.endsWith(`/model.gguf`), true, `model url`);
+                assertEqual(
+                    files[1].url.endsWith(`/mmproj.gguf`),
+                    true,
+                    `projector url`,
+                );
+                assertEqual(cpuFiles(textOnly).length, 1, `text cpu file`);
+                assertEqual(
+                    cpuFiles({ ...textOnly, cpu: undefined }).length,
+                    0,
+                    `no cpu files`,
+                );
+                const
+                    bodies = new Map([
+                        [files[0].url, modelBody],
+                        [files[1].url, projectorBody],
+                    ]),
+                    cuts = new Set([files[0].url]);
+                globalThis.fetch = (async (
+                    input: RequestInfo | URL,
+                    init?: RequestInit,
+                ) => {
+                    const
+                        url = `${input}`,
+                        headers = (init?.headers || {}) as Record<string, string>,
+                        body = bodies.get(url) || new Uint8Array(),
+                        range = headers.Range || ``;
+                    requests.push({ url, range });
+                    if (cuts.delete(url)) {
+                        // a cut connection delivers a prefix, then ends
+                        return new Response(new ReadableStream<Uint8Array>({
+                            start(controller) {
+                                controller.enqueue(body.slice(0, 1000));
+                                controller.close();
+                            },
+                        }), {
+                            status: 200,
+                            headers: { 'content-length': `${body.length}` },
+                        });
+                    };
+                    const match = /bytes=(\d+)-(\d+)/.exec(range);
+                    if (match) {
+                        const
+                            start = Number(match[1]),
+                            end = Number(match[2]);
+                        return new Response(body.slice(start, end + 1), {
+                            status: 206,
+                            headers: {
+                                'content-range':
+                                    `bytes ${start}-${end}/${body.length}`,
+                            },
+                        });
+                    };
+                    return new Response(body, {
+                        status: 200,
+                        headers: { 'content-length': `${body.length}` },
+                    });
+                }) as typeof fetch;
+                try {
+                    await cpuStore.purge();
+                    const blobs = await storedBlobs({
+                        model,
+                        onProgress: value => progress.push(value),
+                    });
+                    if (!blobs) throw new Error(`cpu store unavailable`);
+                    assertEqual(blobs.length, 2, `two cpu blobs`);
+                    assertEqual(blobs[0].size, modelBody.length, `model size`);
+                    assertEqual(
+                        blobs[1].size,
+                        projectorBody.length,
+                        `projector size`,
+                    );
+                    const
+                        modelBytes = new Uint8Array(
+                            await blobs[0].arrayBuffer()),
+                        projectorBytes = new Uint8Array(
+                            await blobs[1].arrayBuffer());
+                    assertEqual(modelBytes[1500], modelBody[1500], `model middle`);
+                    assertEqual(
+                        projectorBytes[1999],
+                        projectorBody[1999],
+                        `projector tail`,
+                    );
+                    assertEqual(
+                        requests[1].range,
+                        `bytes=1000-2999`,
+                        `model resumed`,
+                    );
+                    assertEqual(progress[progress.length - 1], 1, `cpu full progress`);
+                    assertEqual(
+                        progress.some(value => value > 0 && value < 1),
+                        true,
+                        `cpu partial progress`,
+                    );
+                    // a second call reads the store without touching the network
+                    const before = requests.length;
+                    const again = await storedBlobs({ model, onProgress: () => { } });
+                    assertEqual(again?.length, 2, `stored cpu blobs`);
+                    assertEqual(requests.length, before, `store skips network`);
+                    await cpuStore.remove(files[0].url);
+                    assertEqual(
+                        await cpuStore.stored(files[0].url),
+                        undefined,
+                        `cpu removed`,
+                    );
+                } finally {
+                    globalThis.fetch = original;
+                    await cpuStore.purge();
                 };
             },
         },

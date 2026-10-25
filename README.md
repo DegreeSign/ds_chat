@@ -220,8 +220,8 @@ follow the flag.
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | Yes | No |
 | `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | No | Yes |
 
-The first call downloads the model through its engine and caches it. Later
-calls reuse the loaded runtime. Only one model stays in memory. An interrupted
+The first call downloads the model before its engine loads it. Later calls
+reuse the loaded runtime. Only one model stays in memory. An interrupted
 download keeps every part it committed and resumes from the last one on the
 next attempt, including after a reload.
 
@@ -300,24 +300,26 @@ changed. A page inside an iframe is isolated only when every ancestor sets the
 same headers.
 
 Each engine keeps its own cache. Loading a model unloads the previous runtime
-and removes the previous model's cache. The CPU engine uses the wllama cache
-manager. The GPU engine stores the `.litertlm` file in the origin private file
-system under `litert-store` as numbered parts, and reads a Cache Storage entry
-under `litertlm-models` when an older version stored one. A quota failure keeps
-the parts already stored, so freeing disk lets the next attempt resume.
+and removes the previous model's cache. Both engines store model files in the
+origin private file system as numbered parts, under `wllama-store` for the CPU
+engine and `litert-store` for the GPU engine. The GPU engine also reads a Cache
+Storage entry under `litertlm-models` when an older version stored the file. A
+quota failure keeps the parts already stored, so freeing disk lets the next
+attempt resume.
 
-The GPU engine stores the file before it compiles the model, and one download
-serves every caller. A failed compile, a cancelled call or a repeated
-`createChat` reads the stored parts instead of downloading them again. A
-download fetches bounded ranges of 32 MB, commits each part as it arrives and
-retries a stalled or cut connection from the last committed byte, so a reload
-loses at most one part. Each attempt checks the file size and entity tag, and a
-changed model starts over. A host that ignores the range replays the stored
-prefix and keeps the parts already stored. Hosts without a writable file system
-still stream from the network and fall back to Cache Storage, without resuming.
+Both engines store the files before they load them, and one download serves
+every caller. A failed load, a cancelled call or a repeated `createChat` reads
+the stored parts instead of downloading them again. A download fetches bounded
+ranges of 32 MB, commits each part as it arrives and retries a stalled or cut
+connection from the last committed byte, so a reload loses at most one part.
+Each attempt checks the file size and entity tag, and a changed model starts
+over. A host that ignores the range replays the stored prefix and keeps the
+parts already stored. Hosts without a writable file system still stream from
+the network; the CPU engine falls back to the wllama cache manager and the GPU
+engine to Cache Storage, without resuming.
 
-A CPU vision model downloads its projector with the model and caches both. A
-GPU vision model keeps its encoder in the single `.litertlm` file.
+A CPU vision model downloads its projector with the model and stores both files
+as parts. A GPU vision model keeps its encoder in the single `.litertlm` file.
 
 Both engines are bundled into `dist/browser` and `dist/node` as dynamic chunks.
 The package ships the wllama binaries under `dist/assets/wllama` and the LiteRT
@@ -447,9 +449,10 @@ download no engine code beyond the chunk they use.
 
 ### Where are the models stored?
 
-The CPU engine owns its cache through the wllama cache manager. The GPU engine
-stores its model in Cache Storage under `litertlm-models`. The package stores no
-model data itself.
+Both engines store model files in the origin private file system as resumable
+parts, under `wllama-store` for the CPU engine and `litert-store` for the GPU
+engine. The GPU engine also reads a Cache Storage entry under `litertlm-models`
+when an older version stored the file. The package stores no model data itself.
 
 ### Which model should I pick?
 

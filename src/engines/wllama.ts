@@ -1,13 +1,14 @@
 import type { CacheEntry, Wllama, WllamaLogger } from '@wllama/wllama/esm/index.js';
 import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
-import { cpuContextWindow } from '../models';
+import { cpuContextWindow, llmModels } from '../models';
 import {
     hasImages,
     modelUrl,
     replyOptions,
     runEngineChat,
 } from './engine';
+import { createModelStore, isStoreError } from './store';
 import { imageBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
@@ -26,7 +27,9 @@ const
     /** Context window requested from the CPU engine, the wasm heap holds weights and cache */
     contextSize = cpuContextWindow,
     /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
-    gpuProbeLog = `ggml_webgpu: Failed to get an adapter`;
+    gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
+    /** Resumable file store of the CPU engine */
+    store = createModelStore(`wllama-store`);
 
 /** CPU threads after the hardware maximum and the caller cap */
 const cpuThreads = (cores: number, maxThreads: number): number =>
@@ -103,11 +106,66 @@ const
     entryOf = (entry: CacheEntry, file: string): boolean =>
         entry.name.includes(file)
         || !!entry.metadata?.originalURL?.includes(file),
-    /** Every cached file of one model */
-    modelFiles = (model: ChatModel): string[] =>
-        model.cpu
-            ? [model.cpu.file, ...(model.cpu.mmproj ? [model.cpu.mmproj.file] : [])]
-            : [],
+    /** Every CPU file of one model, its name and remote URL */
+    cpuFiles = (model: ChatModel): Array<{ name: string, url: string }> => {
+        const cpu = model.cpu;
+        if (!cpu) return [];
+        return [
+            { name: cpu.file, url: modelUrl(cpu.repo, cpu.file) },
+            ...(cpu.mmproj
+                ? [{
+                    name: cpu.mmproj.file,
+                    url: modelUrl(cpu.repo, cpu.mmproj.file),
+                }]
+                : []),
+        ];
+    },
+    /** Whether every CPU file is complete in the resumable store */
+    filesStored = async (model: ChatModel): Promise<boolean> => {
+        const files = cpuFiles(model);
+        if (!files.length) return false;
+        for (const file of files) {
+            const stored = await store.stored(file.url);
+            if (!stored?.complete) return false;
+        };
+        return true;
+    },
+    /** Whether every CPU file is complete in the wllama cache manager */
+    filesCached = async (
+        instance: Wllama,
+        model: ChatModel,
+    ): Promise<boolean> => {
+        const entries = await instance.cacheManager.list();
+        return cpuFiles(model).every(file =>
+            entries.some(entry => entryOf(entry, file.name)));
+    },
+    /** Every CPU file as a Blob, from the store or a resumable download */
+    storedBlobs = async ({
+        model,
+        signal,
+        onProgress,
+    }: {
+        model: ChatModel,
+        signal?: AbortSignal,
+        onProgress: StartLlmParams[`onProgress`],
+    }): Promise<Blob[] | undefined> => {
+        const
+            files = cpuFiles(model),
+            blobs: Blob[] = [];
+        for (let index = 0; index < files.length; index++) {
+            if (signal?.aborted) throw new Error(`Cancelled`);
+            const saved = await store.download({
+                url: files[index].url,
+                signal,
+                onProgress: (progress, phase) =>
+                    onProgress((index + progress) / files.length, phase),
+            });
+            // a host without a file system streams the files instead
+            if (!saved) return undefined;
+            blobs.push(saved.file);
+        };
+        return blobs.length ? blobs : undefined;
+    },
     /** Map built messages to wllama turns */
     toWllamaMessages = async (
         messages: EngineMessage[],
@@ -182,8 +240,9 @@ const
         );
         const
             instance = await getWllama(),
-            modelFileUrl = modelUrl(cpu.repo, cpu.file),
+            complete = await filesStored(model),
             projectorFile = cpu.mmproj?.file,
+            modelFileUrl = modelUrl(cpu.repo, cpu.file),
             projectorUrl = projectorFile
                 ? modelUrl(cpu.repo, projectorFile) : ``;
         if (signal?.aborted) {
@@ -191,7 +250,7 @@ const
             throw new Error(`Cancelled`);
         };
         // an older text-only cache cannot accept the projector
-        if (projectorFile) {
+        if (!complete && projectorFile) {
             const
                 entries = await instance.cacheManager.list(),
                 hasModel = entries.some(entry => entryOf(entry, cpu.file)),
@@ -200,32 +259,54 @@ const
                 await instance.cacheManager.deleteMany(entry =>
                     entryOf(entry, cpu.file));
         };
+        const loadParams = {
+            n_ctx: contextSize,
+            n_threads: threads,
+            // cap chain-of-thought tokens, long thinking makes replies slow
+            reasoning_budget_tokens: limits.maxThinkingTokens,
+            // this engine is the CPU fallback, never offload to a GPU
+            n_gpu_layers: 0,
+            jinja: true,
+        };
         try {
-            await instance.loadModelFromUrl(
-                projectorUrl
-                    ? { url: modelFileUrl, mmprojUrl: projectorUrl }
-                    : modelFileUrl,
-                {
-                    n_ctx: contextSize,
-                    n_threads: threads,
-                    // cap chain-of-thought tokens, long thinking makes replies slow
-                    reasoning_budget_tokens: limits.maxThinkingTokens,
-                    // this engine is the CPU fallback, never offload to a GPU
-                    n_gpu_layers: 0,
-                    useCache: true,
-                    jinja: true,
-                    // abort the in-flight model download when cancelled
-                    signal,
-                    progressCallback: ({ loaded, total }) => {
-                        const progress = total ? loaded / total : 0;
-                        // the final progress means the download is done and loading begins
-                        onProgress(
-                            progress,
-                            progress >= 1 ? LlmPhase.load : LlmPhase.download,
-                        );
+            // a complete store or an older cache skips the network
+            let blobs = complete
+                ? await storedBlobs({ model, signal, onProgress })
+                : undefined;
+            if (!blobs && !complete && !await filesCached(instance, model)
+                .catch(() => false))
+                blobs = await storedBlobs({ model, signal, onProgress })
+                    .catch(error => {
+                        if (signal?.aborted) throw new Error(`Cancelled`);
+                        // a store the browser cannot write still streams the file
+                        if (!isStoreError(error)) throw error;
+                        if (logging) console.log(`Local model store failed`, error);
+                        return undefined;
+                    });
+            if (blobs) {
+                onProgress(1, LlmPhase.load);
+                await instance.loadModel(blobs, loadParams);
+            } else {
+                await instance.loadModelFromUrl(
+                    projectorUrl
+                        ? { url: modelFileUrl, mmprojUrl: projectorUrl }
+                        : modelFileUrl,
+                    {
+                        ...loadParams,
+                        useCache: true,
+                        // abort the in-flight model download when cancelled
+                        signal,
+                        progressCallback: ({ loaded, total }) => {
+                            const progress = total ? loaded / total : 0;
+                            // the final progress means the download is done and loading begins
+                            onProgress(
+                                progress,
+                                progress >= 1 ? LlmPhase.load : LlmPhase.download,
+                            );
+                        },
                     },
-                },
-            );
+                );
+            };
         } catch (error) {
             // a failed download can leave the worker unusable
             await dropWllama();
@@ -258,28 +339,31 @@ const
         cached: async (model) => {
             try {
                 if (!model.cpu) return false;
-                const
-                    instance = await getWllama(),
-                    entries = await instance.cacheManager.list();
-                return modelFiles(model)
-                    .every(file => entries.some(entry => entryOf(entry, file)));
+                if (await filesStored(model)) return true;
+                return await filesCached(await getWllama(), model);
             } catch { return false; };
         },
         hasCache: async () => {
             try {
+                for (const file of llmModels.flatMap(model => cpuFiles(model)))
+                    if (await store.stored(file.url)) return true;
                 const instance = await getWllama();
                 return (await instance.cacheManager.list()).length > 0;
             } catch { return false; };
         },
         remove: async (model: ChatModel) => {
+            const files = cpuFiles(model);
             try {
-                if (!model.cpu) return;
+                for (const file of files) await store.remove(file.url);
+            } catch { };
+            try {
                 const instance = await getWllama();
                 await instance.cacheManager.deleteMany(entry =>
-                    modelFiles(model).some(file => entryOf(entry, file)));
+                    files.some(file => entryOf(entry, file.name)));
             } catch { };
         },
         purge: async () => {
+            try { await store.purge(); } catch { };
             try {
                 const instance = await getWllama();
                 await instance.cacheManager.clear();
@@ -288,8 +372,10 @@ const
     };
 
 export {
+    cpuFiles,
     cpuThreads,
     startLLM,
+    storedBlobs,
     toWllamaMessages,
     wllamaEngine,
 };

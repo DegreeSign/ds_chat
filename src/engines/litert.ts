@@ -9,12 +9,7 @@ import {
     replyOptions,
     runEngineChat,
 } from './engine';
-import {
-    downloadModel,
-    purgeModels,
-    removeModel,
-    storedModel,
-} from './store';
+import { createModelStore, isStoreError } from './store';
 import { imageBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
@@ -34,6 +29,8 @@ import type {
 const
     /** Cache Storage bucket for the downloaded LiteRT models */
     cacheName = `litertlm-models`,
+    /** Resumable file store of the GPU engine */
+    store = createModelStore(`litert-store`),
     /** GPU executor settings tuned by the LiteRT web chat demo */
     backendConfig: Partial<GpuArtisanConfig> = {
         num_output_candidates: 1,
@@ -62,7 +59,7 @@ const modelCached = async (model: ChatModel): Promise<boolean> => {
     if (!artifact) return false;
     const
         url = modelUrl(artifact.repo, artifact.file),
-        [cache, stored] = await Promise.all([cacheOpen(), storedModel(url)]);
+        [cache, stored] = await Promise.all([cacheOpen(), store.stored(url)]);
     if (stored?.complete) return true;
     try {
         return !!(cache && await cache.match(url));
@@ -229,11 +226,6 @@ const chatOn = async ({
         },
     });
 
-/** Whether a failed store write means this host cannot use a file store */
-const isStoreError = (error: unknown): boolean =>
-    [`NotAllowedError`, `NotSupportedError`]
-        .includes((error as DOMException)?.name || ``);
-
 /** Start the GPU runtime, the unified engine entry */
 const startLLM = async ({
     model,
@@ -255,12 +247,12 @@ const startLLM = async ({
     const legacy = cache ? await cache.match(url) : undefined;
     if (legacy?.body) source = legacy.body;
     else {
-        const stored = await storedModel(url);
+        const stored = await store.stored(url);
         if (stored?.complete) source = stored.file.stream();
     };
     if (!source) {
         // the file store keeps what it fetches, so a retry resumes it
-        const saved = await downloadModel({ url, signal, onProgress })
+        const saved = await store.download({ url, signal, onProgress })
             .catch(error => {
                 if (signal?.aborted) throw new Error(`Cancelled`);
                 // a store the browser cannot write still loads from the network
@@ -317,7 +309,7 @@ const litertEngine: LlmEngine = {
             for (const model of llmModels) {
                 const artifact = model.litert;
                 if (!artifact) continue;
-                const stored = await storedModel(
+                const stored = await store.stored(
                     modelUrl(artifact.repo, artifact.file));
                 if (stored) return true;
             };
@@ -332,13 +324,13 @@ const litertEngine: LlmEngine = {
             const
                 url = modelUrl(artifact.repo, artifact.file),
                 cache = await cacheOpen();
-            await removeModel(url);
+            await store.remove(url);
             if (cache) await cache.delete(url);
         } catch { };
     },
     purge: async () => {
         try {
-            await purgeModels();
+            await store.purge();
             if (typeof caches != `undefined`) await caches.delete(cacheName);
         } catch { };
     },

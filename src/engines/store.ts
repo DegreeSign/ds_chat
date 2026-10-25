@@ -1,6 +1,7 @@
 import { LlmPhase } from '../enums';
 import { contentLength } from './engine';
 import type {
+    ModelStore,
     ResumePlan,
     StartLlmParams,
     StoredFilePart,
@@ -11,8 +12,6 @@ import type {
 } from '../types';
 
 const
-    /** Directory of the model files inside the origin private file system */
-    storeDirName = `litert-store`,
     /** Bytes stored in one part, a cut costs at most one part */
     partBytes = 32 * 1024 * 1024,
     /** Attempts without new bytes before a download gives up */
@@ -64,14 +63,6 @@ const
         };
         try {
             return await navigator.storage.getDirectory();
-        } catch { return undefined; };
-    },
-    /** Open the store directory, absent in Node and without a file system */
-    storeDir = async (): Promise<FileSystemDirectoryHandle | undefined> => {
-        const root = await storeRoot();
-        if (!root) return undefined;
-        try {
-            return await root.getDirectoryHandle(storeDirName, { create: true });
         } catch { return undefined; };
     },
     /** Open one model directory, absent before the first part */
@@ -437,49 +428,63 @@ const
                 signal?.removeEventListener(`abort`, leave);
             };
         };
-    };
+    },
+    /** Whether a failed store write means this host cannot use a file store */
+    isStoreError = (error: unknown): boolean =>
+        [`NotAllowedError`, `NotSupportedError`]
+            .includes((error as DOMException)?.name || ``);
 
-const
-    /** Stored bytes and metadata of one model file, undefined when absent */
-    storedModel = async (url: string): Promise<StoredModel | undefined> => {
-        const dir = await storeDir();
-        return dir ? await readStored(dir, storeName(url)) : undefined;
-    },
-    /** Download one model file, resuming the parts already stored */
-    downloadModel = async ({
-        url,
-        signal,
-        onProgress,
-    }: StoreDownloadParams): Promise<StoredModel | undefined> => {
-        const running = downloads.get(url);
-        if (running) return await running;
-        const dir = await storeDir();
-        if (!dir) return undefined;
-        const pending = downloadInto(dir, url, signal, onProgress).finally(() => {
-            downloads.delete(url);
-        });
-        downloads.set(url, pending);
-        return await pending;
-    },
-    /** Delete one stored model file and its metadata */
-    removeModel = async (url: string): Promise<void> => {
-        const dir = await storeDir();
-        if (!dir) return;
-        await removeFrom(dir, storeName(url));
-    },
-    /** Delete the whole store directory and every model file in it */
-    purgeModels = async (): Promise<void> => {
+/** Create the resumable file store of one engine */
+const createModelStore = (dirName: string): ModelStore => {
+    /** Open this engine's store directory, created on demand */
+    const dir = async (): Promise<FileSystemDirectoryHandle | undefined> => {
         const root = await storeRoot();
-        if (!root) return;
-        await root.removeEntry(storeDirName, { recursive: true })
-            .catch(() => { });
+        if (!root) return undefined;
+        try {
+            return await root.getDirectoryHandle(dirName, { create: true });
+        } catch { return undefined; };
     };
+    return {
+        /** Stored bytes and metadata of one model file */
+        stored: async (url: string): Promise<StoredModel | undefined> => {
+            const root = await dir();
+            return root ? await readStored(root, storeName(url)) : undefined;
+        },
+        /** Download one model file, resuming the parts already stored */
+        download: async ({
+            url,
+            signal,
+            onProgress,
+        }: StoreDownloadParams): Promise<StoredModel | undefined> => {
+            const key = `${dirName}|${url}`;
+            const running = downloads.get(key);
+            if (running) return await running;
+            const root = await dir();
+            if (!root) return undefined;
+            const pending = downloadInto(root, url, signal, onProgress).finally(() => {
+                downloads.delete(key);
+            });
+            downloads.set(key, pending);
+            return await pending;
+        },
+        /** Delete one stored model file and its metadata */
+        remove: async (url: string): Promise<void> => {
+            const root = await dir();
+            if (!root) return;
+            await removeFrom(root, storeName(url));
+        },
+        /** Delete the whole store directory and every model file in it */
+        purge: async (): Promise<void> => {
+            const root = await storeRoot();
+            if (!root) return;
+            await root.removeEntry(dirName, { recursive: true }).catch(() => { });
+        },
+    };
+};
 
 export {
     chainParts,
-    downloadModel,
-    purgeModels,
-    removeModel,
+    createModelStore,
+    isStoreError,
     resumePlan,
-    storedModel,
 };

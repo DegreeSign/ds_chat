@@ -220,6 +220,18 @@ interface StoreDownloadParams {
     onProgress: StartLlmParams[`onProgress`],
 }
 
+/** Resumable model file store owned by one engine */
+interface ModelStore {
+    /** Stored bytes and metadata of one model file, undefined when absent */
+    stored: (url: string) => Promise<StoredModel | undefined>,
+    /** Download one model file, resuming the parts already stored */
+    download: (params: StoreDownloadParams) => Promise<StoredModel | undefined>,
+    /** Delete one stored model file and its metadata */
+    remove: (url: string) => Promise<void>,
+    /** Delete the whole store directory and every model file in it */
+    purge: () => Promise<void>,
+}
+
 /** One generation request */
 interface RuntimeChatParams {
     messages: ChatMessage[],
@@ -415,6 +427,7 @@ export type {
     StoredModelMeta,
     ResumePlan,
     StoreDownloadParams,
+    ModelStore,
     Runtime,
     EngineChatParams,
     StartLlmParams,
