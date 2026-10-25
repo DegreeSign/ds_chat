@@ -230,6 +230,26 @@ The CPU engine derives a raw thread count from the device, then caps it at
 `limits.maxThreads`, default 2. The cap is applied after the raw maximum, so the
 engine never exceeds the device or the caller budget.
 
+Threads only take effect when the host page is cross-origin isolated. Serve it
+with both headers:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Then assert `crossOriginIsolated === true` in the page. Without isolation the
+engine falls back to one thread and image encoding becomes much slower, since
+the projector runs on the CPU.
+
+Under `require-corp` every cross-origin subresource must be CORS enabled or
+carry `Cross-Origin-Resource-Policy`. Hugging Face downloads already qualify;
+third party images, fonts and embeds need `crossorigin="anonymous"` or must be
+self hosted. Chromium also accepts
+`Cross-Origin-Embedder-Policy: credentialless` when those assets cannot be
+changed. A page inside an iframe is isolated only when every ancestor sets the
+same headers.
+
 Only one model stays on device. Loading a new model unloads the previous runtime
 and deletes other model caches. A quota failure purges every model cache before
 retrying, so a half written download never blocks the next attempt.
