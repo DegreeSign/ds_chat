@@ -60,6 +60,71 @@ const modelCached = async (model: ChatModel): Promise<boolean> => {
     } catch { return false; };
 };
 
+/** Every model file download in flight, shared by every caller */
+const downloads = new Map<string, Promise<void>>();
+
+/** Declared size of one download, zero when the host hides it */
+const contentLength = (response: Response): number =>
+    Number(response.headers.get(`content-length`)) || 0;
+
+/** Stream one response body, reporting its download progress */
+const countStream = (
+    body: ReadableStream<Uint8Array>,
+    total: number,
+    onProgress: StartLlmParams[`onProgress`],
+): ReadableStream<Uint8Array> => {
+    let loaded = 0;
+    return body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        transform: (chunk, controller) => {
+            loaded += chunk.byteLength;
+            onProgress(total ? loaded / total : 0, LlmPhase.download);
+            controller.enqueue(chunk);
+        },
+    }));
+};
+
+/** Fetch one model file into the cache, once per URL */
+const cacheModel = async (
+    url: string,
+    cache: Cache,
+    signal: AbortSignal | undefined,
+    onProgress: StartLlmParams[`onProgress`],
+): Promise<void> => {
+    const running = downloads.get(url);
+    if (running) return await running;
+    const pending = (async () => {
+        const response = await fetch(url, { signal });
+        if (!response.ok || !response.body)
+            throw new Error(`Model download failed`);
+        const
+            total = contentLength(response),
+            body = countStream(response.body, total, onProgress);
+        // the whole file lands on disk before the engine reads it back
+        await cache.put(url, new Response(body, {
+            headers: {
+                'content-type': `application/octet-stream`,
+                ...(total ? { 'content-length': `${total}` } : {}),
+            },
+        }));
+    })().finally(() => {
+        downloads.delete(url);
+    });
+    downloads.set(url, pending);
+    return await pending;
+};
+
+/** Stream one model file from the network, for a cache the browser rejects */
+const fetchModel = async (
+    url: string,
+    signal: AbortSignal | undefined,
+    onProgress: StartLlmParams[`onProgress`],
+): Promise<ReadableStream<Uint8Array>> => {
+    const response = await fetch(url, { signal });
+    if (!response.ok || !response.body)
+        throw new Error(`Model download failed`);
+    return countStream(response.body, contentLength(response), onProgress);
+};
+
 /** Map built messages to LiteRT turns */
 const toLitertMessages = async (
     messages: EngineMessage[],
@@ -174,43 +239,24 @@ const startLLM = async ({
     if (signal?.aborted) throw new Error(`Cancelled`);
     const
         url = modelUrl(artifact.repo, artifact.file),
-        cache = await cacheOpen(),
-        hit = cache ? await cache.match(url) : undefined;
-    let source: ReadableStream<Uint8Array>;
-    if (hit?.body) {
-        source = hit.body;
-        onProgress(1, LlmPhase.load);
-    } else {
-        const response = await fetch(url, { signal });
-        if (!response.ok || !response.body)
-            throw new Error(`Model download failed`);
-        const total = Number(response.headers.get(`content-length`)) || 0;
-        let loaded = 0;
-        const counted = response.body.pipeThrough(
-            new TransformStream<Uint8Array, Uint8Array>({
-                transform: (chunk, controller) => {
-                    loaded += chunk.byteLength;
-                    onProgress(
-                        total ? loaded / total : 0,
-                        LlmPhase.download,
-                    );
-                    controller.enqueue(chunk);
-                },
-            }),
-        );
-        if (cache) {
-            const [forEngine, forCache] = counted.tee();
-            void cache.put(url, new Response(forCache, {
-                headers: {
-                    'content-type': `application/octet-stream`,
-                    ...(total ? { 'content-length': `${total}` } : {}),
-                },
-            })).catch(error => {
+        cache = await cacheOpen();
+    let source: ReadableStream<Uint8Array> | undefined;
+    if (cache) {
+        // the file lands on disk before the engine reads it, so a failed
+        // engine or a second caller never downloads it again
+        if (!await cache.match(url)) {
+            try {
+                await cacheModel(url, cache, signal, onProgress);
+            } catch (error) {
+                if (signal?.aborted) throw new Error(`Cancelled`);
                 if (logging) console.log(`Local model cache failed`, error);
-            });
-            source = forEngine;
-        } else source = counted;
+            };
+        };
+        const hit = await cache.match(url);
+        if (hit?.body) source = hit.body;
     };
+    // a cache the browser rejects still loads from the network stream
+    if (!source) source = await fetchModel(url, signal, onProgress);
     if (signal?.aborted) throw new Error(`Cancelled`);
     onProgress(1, LlmPhase.load);
     const engine = await mod.Engine.create({
@@ -264,6 +310,7 @@ const litertEngine: LlmEngine = {
 };
 
 export {
+    cacheModel,
     litertEngine,
     toLitertMessages,
 };

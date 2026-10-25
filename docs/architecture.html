@@ -484,13 +484,13 @@ const e = (from, to, kind) => EDGES.push({ from, to, kind });
 f(`host`, `host`, `host app`, `host app`, 0);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 18);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 50);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 370);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 245);
-f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 260);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 381);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 248);
+f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 296);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 44);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 376);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 295);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 269);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 316);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
 f(`litertLoader`, `engines`, `litertLoader.js`,
@@ -500,7 +500,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1425);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1549);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 148);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 204);
@@ -524,7 +524,7 @@ n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
 // entry, enums and types
 n(`entry`, `exports`, 1, `public exports`, `createChat · preloadModel + 6 enums`,
     `Only createChat, preloadModel and the public types leave the package`);
-n(`chat`, `createChat`, 241, `createChat`, `(input: ChatInput) => CancelChat`,
+n(`chat`, `createChat`, 244, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
 n(`chat`, `createChatOn`, 50, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
@@ -536,12 +536,12 @@ n(`chat`, `emitStatus`, 57, `emitStatus`, `(call: ActiveCall) => void`,
     `Publish the snapshot for one live call`);
 n(`chat`, `run`, 61, `run`, `(call: ActiveCall) => Promise<void>`,
     `Resolve the model, load it, strip unsupported images, stream`);
-n(`chat`, `cancel`, 164, `cancel`, `(call: ActiveCall) => void`,
-    `Stale no-op, abort the stream, cancel the load, or unload`);
-n(`chat`, `createPreloadOn`, 195, `createPreloadOn`,
+n(`chat`, `cancel`, 167, `cancel`, `(call: ActiveCall) => void`,
+    `Stale no-op, leave the load wait, abort the stream, or unload`);
+n(`chat`, `createPreloadOn`, 198, `createPreloadOn`,
     `(service: Runtime) => (input: ChatPreloadInput) => Promise<boolean>`,
     `Testable preload factory over one runtime`);
-n(`chat`, `preloadModel`, 243, `preloadModel`,
+n(`chat`, `preloadModel`, 246, `preloadModel`,
     `(input: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`enums`, `enums`, 2, `enums`, `6 exported enums`,
@@ -565,9 +565,13 @@ n(`types`, `preload`, 100, `ChatPreloadInput`,
     `The model preload subset a host may call before the first chat`);
 n(`types`, `call`, 129, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · requesting · phase · percent`
-    + ` · load · chat · unload · cancelLoad · model`,
+    + ` · load · chat · unload · model`,
     `One request state, one live call and the runtime it drives`);
-n(`types`, `params`, 190, `EngineChatParams · StartLlmParams`
+n(`types`, `load`, 154, `RuntimeLoadParams · RuntimeLoadWaiter`,
+    `model · limits · assets · logging · signal · onProgress`
+    + ` · report · settle`,
+    `One load request and one caller waiting on the load it joined`);
+n(`types`, `params`, 200, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · signal`,
     `Per-call budgets and accumulated text callbacks`);
@@ -588,39 +592,43 @@ n(`types`, `litertParams`, 283, `LitertChatParams · StreamLitertParams`,
     `One LiteRT chat call and one stream over the loaded module`);
 
 // model runtime
-n(`llm`, `createRuntime`, 16, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
+n(`llm`, `createRuntime`, 17, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
     `One module singleton, fake engines in tests`);
-n(`llm`, `probes`, 38, `probes`,
+n(`llm`, `probes`, 39, `probes`,
     `wasmSupported · webgpuSupported · persistStorage`
     + ` · isOverQuota · isQuotaError`,
     `Capability and storage checks, guarded`);
-n(`llm`, `engineFor`, 49, `engineFor`,
+n(`llm`, `engineFor`, 50, `engineFor`,
     `(model: ChatModel) => LlmEngine | undefined`,
     `Test override, then the model artifact and WebGPU or wasm capability`);
-n(`llm`, `evictPrevious`, 82, `evictPrevious`,
+n(`llm`, `evictPrevious`, 83, `evictPrevious`,
     `(model, engine) => Promise<void>`,
     `Unload the previous model, remove its cache, keep the loaded engine only`);
-n(`llm`, `reportProgress`, 101, `reportProgress`, `(value, phase?) => void`,
-    `Clamp 0..1 and forward to the active request`);
-n(`llm`, `setStatus`, 109, `setStatus`, `(next: LlmStatus) => void`,
+n(`llm`, `reportProgress`, 102, `reportProgress`, `(value, phase?) => void`,
+    `Clamp 0..1 and report to every caller waiting on the load`);
+n(`llm`, `setStatus`, 111, `setStatus`, `(next: LlmStatus) => void`,
     `Store the engine status for the next snapshot`);
-n(`llm`, `ready`, 113, `ready`, `() => boolean`,
+n(`llm`, `abortLoad`, 115, `abortLoad`, `() => void`,
+    `Bump the load token, abort the engine call and return to idle`);
+n(`llm`, `releaseWaiter`, 123, `releaseWaiter`, `(waiter) => void`,
+    `Drop one caller, then abort in a microtask once nobody waits`);
+n(`llm`, `followLoad`, 131, `followLoad`, `(onProgress, signal?) => Promise<boolean>`,
+    `Follow the shared load, leave on abort, never restart the download`);
+n(`llm`, `ready`, 160, `ready`, `() => boolean`,
     `Ready status plus a runtime and an active model`);
-n(`llm`, `load`, 116, `load`,
-    `({ model, limits, assets, logging, onProgress }) => Promise<boolean>`,
-    `Join the same load, abort a different one, pick the engine, evict,`
-    + ` cache check, startLLM, keep one runtime`);
-n(`llm`, `unload`, 207, `unload`, `() => Promise<void>`,
-    `Bump the load token, release the engine, keep the cache`);
-n(`llm`, `cancelLoad`, 220, `cancelLoad`, `() => void`,
-    `Abort the download or load and return to idle`);
-n(`llm`, `chat`, 228, `chat`, `(params) => Promise<string | undefined>`,
+n(`llm`, `load`, 163, `load`,
+    `({ model, limits, assets, logging, signal, onProgress }) => Promise<boolean>`,
+    `Join the same load, abandon the wait on abort, abort a different model,`
+    + ` pick the engine, evict, cache check, startLLM, keep one runtime`);
+n(`llm`, `unload`, 255, `unload`, `() => Promise<void>`,
+    `Abort the load, release the engine, keep the cache`);
+n(`llm`, `chat`, 265, `chat`, `(params) => Promise<string | undefined>`,
     `Serialize one engine turn, then stream on the loaded runtime`);
-n(`llm`, `isLoading`, 242, `isLoading`, `() => boolean`,
+n(`llm`, `isLoading`, 279, `isLoading`, `() => boolean`,
     `Not ready and downloading`);
-n(`llm`, `model`, 254, `runtime.model`, `() => ChatModel | undefined`,
+n(`llm`, `model`, 290, `runtime.model`, `() => ChatModel | undefined`,
     `The model currently loaded on the runtime`);
-n(`llm`, `runtime`, 258, `runtime`, `createRuntime()`,
+n(`llm`, `runtime`, 294, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
@@ -721,7 +729,7 @@ n(`wllama`, `remove`, 274, `remove`, `(model) => Promise<void>`,
 n(`wllama`, `purge`, 282, `purge`, `() => Promise<void>`, `cacheManager.clear()`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 240, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 286, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, hasCache, remove, purge`);
 n(`litert`, `cache`, 29, `cacheName · backendConfig`,
     `litertlm-models · GPU executor settings`,
@@ -730,25 +738,36 @@ n(`litert`, `cacheOpen`, 45, `cacheOpen`, `() => Promise<Cache | undefined>`,
     `Open the model cache, absent in Node and on an insecure origin`);
 n(`litert`, `modelCached`, 53, `modelCached`, `(model) => Promise<boolean>`,
     `Whether the model URL is a complete Cache Storage entry`);
-n(`litert`, `toLitertMessages`, 64, `toLitertMessages`,
+n(`litert`, `downloads`, 64, `downloads`, `Map<string, Promise<void>>`,
+    `Every model file download in flight, shared by every caller`);
+n(`litert`, `contentLength`, 67, `contentLength`, `(response) => number`,
+    `Declared size of one download, zero when the host hides it`);
+n(`litert`, `countStream`, 71, `countStream`, `(body, total, onProgress) => stream`,
+    `Report download progress while the file streams to the cache`);
+n(`litert`, `cacheModel`, 87, `cacheModel`, `(url, cache, signal, onProgress)`,
+    `Fetch a model file into Cache Storage once per URL, the engine reads`
+    + ` it back from disk, so a retry never downloads it again`);
+n(`litert`, `fetchModel`, 117, `fetchModel`, `(url, signal, onProgress) => stream`,
+    `Network stream for a cache the browser rejects`);
+n(`litert`, `toLitertMessages`, 129, `toLitertMessages`,
     `(messages) => Promise<LitertMessage[]>`,
     `Map built turns to LiteRT turns and decode image parts into bytes`);
-n(`litert`, `streamLitert`, 84, `streamLitert`,
+n(`litert`, `streamLitert`, 149, `streamLitert`,
     `(engine, mod, params, messages) => AsyncGenerator<EngineChunk>`,
     `Create a conversation, stream content and thought channels, cancel`
     + ` through the abort signal, delete the conversation`);
-n(`litert`, `chat`, 144, `chatOn`, `(engine, model, mod, params)`,
+n(`litert`, `chat`, 209, `chatOn`, `(engine, model, mod, params)`,
     `Reject unsupported images, then stream through the shared reply loop`);
-n(`litert`, `startLLM`, 163, `startLLM`, `(params) => Promise<LlmRuntime>`,
-    `Load wasm and module, stream the model into Cache Storage and the engine,`
-    + ` compile with progress, return the runtime`);
-n(`litert`, `unload`, 236, `runtime.unload`, `() => Promise<void>`,
+n(`litert`, `startLLM`, 228, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    `Load wasm and module, store the model in Cache Storage once, then`
+    + ` compile it from the cached file with progress`);
+n(`litert`, `unload`, 282, `runtime.unload`, `() => Promise<void>`,
     `Delete the wasm engine, keeping the model cache`);
-n(`litert`, `hasCache`, 244, `hasCache`, `() => Promise<boolean>`,
+n(`litert`, `hasCache`, 290, `hasCache`, `() => Promise<boolean>`,
     `Any entry in the LiteRT model cache`);
-n(`litert`, `remove`, 250, `remove`, `(model) => Promise<void>`,
+n(`litert`, `remove`, 296, `remove`, `(model) => Promise<void>`,
     `Delete the model URL from Cache Storage`);
-n(`litert`, `purge`, 259, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 305, `purge`, `() => Promise<void>`,
     `Delete the whole LiteRT model cache`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
@@ -806,9 +825,9 @@ n(`harness`, `streamOf`, 122, `streamOf`, `(...chunks) => AsyncIterable`,
     `One scripted engine stream`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 145, `definitions`, `41 deferred cases`,
+n(`harness`, `definitions`, 145, `definitions`, `45 deferred cases`,
     `exports, limits, prompt, images, stream, runtime, preload, chat, threads, square`);
-n(`harness`, `main`, 1412, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 1536, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 26, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat and preloadModel run without a DOM`);
@@ -873,7 +892,7 @@ e(`chat.run`, `resolveLimits`, `call`);
 e(`chat.run`, `load`, `call`);
 e(`chat.run`, `llm.chat`, `call`);
 e(`chat.cancel`, `llm.unload`, `call`);
-e(`chat.cancel`, `cancelLoad`, `call`);
+e(`chat.cancel`, `abortLoad`, `inner`);
 e(`chat.emitStatus`, `chat.statusSnapshot`, `call`);
 e(`chat.createPreloadOn`, `chat.statusSnapshot`, `inner`);
 e(`chat.createPreloadOn`, `findLlmModel`, `call`);
@@ -898,14 +917,17 @@ e(`createRuntime`, `engineFor`, `inner`);
 e(`createRuntime`, `evictPrevious`, `inner`);
 e(`createRuntime`, `reportProgress`, `inner`);
 e(`createRuntime`, `setStatus`, `inner`);
+e(`createRuntime`, `abortLoad`, `inner`);
+e(`createRuntime`, `releaseWaiter`, `inner`);
+e(`createRuntime`, `followLoad`, `inner`);
 e(`createRuntime`, `ready`, `inner`);
 e(`createRuntime`, `load`, `inner`);
 e(`llm.createRuntime`, `llm.unload`, `inner`);
-e(`createRuntime`, `cancelLoad`, `inner`);
 e(`llm.createRuntime`, `llm.chat`, `inner`);
 e(`createRuntime`, `isLoading`, `inner`);
 e(`llm.createRuntime`, `types.records`, `type`);
 e(`llm.createRuntime`, `types.call`, `type`);
+e(`llm.createRuntime`, `types.load`, `type`);
 e(`llm.createRuntime`, `types.runtimeContract`, `type`);
 e(`llm.runtime`, `llm.createRuntime`, `call`);
 e(`load`, `engineFor`, `call`);
@@ -915,8 +937,13 @@ e(`load`, `wllama.purge`, `call`);
 e(`load`, `litert.purge`, `call`);
 e(`load`, `reportProgress`, `call`);
 e(`load`, `setStatus`, `call`);
+e(`load`, `abortLoad`, `call`);
+e(`load`, `followLoad`, `call`);
 e(`load`, `wllama.startLLM`, `call`);
 e(`load`, `litert.startLLM`, `call`);
+e(`followLoad`, `releaseWaiter`, `call`);
+e(`releaseWaiter`, `abortLoad`, `call`);
+e(`llm.load`, `types.load`, `type`);
 e(`llm.load`, `types.runtimeContract`, `build`);
 e(`evictPrevious`, `llmModels`, `call`);
 e(`evictPrevious`, `engineFor`, `call`);
@@ -1022,10 +1049,18 @@ e(`litert.startLLM`, `loadLitert`, `call`);
 e(`litert.startLLM`, `assets.defaultLitertAssets`, `call`);
 e(`litert.startLLM`, `models.litertWindow`, `call`);
 e(`litert.startLLM`, `litert.cacheOpen`, `call`);
+e(`litert.startLLM`, `litert.cacheModel`, `call`);
+e(`litert.startLLM`, `litert.fetchModel`, `call`);
 e(`litert.startLLM`, `engine.modelUrl`, `call`);
 e(`litert.startLLM`, `litert.chat`, `inner`);
 e(`litert.startLLM`, `litert.unload`, `inner`);
 e(`litert.startLLM`, `types.params`, `type`);
+e(`litert.cacheModel`, `litert.countStream`, `call`);
+e(`litert.cacheModel`, `litert.contentLength`, `call`);
+e(`litert.cacheModel`, `litert.downloads`, `store`);
+e(`litert.fetchModel`, `litert.countStream`, `call`);
+e(`litert.fetchModel`, `litert.contentLength`, `call`);
+e(`litert.countStream`, `enums.enums`, `type`);
 e(`litert.chat`, `engine.hasImages`, `call`);
 e(`litert.chat`, `engine.runEngineChat`, `call`);
 e(`litert.chat`, `litert.streamLitert`, `call`);
@@ -1582,7 +1617,7 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
                     ` Reject an unknown model or a prompt with no user turn, then`
                     + ` resolve the per-call limits.`),
                 step([`llm.load`],
-                    ` Reuse a ready model, join the same load, or abort a`
+                    ` Reuse a ready model, join the same load, or abandon a`
                     + ` different one before starting.`),
                 step([`llm.probes`, `llm.engineFor`],
                     ` Persist storage, detect wasm and WebGPU, pick the engine`
@@ -1618,7 +1653,7 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
                     ` requesting false, then ready or the last error.`),
                 step([`chat.cancel`],
                     ` A stale handle does nothing; otherwise abort the stream,`
-                    + ` cancel the load, or unload the model.`),
+                    + ` leave the shared download, or unload the model.`),
             ],
         },
     };

@@ -25,7 +25,7 @@ import {
     cpuThreads,
     toWllamaMessages,
 } from "../src/engines/wllama";
-import { toLitertMessages } from "../src/engines/litert";
+import { cacheModel, toLitertMessages } from "../src/engines/litert";
 import {
     imageSide,
     imageBuffer,
@@ -687,6 +687,111 @@ const definitions: Array<{
             },
         },
         {
+            name: `preload/chat joins in-flight load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime, calls } = runtimeWith({ loadGate: gate.promise }),
+                    replies: string[] = [],
+                    preload = createPreloadOn(runtime)({
+                        model: ChatModelId.qwen3_vl_2b,
+                        onStatus: () => { },
+                    });
+                await waitFor(() => calls.start == 1, `preload started`);
+                createChatOn(runtime)({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: value => replies.push(value),
+                });
+                await sleep(20);
+                assertEqual(calls.start, 1, `chat joins download`);
+                gate.resolve();
+                assertEqual(await preload, true, `preload done`);
+                await waitFor(() => replies[replies.length - 1] == `reply`, `chat reply`);
+                assertEqual(calls.start, 1, `one download`);
+            },
+        },
+        {
+            name: `runtime/joiner cancel keeps load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime, calls } = runtimeWith({ loadGate: gate.promise }),
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    limits = resolveLlmLimits(),
+                    controller = new AbortController(),
+                    owner = runtime.load({
+                        model,
+                        limits,
+                        onProgress: () => { },
+                    }),
+                    joiner = runtime.load({
+                        model,
+                        limits,
+                        signal: controller.signal,
+                        onProgress: () => { },
+                    });
+                await waitFor(() => calls.start == 1, `load started`);
+                let left = false;
+                void joiner.then(() => { left = true; });
+                controller.abort();
+                await sleep(20);
+                assertEqual(left, true, `joiner left`);
+                assertEqual(calls.start, 1, `load kept`);
+                gate.resolve();
+                assertEqual(await owner, true, `owner loaded`);
+                assertEqual(calls.start, 1, `still one download`);
+                assertEqual(runtime.ready(), true, `ready`);
+            },
+        },
+        {
+            name: `runtime/cancel load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime } = runtimeWith({ loadGate: gate.promise }),
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    controller = new AbortController(),
+                    loading = runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        signal: controller.signal,
+                        onProgress: () => { },
+                    });
+                await sleep(0);
+                controller.abort();
+                gate.resolve();
+                assertEqual(await loading, false, `cancelled load`);
+                assertEqual(runtime.status(), LlmStatus.idle, `idle after cancel`);
+            },
+        },
+        {
+            name: `preload/chat cancel keeps download`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime, calls } = runtimeWith({ loadGate: gate.promise }),
+                    preload = createPreloadOn(runtime)({
+                        model: ChatModelId.qwen3_vl_2b,
+                        onStatus: () => { },
+                    });
+                await waitFor(() => calls.start == 1, `preload started`);
+                const cancel = createChatOn(runtime)({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                });
+                await sleep(10);
+                cancel();
+                await sleep(10);
+                gate.resolve();
+                assertEqual(await preload, true, `preload finished`);
+                assertEqual(calls.start, 1, `one download`);
+                assertEqual(runtime.ready(), true, `model ready`);
+                assertEqual(calls.chat, 0, `no chat after cancel`);
+            },
+        },
+        {
             name: `runtime/unsupported`,
             run: async () => {
                 const
@@ -717,25 +822,6 @@ const definitions: Array<{
                 });
                 assertEqual(loaded, false, `failed load`);
                 assertEqual(runtime.status(), LlmStatus.error, `error status`);
-            },
-        },
-        {
-            name: `runtime/cancel load`,
-            run: async () => {
-                const
-                    gate = deferred(),
-                    { runtime } = runtimeWith({ loadGate: gate.promise }),
-                    model = modelOf(ChatModelId.qwen3_vl_2b),
-                    loading = runtime.load({
-                        model,
-                        limits: resolveLlmLimits(),
-                        onProgress: () => { },
-                    });
-                await sleep(0);
-                runtime.cancelLoad();
-                gate.resolve();
-                assertEqual(await loading, false, `cancelled load`);
-                assertEqual(runtime.status(), LlmStatus.idle, `idle after cancel`);
             },
         },
         {
@@ -1338,6 +1424,44 @@ const definitions: Array<{
                 assertEqual(cpuThreads(16, 99), 8, `sixteen cores raw eight`);
                 assertEqual(cpuThreads(1, 2), 2, `one core raw two`);
                 assertEqual(cpuThreads(8, 3), 3, `eight cores cap three`);
+            },
+        },
+        {
+            name: `litert/download once`,
+            run: async () => {
+                const
+                    name = `ds-chat-test-litert`,
+                    url = `https://models.test/gemma.litertlm`,
+                    bytes = new Uint8Array(4096).fill(7),
+                    progress: number[] = [],
+                    fetches: string[] = [],
+                    original = globalThis.fetch;
+                globalThis.fetch = (async (input: RequestInfo | URL) => {
+                    fetches.push(`${input}`);
+                    return new Response(new Blob([bytes]).stream(), {
+                        status: 200,
+                        headers: { 'content-length': `${bytes.byteLength}` },
+                    });
+                }) as typeof fetch;
+                try {
+                    const cache = await caches.open(name);
+                    await Promise.all([
+                        cacheModel(url, cache, undefined, value => progress.push(value)),
+                        cacheModel(url, cache, undefined, () => { }),
+                    ]);
+                    assertEqual(fetches.length, 1, `one download`);
+                    assertEqual(progress[progress.length - 1], 1, `full progress`);
+                    const
+                        stored = await cache.match(url),
+                        size = (await stored?.arrayBuffer())?.byteLength;
+                    assertEqual(size, bytes.byteLength, `stored bytes`);
+                    // a settled download is not remembered
+                    await cacheModel(url, cache, undefined, () => { });
+                    assertEqual(fetches.length, 2, `fresh download after settle`);
+                    await caches.delete(name);
+                } finally {
+                    globalThis.fetch = original;
+                };
             },
         },
         {

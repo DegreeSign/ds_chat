@@ -93,6 +93,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     model,
                     limits,
                     logging,
+                    signal: call.controller.signal,
                     onProgress: (value, phase) => {
                         if (call.token != token) return;
                         call.percent = Math.round(value * 100);
@@ -105,8 +106,10 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     return false;
                 });
             if (call.token != token) return;
+            // a cancel reports the outcome itself
+            if (call.cancelled) return;
             if (!loaded) {
-                if (!call.cancelled && !call.error) call.error = `Model not ready`;
+                if (!call.error) call.error = `Model not ready`;
                 emitStatus(call);
                 return;
             };
@@ -169,8 +172,8 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 void service.unload().then(() => emitStatus(call));
                 return;
             };
-            service.cancelLoad();
-            emitStatus(call);
+            // a load another caller waits for keeps going
+            queueMicrotask(() => emitStatus(call));
         };
 
     return input => {

@@ -11,6 +11,7 @@ import type {
     RuntimeChatParams,
     RuntimeDeps,
     RuntimeLoadParams,
+    RuntimeLoadWaiter,
 } from './types';
 
 const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
@@ -27,10 +28,10 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         status: LlmStatus = LlmStatus.idle,
         loading: Promise<boolean> | undefined,
         loadingModel: ChatModel['id'] | undefined,
+        waiters: RuntimeLoadWaiter[] = [],
         startAbort: AbortController | undefined,
         loadToken = 0,
         progress = { percent: 0, phase: LlmPhase.download },
-        progressListener: RuntimeLoadParams[`onProgress`] | undefined,
         streaming: Promise<string | undefined> | undefined;
 
     const
@@ -97,17 +98,63 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 if (other.id != model.id && engineFor(other) == engine)
                     await engine.remove(other);
         },
-        /** Report load progress to the active request */
+        /** Report load progress to every waiting caller */
         reportProgress = (value: number, phase?: LlmPhase) => {
             progress = {
                 percent: Math.max(0, Math.min(1, value)),
                 phase: phase || LlmPhase.download,
             };
-            progressListener?.(progress.percent, progress.phase);
+            for (const waiter of [...waiters])
+                waiter.report(progress.percent, progress.phase);
         },
         /** Set the engine status, read by the next status snapshot */
         setStatus = (next: LlmStatus) => {
             status = next;
+        },
+        /** Stop a download or load that is no longer wanted */
+        abortLoad = () => {
+            loadToken++;
+            startAbort?.abort();
+            startAbort = undefined;
+            loadingModel = undefined;
+            if (status == LlmStatus.downloading) setStatus(LlmStatus.idle);
+        },
+        /** Drop one caller, aborting the load once nobody waits for it */
+        releaseWaiter = (waiter: RuntimeLoadWaiter) => {
+            waiters = waiters.filter(item => item != waiter);
+            // a newer caller may join in the same tick
+            queueMicrotask(() => {
+                if (!waiters.length && loading) abortLoad();
+            });
+        },
+        /** Follow the in-flight load until it ends or this caller leaves */
+        followLoad = (
+            onProgress: RuntimeLoadParams[`onProgress`],
+            signal?: AbortSignal,
+        ): Promise<boolean> => {
+            const attempt = loading;
+            if (!attempt) return Promise.resolve(false);
+            return new Promise<boolean>(resolve => {
+                let settled = false;
+                const
+                    waiter: RuntimeLoadWaiter = {
+                        report: onProgress,
+                        settle: loaded => {
+                            if (settled) return;
+                            settled = true;
+                            signal?.removeEventListener(`abort`, leave);
+                            resolve(loaded);
+                        },
+                    },
+                    leave = () => {
+                        releaseWaiter(waiter);
+                        waiter.settle(false);
+                    };
+                waiters.push(waiter);
+                if (signal?.aborted) leave();
+                else signal?.addEventListener(`abort`, leave, { once: true });
+                void attempt.then(waiter.settle, () => waiter.settle(false));
+            });
         },
         /** Whether a model is loaded and ready for local chat */
         ready = (): boolean =>
@@ -118,21 +165,21 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             limits,
             assets,
             logging,
+            signal,
             onProgress,
         }: RuntimeLoadParams): Promise<boolean> => {
+            if (signal?.aborted) return false;
             if (ready() && activeModel?.id == model.id) return true;
             if (loading && loadingModel == model.id) {
-                progressListener = onProgress;
                 onProgress(progress.percent, progress.phase);
-                return await loading;
+                return await followLoad(onProgress, signal);
             };
             if (loading) {
-                // stop reporting the old model while it unwinds
-                progressListener = undefined;
-                startAbort?.abort();
+                // a different model wins, the old load lets go
+                abortLoad();
+                waiters = [];
                 await loading.catch(() => false);
             };
-            progressListener = onProgress;
             const token = ++loadToken;
             const attempt = (async (): Promise<boolean> => {
                 await persistStorage();
@@ -197,32 +244,22 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 if (loading == wrapped) {
                     loading = undefined;
                     loadingModel = undefined;
+                    waiters = [];
                 };
             });
             loading = wrapped;
             loadingModel = model.id;
-            return await wrapped;
+            return await followLoad(onProgress, signal);
         },
         /** Release the local model from memory, keeping its cache */
         unload = async () => {
-            loadToken++;
-            startAbort?.abort();
-            startAbort = undefined;
-            loadingModel = undefined;
             const current = runtime;
+            abortLoad();
             runtime = undefined;
             activeModel = undefined;
             activeEngine = undefined;
             setStatus(LlmStatus.idle);
             await current?.unload();
-        },
-        /** Stop a download or load that is no longer wanted */
-        cancelLoad = () => {
-            loadToken++;
-            startAbort?.abort();
-            startAbort = undefined;
-            loadingModel = undefined;
-            if (status == LlmStatus.downloading) setStatus(LlmStatus.idle);
         },
         /** Run one chat completion on the loaded runtime */
         chat = async (params: RuntimeChatParams): Promise<string | undefined> => {
@@ -246,7 +283,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         load,
         chat,
         unload,
-        cancelLoad,
         ready,
         loading: isLoading,
         status: () => status,

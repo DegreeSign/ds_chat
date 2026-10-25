@@ -151,11 +151,13 @@ requested model is already loaded, no download or load happens.
 
 | State | Effect |
 | ----- | ------ |
-| Downloading or loading | Aborts the model load. |
+| Downloading or loading | Stops waiting for the load. A download another caller waits for keeps going. |
 | Ready | Aborts the reply and unloads the model. |
 | An older call | Nothing, because a newer call owns the runtime. |
 
-The model stays loaded between calls until a cancel frees it.
+The model stays loaded between calls until a cancel frees it. One model
+download serves every caller: a chat that joins a preload shares its progress
+and never starts a second download.
 
 ### Preload
 
@@ -166,7 +168,9 @@ preloadModel(input: ChatPreloadInput): Promise<boolean>
 Call it before the first `createChat` to download and load the model early. It
 resolves `true` when the runtime is ready and `false` when the model is unknown,
 unsupported or failed. A later `createChat` for the same model reuses the loaded
-runtime, and either call joins a load already in flight.
+runtime, and either call joins a load already in flight. A preload owns no cancel
+function, so a chat that joins its download and is cancelled leaves the download
+running.
 
 `ChatPreloadInput` is the subset of `ChatInput` that a preload needs:
 
@@ -297,8 +301,13 @@ Each engine keeps its own cache. Loading a model unloads the previous runtime
 and removes the previous model's cache. The CPU engine uses the wllama cache
 manager; the GPU engine stores the single `.litertlm` file in Cache Storage
 under `litertlm-models`. A quota failure purges the cache of the engine being
-loaded. The GPU cache write is best effort: if the browser rejects it, the model
-still loads from the network stream and the next call downloads it again.
+loaded.
+
+The GPU engine stores the whole file before it compiles the model, and one
+download serves every caller. A failed compile, a cancelled call or a repeated
+`createChat` reads the stored file instead of downloading it again. The cache
+write is best effort: if the browser rejects it, the model still streams from
+the network and the next call downloads it again.
 
 A CPU vision model downloads its projector with the model and caches both. A
 GPU vision model keeps its encoder in the single `.litertlm` file.

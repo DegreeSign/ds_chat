@@ -157,7 +157,17 @@ interface RuntimeLoadParams {
     assets?: Partial<WllamaAssets>,
     /** Whether engine logs reach the console */
     logging?: boolean,
+    /** Stop waiting for this load, the download continues while another caller waits */
+    signal?: AbortSignal,
     onProgress: (progress: number, phase: LlmPhase) => void,
+}
+
+/** One caller waiting on an in-flight model load */
+interface RuntimeLoadWaiter {
+    /** Report load progress to this caller */
+    report: RuntimeLoadParams[`onProgress`],
+    /** Resolve this caller, early when it leaves the load */
+    settle: (loaded: boolean) => void,
 }
 
 /** One generation request */
@@ -174,10 +184,10 @@ interface RuntimeChatParams {
 
 /** On-device runtime shared by every request */
 interface Runtime {
+    /** Load a model, or join a load of the same model already in flight */
     load: (params: RuntimeLoadParams) => Promise<boolean>,
     chat: (params: RuntimeChatParams) => Promise<string | undefined>,
     unload: () => Promise<void>,
-    cancelLoad: () => void,
     ready: () => boolean,
     loading: () => boolean,
     status: () => LlmStatus,
@@ -347,6 +357,7 @@ export type {
     ActiveCall,
     RuntimeDeps,
     RuntimeLoadParams,
+    RuntimeLoadWaiter,
     RuntimeChatParams,
     Runtime,
     EngineChatParams,
