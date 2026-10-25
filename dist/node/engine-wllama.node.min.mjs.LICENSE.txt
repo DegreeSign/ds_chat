@@ -1,0 +1,1 @@
+/*! MIT License. DegreeSign Chat SDK */

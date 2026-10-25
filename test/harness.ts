@@ -1,0 +1,1158 @@
+// Browser test harness for @degreesign/chat.
+import * as entry from "../src/index";
+import { createChat } from "../src/index";
+import { createChatOn } from "../src/chat";
+import { createRuntime } from "../src/service";
+import {
+    buildMessages,
+    createThinkSplitter,
+    defaultLlmLimits,
+    replyOptions,
+    resolveLlmLimits,
+    runEngineChat,
+    streamReply,
+} from "../src/engines/engine";
+import {
+    cpuContextWindow,
+    findLlmModel,
+    llmModels,
+    supportsImages,
+} from "../src/models";
+import {
+    cpuThreads,
+    imageBuffer,
+    toWllamaMessages,
+} from "../src/engines/wllama";
+import {
+    imageSide,
+    resizeImageUrl,
+    resizeImages,
+} from "../src/engines/images";
+import {
+    ChatModelId,
+    ChatStatus,
+    LlmBackend,
+    LlmPhase,
+    LlmRole,
+    LlmStatus,
+} from "../src/enums";
+import type {
+    ChatMessage,
+    ChatModel,
+    ChatStatusSnapshot,
+    EngineMessage,
+} from "../src/types";
+import type { FakeEngineOptions } from "./fixtures.js";
+import { createFakeEngine } from "./fixtures.js";
+
+/** One test outcome. */
+interface Outcome {
+    name: string;
+    ok: boolean;
+    error?: string;
+}
+
+const
+    outcomes: Outcome[] = [],
+    sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
+    /** Run one test and record its outcome. */
+    test = async (name: string, run: () => void | Promise<void>) => {
+        try {
+            await run();
+            outcomes.push({ name, ok: true });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            outcomes.push({ name, ok: false, error: message });
+        }
+    },
+    assert = (condition: unknown, message: string): void => {
+        if (!condition) throw new Error(message);
+    },
+    assertEqual = (actual: unknown, expected: unknown, label: string): void => {
+        if (actual !== expected)
+            throw new Error(`${label}: expected ${String(expected)} got ${String(actual)}`);
+    },
+    /** A promise resolved by the test. */
+    deferred = () => {
+        let resolve = () => { };
+        const promise = new Promise<void>(result => { resolve = result; });
+        return { promise, resolve };
+    },
+    /** Poll a condition until it holds. */
+    waitFor = async (check: () => boolean, label: string) => {
+        for (let i = 0; i < 100; i++) {
+            if (check()) return;
+            await sleep(2);
+        };
+        throw new Error(`${label}: timed out`);
+    },
+    /** Resolve one catalog model or fail the test. */
+    modelOf = (id: ChatModelId): ChatModel => {
+        const model = findLlmModel(id);
+        if (!model) throw new Error(`missing model ${id}`);
+        return model;
+    },
+    /** Build a runtime over one fake CPU engine. */
+    runtimeWith = (options: FakeEngineOptions = {}) => {
+        const
+            cpu = createFakeEngine({ backend: LlmBackend.cpu, ...options }),
+            runtime = createRuntime({
+                engines: { cpu: cpu.engine },
+                backend: LlmBackend.cpu,
+            });
+        return { ...cpu, runtime };
+    },
+    /** Build a one-shot chat over one fake CPU engine. */
+    chatWith = (options: FakeEngineOptions = {}) => {
+        const base = runtimeWith(options);
+        return { ...base, chat: createChatOn(base.runtime) };
+    },
+    userMessage = (content: string): ChatMessage => ({
+        role: LlmRole.user,
+        content,
+    }),
+    /** Consume one fake engine stream. */
+    streamOf = (...chunks: unknown[]) => (async function* () {
+        for (const chunk of chunks) yield chunk;
+    })(),
+    /** A real JPEG with a centered square */
+    paintImage = (width: number, height: number): string => {
+        const canvas = document.createElement(`canvas`);
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext(`2d`);
+        if (!context) throw new Error(`canvas unavailable`);
+        context.fillStyle = `#c00`;
+        context.fillRect(0, 0, width, height);
+        const side = Math.min(width, height);
+        context.fillStyle = `#0a0`;
+        context.fillRect(
+            (width - side) / 2,
+            (height - side) / 2,
+            side,
+            side,
+        );
+        return canvas.toDataURL(`image/jpeg`, 0.95);
+    };
+
+const definitions: Array<{
+    name: string;
+    run: () => void | Promise<void>;
+}> = [
+        {
+            name: `exports`,
+            run: () => {
+                assertEqual(typeof createChat, `function`, `createChat`);
+                assertEqual(typeof createChatOn, `function`, `createChatOn`);
+                assertEqual(typeof createRuntime, `function`, `createRuntime`);
+                const names = Object.keys(entry).sort();
+                assertEqual(
+                    names.join(`,`),
+                    [
+                        `ChatModelId`,
+                        `ChatStatus`,
+                        `LlmBackend`,
+                        `LlmPhase`,
+                        `LlmRole`,
+                        `LlmStatus`,
+                        `createChat`,
+                    ].join(`,`),
+                    `public names`,
+                );
+                assertEqual(`createChatOn` in entry, false, `internal chat factory`);
+                assertEqual(ChatStatus.online, 0, `online`);
+                assertEqual(ChatStatus.away, 1, `away`);
+                assertEqual(ChatStatus.offline, 2, `offline`);
+                assertEqual(LlmStatus.ready, 2, `ready`);
+                assertEqual(LlmBackend.cpu, `cpu`, `cpu backend`);
+                assertEqual(LlmPhase.download, `download`, `download phase`);
+                assertEqual(LlmRole.assistant, `assistant`, `assistant role`);
+                assertEqual(ChatModelId.qwen3_vl_2b, `qwen3-vl-2b`, `qwen id`);
+            },
+        },
+        {
+            name: `models/catalog`,
+            run: () => {
+                assertEqual(llmModels.length, 1, `catalog size`);
+                assertEqual(cpuContextWindow, 8192, `cpu window`);
+                assertEqual(
+                    modelOf(ChatModelId.qwen3_vl_2b).reasoning,
+                    true,
+                    `qwen reasoning`,
+                );
+                assertEqual(
+                    modelOf(ChatModelId.qwen3_vl_2b).cpu.mmproj?.file,
+                    `mmproj-Qwen3VL-2B-Thinking-Q8_0.gguf`,
+                    `vision projector`,
+                );
+                assertEqual(
+                    supportsImages(modelOf(ChatModelId.qwen3_vl_2b)),
+                    true,
+                    `cpu images`,
+                );
+                const textOnly: ChatModel = {
+                    id: ChatModelId.qwen3_vl_2b,
+                    reasoning: false,
+                    cpu: { repo: `text-only`, file: `text-only.gguf` },
+                };
+                assertEqual(
+                    supportsImages(textOnly),
+                    false,
+                    `text images`,
+                );
+                assertEqual(findLlmModel(`missing`), undefined, `unknown model`);
+            },
+        },
+        {
+            name: `limits/defaults`,
+            run: () => {
+                const defaults = resolveLlmLimits();
+                assertEqual(defaults.maxReplyTokens, defaultLlmLimits.maxReplyTokens, `reply`);
+                assertEqual(defaults.promptCharBudget, 10000, `budget`);
+                assertEqual(defaults.maxImages, 2, `images`);
+                assertEqual(defaults.maxThreads, 2, `threads`);
+                assertEqual(resolveLlmLimits({ maxThreads: 1 }).maxThreads, 1, `one thread`);
+                assertEqual(resolveLlmLimits({ maxThreads: 8 }).maxThreads, 8, `eight threads`);
+                assertEqual(resolveLlmLimits({ maxThreads: 0 }).maxThreads, 2, `bad threads`);
+                const custom = resolveLlmLimits({
+                    maxReplyTokens: 40,
+                    promptCharBudget: 12.9,
+                });
+                assertEqual(custom.maxReplyTokens, 40, `custom reply`);
+                assertEqual(custom.promptCharBudget, 12, `floored budget`);
+                assertEqual(resolveLlmLimits({ maxImages: 3 }).maxImages, 3, `custom images`);
+                assertEqual(resolveLlmLimits({ maxImages: 0 }).maxImages, 0, `zero images`);
+                const invalid = resolveLlmLimits({
+                    maxReplyTokens: 0,
+                    maxThinkingTokens: -1,
+                    maxImages: -1,
+                    maxThreads: 0,
+                });
+                assertEqual(invalid.maxReplyTokens, defaultLlmLimits.maxReplyTokens, `bad reply`);
+                assertEqual(
+                    invalid.maxThinkingTokens,
+                    defaultLlmLimits.maxThinkingTokens,
+                    `bad thinking`,
+                );
+                assertEqual(invalid.maxImages, defaultLlmLimits.maxImages, `bad images`);
+                assertEqual(invalid.maxThreads, defaultLlmLimits.maxThreads, `bad threads`);
+            },
+        },
+        {
+            name: `limits/reply options`,
+            run: () => {
+                const plain = replyOptions(defaultLlmLimits, false);
+                assertEqual(plain.max_tokens, defaultLlmLimits.maxReplyTokens, `plain tokens`);
+                assertEqual(plain.stream, true, `stream`);
+                assertEqual(plain.temperature, 0.7, `temperature`);
+                const reasoning = replyOptions(
+                    { ...defaultLlmLimits, maxReasoningTokens: 321 },
+                    true,
+                );
+                assertEqual(reasoning.max_tokens, 321, `reasoning tokens`);
+            },
+        },
+        {
+            name: `prompt/system and alternation`,
+            run: () => {
+                const messages = buildMessages([
+                    { role: LlmRole.system, content: `A` },
+                    { role: LlmRole.user, content: `u1` },
+                    { role: LlmRole.assistant, content: `a1` },
+                    { role: LlmRole.system, content: `B` },
+                    { role: LlmRole.user, content: `u2` },
+                ]);
+                assertEqual(messages.length, 4, `turn count`);
+                assertEqual(messages[0].role, `system`, `system first`);
+                assertEqual(messages[0].content, `A\n\nB`, `system order`);
+                assertEqual(messages[1].content, `u1`, `user one`);
+                assertEqual(messages[2].content, `a1`, `assistant one`);
+                assertEqual(messages[3].content, `u2`, `user two`);
+                const merged = buildMessages([
+                    { role: LlmRole.user, content: `one` },
+                    { role: LlmRole.user, content: `two` },
+                ]);
+                assertEqual(merged.length, 1, `merged length`);
+                assertEqual(merged[0].content, `one\ntwo`, `merged text`);
+                const leading = buildMessages([
+                    { role: LlmRole.assistant, content: `a` },
+                    { role: LlmRole.user, content: `u` },
+                ]);
+                assertEqual(leading.length, 1, `leading dropped`);
+                assertEqual(leading[0].role, `user`, `starts with user`);
+            },
+        },
+        {
+            name: `prompt/clip and budgets`,
+            run: () => {
+                const clipped = buildMessages(
+                    [{ role: LlmRole.user, content: `abcdef` }],
+                    { ...defaultLlmLimits, maxContentLength: 3 },
+                );
+                assertEqual(clipped[0].content, `abc`, `content clip`);
+                const budgeted = buildMessages(
+                    [
+                        { role: LlmRole.user, content: `12345` },
+                        { role: LlmRole.user, content: `67890` },
+                    ],
+                    { ...defaultLlmLimits, promptCharBudget: 5 },
+                );
+                assertEqual(budgeted.length, 1, `budget length`);
+                assertEqual(budgeted[0].content, `67890`, `budget tail`);
+                assertEqual(buildMessages([]).length, 0, `empty prompt`);
+                const systemOnly = buildMessages([
+                    { role: LlmRole.system, content: `only` },
+                ]);
+                assertEqual(systemOnly.length, 1, `system only`);
+                assertEqual(systemOnly[0].role, `system`, `system only role`);
+            },
+        },
+        {
+            name: `prompt/images`,
+            run: async () => {
+                const
+                    image = `data:image/png;base64,QQ==`,
+                    limits = { ...defaultLlmLimits, maxImages: 2 },
+                    partsOf = (message?: EngineMessage) =>
+                        (message?.content || []) as Array<{
+                            type: string,
+                            text?: string,
+                            url?: string,
+                        }>;
+                const only = buildMessages([
+                    { role: LlmRole.user, content: ``, images: [image] },
+                ], limits);
+                assertEqual(only.length, 1, `image only turn`);
+                const onlyParts = partsOf(only[0]);
+                assertEqual(onlyParts.length, 1, `image only parts`);
+                assertEqual(onlyParts[0].type, `image`, `image only type`);
+                assertEqual(onlyParts[0].url, image, `image only url`);
+                const mixed = buildMessages([
+                    { role: LlmRole.user, content: `look`, images: [image] },
+                ], limits);
+                const mixedParts = partsOf(mixed[0]);
+                assertEqual(mixedParts.length, 2, `mixed parts`);
+                assertEqual(mixedParts[0].text, `look`, `text first`);
+                assertEqual(mixedParts[1].type, `image`, `image second`);
+                const capped = buildMessages([
+                    { role: LlmRole.user, content: `one`, images: [`a`, `b`] },
+                    { role: LlmRole.assistant, content: `ok` },
+                    { role: LlmRole.user, content: `two`, images: [`c`] },
+                ], limits);
+                assertEqual(capped.length, 3, `capped turns`);
+                const olderParts = partsOf(capped[0]);
+                assertEqual(
+                    olderParts.filter(part => part.type == `image`).length,
+                    1,
+                    `older image cap`,
+                );
+                const newestParts = partsOf(capped[2]);
+                assertEqual(newestParts[1].url, `c`, `newest image`);
+                const zero = buildMessages([
+                    { role: LlmRole.user, content: `hi`, images: [image] },
+                ], { ...limits, maxImages: 0 });
+                assertEqual(typeof zero[0].content, `string`, `zero images`);
+                const systemImages = buildMessages([
+                    { role: LlmRole.system, content: `sys`, images: [image] },
+                    { role: LlmRole.user, content: `hi` },
+                ], limits);
+                assertEqual(systemImages[0].content, `sys`, `system image ignored`);
+                const assistantImages = buildMessages([
+                    { role: LlmRole.user, content: `hi` },
+                    { role: LlmRole.assistant, content: `ok`, images: [image] },
+                ], limits);
+                assertEqual(assistantImages[1].content, `ok`, `assistant image ignored`);
+                const
+                    buffer = await imageBuffer(image),
+                    wllama = await toWllamaMessages(mixed),
+                    wllamaParts = wllama[0].content as Array<{
+                        type: string,
+                        text?: string,
+                        data?: ArrayBuffer,
+                    }>;
+                assertEqual(new Uint8Array(buffer)[0], 65, `decoded image`);
+                assertEqual(wllamaParts[0].type, `text`, `wllama text`);
+                assertEqual(wllamaParts[1].type, `image`, `wllama image`);
+                assertEqual(wllamaParts[1].data?.byteLength, 1, `wllama bytes`);
+            },
+        },
+        {
+            name: `think/splitter`,
+            run: () => {
+                const
+                    reasoned: string[] = [],
+                    text: string[] = [],
+                    splitter = createThinkSplitter(
+                        value => reasoned.push(value),
+                        value => text.push(value),
+                    );
+                splitter.feed(`hello <|channel>thought\nwhy<channel|>world`);
+                splitter.flush();
+                assertEqual(text.join(``), `hello world`, `visible text`);
+                assertEqual(reasoned.join(``), `why`, `reasoning text`);
+                const
+                    partialReason: string[] = [],
+                    partialText: string[] = [],
+                    partial = createThinkSplitter(
+                        value => partialReason.push(value),
+                        value => partialText.push(value),
+                    );
+                partial.feed(`hi <|chan`);
+                assertEqual(partialText.join(``), `hi `, `held partial`);
+                partial.feed(`nel>thought\nx`);
+                partial.flush();
+                assertEqual(partialText.join(``), `hi `, `held no leak`);
+                assertEqual(partialReason.join(``), `x`, `held reasoning`);
+            },
+        },
+        {
+            name: `stream/reply`,
+            run: async () => {
+                const
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    reasoned: string[] = [],
+                    text: string[] = [],
+                    result = await streamReply({
+                        model,
+                        onReason: value => reasoned.push(value),
+                        onText: value => text.push(value),
+                        start: async () => streamOf(
+                            { choices: [{ delta: { reasoning_content: `why` } }] },
+                            { choices: [{ delta: { content: `hello ` } }] },
+                            {
+                                choices: [{
+                                    delta: { content: `world` },
+                                    finish_reason: `stop`,
+                                }],
+                            },
+                        ),
+                        stopped: () => false,
+                    });
+                assertEqual(result, `hello world`, `reply text`);
+                assertEqual(reasoned.join(``), `why`, `reasoning deltas`);
+                assertEqual(text.join(``), `hello world`, `text deltas`);
+                const inline = await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    start: async () => streamOf({
+                        choices: [{
+                            delta: { content: `<|channel>thought\nwhy<channel|>answer` },
+                        }],
+                    }),
+                    stopped: () => false,
+                });
+                assertEqual(inline, `answer`, `inline reasoning`);
+                const stopped = await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    start: async () => streamOf({
+                        choices: [{ delta: { content: `hidden` } }],
+                    }),
+                    stopped: () => true,
+                });
+                assertEqual(stopped, undefined, `stopped reply`);
+                const failed = await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    start: async () => { throw new Error(`boom`); },
+                    stopped: () => false,
+                });
+                assertEqual(failed, undefined, `failed reply`);
+                const
+                    sent: EngineMessage[] = [],
+                    built = await runEngineChat({
+                        model,
+                        params: {
+                            messages: [
+                                { role: LlmRole.system, content: `sys` },
+                                userMessage(`hi`),
+                            ],
+                            limits: defaultLlmLimits,
+                            reasoning: false,
+                            onReason: () => { },
+                            onText: () => { },
+                        },
+                        stopped: () => false,
+                        start: async messages => {
+                            sent.push(...messages);
+                            return streamOf({
+                                choices: [{ delta: { content: `ok` } }],
+                            });
+                        },
+                    });
+                assertEqual(built, `ok`, `engine run`);
+                assertEqual(sent[0].role, `system`, `engine system`);
+                assertEqual(sent[1].content, `hi`, `engine user`);
+            },
+        },
+        {
+            name: `runtime/load and reuse`,
+            run: async () => {
+                const
+                    { runtime, calls, models } = runtimeWith(),
+                    progress: Array<{ percent: number, phase: LlmPhase }> = [],
+                    loaded = await runtime.load({
+                        model: modelOf(ChatModelId.qwen3_vl_2b),
+                        limits: resolveLlmLimits(),
+                        onProgress: (percent, phase) => progress.push({ percent, phase }),
+                    });
+                assertEqual(loaded, true, `loaded`);
+                assertEqual(runtime.ready(), true, `ready`);
+                assertEqual(runtime.loading(), false, `not loading`);
+                assertEqual(runtime.status(), LlmStatus.ready, `ready status`);
+                assertEqual(runtime.backend(), LlmBackend.cpu, `backend`);
+                assertEqual(calls.start, 1, `started once`);
+                assertEqual(models[0].id, ChatModelId.qwen3_vl_2b, `loaded model`);
+                assert(progress.length >= 2, `progress events`);
+                assertEqual(progress[0].phase, LlmPhase.download, `download phase`);
+                assertEqual(progress[progress.length - 1].phase, LlmPhase.load, `load phase`);
+                assertEqual(progress[progress.length - 1].percent, 1, `full progress`);
+                const reused = await runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                assertEqual(reused, true, `reused`);
+                assertEqual(calls.start, 1, `reuse skips start`);
+            },
+        },
+        {
+            name: `runtime/chat budgets`,
+            run: async () => {
+                const
+                    { runtime, requests } = runtimeWith({
+                        chatText: `hello`,
+                        thinkingText: `why`,
+                    }),
+                    reasoned: string[] = [],
+                    text: string[] = [];
+                await runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                const result = await runtime.chat({
+                    messages: [userMessage(`hi`)],
+                    limits: { ...defaultLlmLimits, maxReplyTokens: 12 },
+                    reasoning: true,
+                    onReason: value => reasoned.push(value),
+                    onText: value => text.push(value),
+                });
+                assertEqual(result, `hello`, `chat result`);
+                assertEqual(requests.length, 1, `one chat`);
+                assertEqual(requests[0].limits.maxReplyTokens, 12, `call limits`);
+                assertEqual(requests[0].reasoning, true, `call reasoning`);
+                assertEqual(reasoned.join(``), `why`, `thinking stream`);
+                assertEqual(text.join(``), `hello`, `reply stream`);
+            },
+        },
+        {
+            name: `runtime/join same load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime, calls } = runtimeWith({ loadGate: gate.promise }),
+                    progress: number[] = [],
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    first = runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        onProgress: value => progress.push(value),
+                    }),
+                    second = runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        onProgress: value => progress.push(value),
+                    });
+                await sleep(0);
+                await waitFor(() => calls.start == 1, `load started`);
+                assertEqual(calls.start, 1, `joined load`);
+                gate.resolve();
+                assertEqual(await first, true, `first load`);
+                assertEqual(await second, true, `second load`);
+                assertEqual(calls.start, 1, `still one start`);
+            },
+        },
+        {
+            name: `runtime/unsupported`,
+            run: async () => {
+                const
+                    fake = createFakeEngine({ backend: LlmBackend.cpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: fake.engine },
+                        backend: LlmBackend.none,
+                    }),
+                    loaded = await runtime.load({
+                        model: modelOf(ChatModelId.qwen3_vl_2b),
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                assertEqual(loaded, false, `unsupported load`);
+                assertEqual(runtime.status(), LlmStatus.unsupported, `unsupported status`);
+                assertEqual(runtime.ready(), false, `not ready`);
+                assertEqual(fake.calls.start, 0, `no engine start`);
+            },
+        },
+        {
+            name: `runtime/start failure`,
+            run: async () => {
+                const { runtime } = runtimeWith({ failStart: true });
+                const loaded = await runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                assertEqual(loaded, false, `failed load`);
+                assertEqual(runtime.status(), LlmStatus.error, `error status`);
+            },
+        },
+        {
+            name: `runtime/cancel load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime } = runtimeWith({ loadGate: gate.promise }),
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    loading = runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                await sleep(0);
+                runtime.cancelLoad();
+                gate.resolve();
+                assertEqual(await loading, false, `cancelled load`);
+                assertEqual(runtime.status(), LlmStatus.idle, `idle after cancel`);
+            },
+        },
+        {
+            name: `runtime/unload`,
+            run: async () => {
+                const { runtime, calls } = runtimeWith();
+                await runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                await runtime.unload();
+                assertEqual(runtime.status(), LlmStatus.idle, `idle after unload`);
+                assertEqual(runtime.ready(), false, `not ready after unload`);
+                assertEqual(calls.unload, 1, `engine unloaded`);
+            },
+        },
+        {
+            name: `runtime/serialized chat`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { runtime, calls } = runtimeWith({ chatGate: gate.promise }),
+                    limits = resolveLlmLimits();
+                await runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits,
+                    onProgress: () => { },
+                });
+                const params = {
+                    messages: [userMessage(`hi`)],
+                    limits,
+                    reasoning: false,
+                    onReason: () => { },
+                    onText: () => { },
+                };
+                const first = runtime.chat(params);
+                const second = runtime.chat(params);
+                await sleep(0);
+                assertEqual(calls.chat, 1, `one chat at a time`);
+                gate.resolve();
+                await first;
+                await second;
+                assertEqual(calls.chat, 2, `second chat ran`);
+            },
+        },
+        {
+            name: `chat/status and stream`,
+            run: async () => {
+                const
+                    statuses: ChatStatusSnapshot[] = [],
+                    reasoned: string[] = [],
+                    replies: string[] = [],
+                    { chat } = chatWith({
+                        chatText: `hello`,
+                        thinkingText: `why`,
+                    });
+                const cancel = chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    reasoning: true,
+                    onThinking: value => reasoned.push(value),
+                    onResponse: value => replies.push(value),
+                    onStatus: value => statuses.push(value),
+                });
+                assertEqual(typeof cancel, `function`, `cancel handle`);
+                await sleep(20);
+                assertEqual(statuses[0].requesting, false, `idle start`);
+                assertEqual(statuses[0].ready, false, `not ready start`);
+                assertEqual(statuses[0].availability, ChatStatus.away, `away start`);
+                assertEqual(
+                    statuses.some(value => value.requesting),
+                    true,
+                    `requesting emitted`,
+                );
+                assertEqual(statuses[statuses.length - 1].requesting, false, `idle end`);
+                assertEqual(statuses[statuses.length - 1].ready, true, `ready end`);
+                assertEqual(statuses[statuses.length - 1].percent, 100, `percent end`);
+                assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
+                assertEqual(replies[replies.length - 1], `hello`, `accumulated reply`);
+                assertEqual(reasoned[reasoned.length - 1], `why`, `accumulated thinking`);
+            },
+        },
+        {
+            name: `chat/text and images`,
+            run: async () => {
+                const
+                    image = `data:image/png;base64,QQ==`,
+                    vision = chatWith({ chatText: `seen` }),
+                    visionStatuses: ChatStatusSnapshot[] = [],
+                    replies: string[] = [];
+                vision.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [{ role: LlmRole.user, content: `what`, images: [image] }],
+                    onResponse: value => replies.push(value),
+                    onStatus: value => visionStatuses.push(value),
+                });
+                await waitFor(() => vision.requests.length == 1, `vision chat`);
+                assertEqual(vision.requests.length, 1, `vision chat`);
+                assertEqual(vision.requests[0].messages[0].content, `what`, `text passed`);
+                assertEqual(vision.requests[0].messages[0].images?.[0], image, `image passed`);
+                assertEqual(visionStatuses[0].supportsImages, true, `vision status`);
+                await waitFor(() => replies[replies.length - 1] == `seen`, `vision reply`);
+                assertEqual(replies[replies.length - 1], `seen`, `vision reply`);
+                assertEqual(visionStatuses[visionStatuses.length - 1].requesting, false, `done`);
+                assertEqual(visionStatuses[visionStatuses.length - 1].error, undefined, `no error`);
+                const only = chatWith({ chatText: `seen` });
+                only.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [{ role: LlmRole.user, content: ``, images: [image] }],
+                    onResponse: () => { },
+                });
+                await waitFor(() => only.requests.length == 1, `image only chat`);
+                assertEqual(only.requests.length, 1, `image only chat`);
+                assertEqual(only.requests[0].messages[0].images?.length, 1, `only image passed`);
+                assertEqual(only.requests[0].messages[0].content, ``, `no text kept`);
+            },
+        },
+        {
+            name: `chat/real image pipeline`,
+            run: async () => {
+                const
+                    source = paintImage(512, 256),
+                    sent: EngineMessage[][] = [],
+                    replies: string[] = [],
+                    statuses: ChatStatusSnapshot[] = [],
+                    { chat } = chatWith({
+                        chatImpl: async params => await runEngineChat({
+                            model: modelOf(ChatModelId.qwen3_vl_2b),
+                            params,
+                            start: async messages => {
+                                sent.push(messages);
+                                return streamOf({
+                                    choices: [{
+                                        delta: { content: `seen` },
+                                        finish_reason: `stop`,
+                                    }],
+                                });
+                            },
+                            stopped: () => params.signal?.aborted === true,
+                        }),
+                    });
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [{ role: LlmRole.user, content: `what`, images: [source] }],
+                    onResponse: value => replies.push(value),
+                    onStatus: value => statuses.push(value),
+                });
+                await waitFor(() => replies[replies.length - 1] == `seen`, `reply`);
+                await waitFor(
+                    () => statuses[statuses.length - 1]?.requesting === false,
+                    `settled`,
+                );
+                assertEqual(sent.length, 1, `one engine call`);
+                const content = sent[0][0].content;
+                if (typeof content == `string`) throw new Error(`parts expected`);
+                assertEqual(content.length, 2, `text and image`);
+                assertEqual(content[0].type, `text`, `text part`);
+                if (content[0].type != `text`) throw new Error(`text expected`);
+                assertEqual(content[0].text, `what`, `text value`);
+                const image = content[1];
+                if (image.type != `image`) throw new Error(`image expected`);
+                assert(image.url.startsWith(`data:image/jpeg`), `resized jpeg`);
+                const bitmap = await createImageBitmap(
+                    await (await fetch(image.url)).blob());
+                assertEqual(bitmap.width, imageSide, `image width`);
+                assertEqual(bitmap.height, imageSide, `image height`);
+                bitmap.close();
+                assertEqual(replies[replies.length - 1], `seen`, `reply`);
+                assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
+            },
+        },
+        {
+            name: `chat/unknown model`,
+            run: async () => {
+                const
+                    { chat, calls } = chatWith(),
+                    statuses: ChatStatusSnapshot[] = [];
+                chat({
+                    model: `missing` as ChatModelId,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                    onStatus: value => statuses.push(value),
+                });
+                await sleep(10);
+                assertEqual(statuses[statuses.length - 1].error, `Unknown model`, `error`);
+                assertEqual(calls.start, 0, `no start`);
+            },
+        },
+        {
+            name: `chat/empty prompt`,
+            run: async () => {
+                const
+                    { chat, calls } = chatWith(),
+                    statuses: ChatStatusSnapshot[] = [];
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [{ role: LlmRole.system, content: `only` }],
+                    onResponse: () => { },
+                    onStatus: value => statuses.push(value),
+                });
+                await sleep(10);
+                assertEqual(calls.start, 0, `no start`);
+                assertEqual(statuses.length >= 1, true, `status emitted`);
+                assertEqual(statuses[statuses.length - 1].requesting, false, `not requesting`);
+            },
+        },
+        {
+            name: `chat/last call wins`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { chat, requests } = chatWith({
+                        chatText: `second`,
+                        chatGate: gate.promise,
+                    }),
+                    firstReplies: string[] = [],
+                    secondReplies: string[] = [];
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`first`)],
+                    onResponse: value => firstReplies.push(value),
+                });
+                await sleep(10);
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`second`)],
+                    onResponse: value => secondReplies.push(value),
+                });
+                await sleep(10);
+                assertEqual(requests[0].signal?.aborted, true, `first aborted`);
+                gate.resolve();
+                await sleep(20);
+                assertEqual(firstReplies.length, 0, `first silent`);
+                assertEqual(secondReplies[secondReplies.length - 1], `second`, `second reply`);
+            },
+        },
+        {
+            name: `chat/cancel stream`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { chat, calls, requests } = chatWith({ chatGate: gate.promise }),
+                    statuses: ChatStatusSnapshot[] = [],
+                    replies: string[] = [],
+                    cancel = chat({
+                        model: ChatModelId.qwen3_vl_2b,
+                        messages: [userMessage(`hi`)],
+                        onResponse: value => replies.push(value),
+                        onStatus: value => statuses.push(value),
+                    });
+                await sleep(10);
+                cancel();
+                gate.resolve();
+                await sleep(20);
+                assertEqual(requests[0].signal?.aborted, true, `stream aborted`);
+                assertEqual(calls.unload >= 1, true, `model unloaded`);
+                assertEqual(statuses[statuses.length - 1].ready, false, `not ready`);
+                assertEqual(statuses[statuses.length - 1].status, LlmStatus.idle, `idle`);
+                assertEqual(replies.length, 0, `no reply after cancel`);
+            },
+        },
+        {
+            name: `chat/cancel load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    { chat, calls } = chatWith({ loadGate: gate.promise }),
+                    statuses: ChatStatusSnapshot[] = [],
+                    cancel = chat({
+                        model: ChatModelId.qwen3_vl_2b,
+                        messages: [userMessage(`hi`)],
+                        onResponse: () => { },
+                        onStatus: value => statuses.push(value),
+                    });
+                await sleep(10);
+                cancel();
+                gate.resolve();
+                await sleep(20);
+                assertEqual(calls.chat, 0, `no chat`);
+                assertEqual(statuses[statuses.length - 1].status, LlmStatus.idle, `idle`);
+                assertEqual(statuses[statuses.length - 1].requesting, false, `not requesting`);
+            },
+        },
+        {
+            name: `chat/cancel after reply`,
+            run: async () => {
+                const
+                    { chat, calls } = chatWith(),
+                    cancel = chat({
+                        model: ChatModelId.qwen3_vl_2b,
+                        messages: [userMessage(`hi`)],
+                        onResponse: () => { },
+                    });
+                await sleep(20);
+                cancel();
+                await sleep(10);
+                assertEqual(calls.unload >= 1, true, `model unloaded after reply`);
+            },
+        },
+        {
+            name: `chat/stale cancel`,
+            run: async () => {
+                const
+                    { chat, calls } = chatWith(),
+                    firstCancel = chat({
+                        model: ChatModelId.qwen3_vl_2b,
+                        messages: [userMessage(`one`)],
+                        onResponse: () => { },
+                    });
+                await sleep(20);
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`two`)],
+                    onResponse: () => { },
+                });
+                firstCancel();
+                await sleep(20);
+                assertEqual(calls.unload, 0, `stale cancel ignored`);
+            },
+        },
+        {
+            name: `chat/minimal input`,
+            run: async () => {
+                const
+                    { chat, calls } = chatWith(),
+                    cancel = chat({
+                        model: ChatModelId.qwen3_vl_2b,
+                        messages: [userMessage(`hi`)],
+                        onResponse: () => { },
+                    });
+                await sleep(20);
+                assertEqual(calls.chat, 1, `chat ran with required callbacks`);
+                assertEqual(typeof cancel, `function`, `cancel handle`);
+            },
+        },
+        {
+            name: `chat/public entry`,
+            run: async () => {
+                const statuses: ChatStatusSnapshot[] = [];
+                const cancel = createChat({
+                    model: `missing` as ChatModelId,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                    onStatus: value => statuses.push(value),
+                });
+                assertEqual(typeof cancel, `function`, `cancel handle`);
+                await sleep(10);
+                assertEqual(statuses[statuses.length - 1].error, `Unknown model`, `error`);
+                assertEqual(statuses[statuses.length - 1].requesting, false, `not requesting`);
+            },
+        },
+        {
+            name: `logging/opt-in`,
+            run: async () => {
+                const
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    captured: unknown[][] = [],
+                    original = console.log,
+                    params = {
+                        messages: [userMessage(`hi`)],
+                        limits: defaultLlmLimits,
+                        reasoning: false,
+                        onReason: () => { },
+                        onText: () => { },
+                    },
+                    start = async () => streamOf({
+                        choices: [{ delta: { content: `ok` } }],
+                    });
+                console.log = (...args: unknown[]) => { captured.push(args); };
+                try {
+                    await runEngineChat({ model, params, start, stopped: () => false });
+                    assertEqual(captured.length, 0, `silent by default`);
+                    await runEngineChat({
+                        model,
+                        params: { ...params, logging: true },
+                        start,
+                        stopped: () => false,
+                    });
+                    const names = captured.map(args => args[0]);
+                    assert(names.includes(`Local chat call`), `call log`);
+                    assert(names.includes(`Local chat reply`), `reply log`);
+                    assert(names.includes(`Local chat finish`), `finish log`);
+                    const logged = captured[0]?.[2] as Array<{ content: string }>;
+                    assertEqual(logged[0].content, `****`, `censored messages`);
+                    captured.length = 0;
+                    await runEngineChat({
+                        model,
+                        params,
+                        start: async () => { throw new Error(`boom`); },
+                        stopped: () => false,
+                    });
+                    assertEqual(captured.length, 0, `failure silent`);
+                    await runEngineChat({
+                        model,
+                        params: { ...params, logging: true },
+                        start: async () => { throw new Error(`boom`); },
+                        stopped: () => false,
+                    });
+                    assertEqual(
+                        captured.some(args => args[0] == `Local chat failed`),
+                        true,
+                        `failure log`,
+                    );
+                    captured.length = 0;
+                    const quiet = runtimeWith({ failStart: true });
+                    await quiet.runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                    assertEqual(captured.length, 0, `load failure silent`);
+                    const loud = runtimeWith({ failStart: true });
+                    await loud.runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        logging: true,
+                        onProgress: () => { },
+                    });
+                    assertEqual(captured[0]?.[0], `Local model failed`, `load failure log`);
+                    captured.length = 0;
+                    const { chat, requests, loggings } = chatWith();
+                    chat({
+                        model: ChatModelId.qwen3_vl_2b,
+                        messages: [userMessage(`hi`)],
+                        logging: true,
+                        onResponse: () => { },
+                    });
+                    await sleep(20);
+                    assertEqual(loggings[0], true, `start logging flag`);
+                    assertEqual(requests[0]?.logging, true, `chat logging flag`);
+                } finally {
+                    console.log = original;
+                };
+            },
+        },
+        {
+            name: `threads/cap`,
+            run: () => {
+                assertEqual(cpuThreads(8, 2), 2, `eight cores cap two`);
+                assertEqual(cpuThreads(8, 1), 1, `eight cores cap one`);
+                assertEqual(cpuThreads(8, 99), 7, `eight cores raw seven`);
+                assertEqual(cpuThreads(16, 99), 8, `sixteen cores raw eight`);
+                assertEqual(cpuThreads(1, 2), 2, `one core raw two`);
+                assertEqual(cpuThreads(8, 3), 3, `eight cores cap three`);
+            },
+        },
+        {
+            name: `images/square`,
+            run: async () => {
+                const sizeOf = async (url: string) => {
+                    const bitmap = await createImageBitmap(
+                        await (await fetch(url)).blob());
+                    const size = { width: bitmap.width, height: bitmap.height };
+                    bitmap.close();
+                    return size;
+                };
+                const pixelOf = async (url: string, x: number, y: number) => {
+                    const
+                        bitmap = await createImageBitmap(
+                            await (await fetch(url)).blob()),
+                        canvas = document.createElement(`canvas`),
+                        context = canvas.getContext(`2d`);
+                    if (!context) throw new Error(`canvas unavailable`);
+                    canvas.width = imageSide;
+                    canvas.height = imageSide;
+                    context.drawImage(bitmap, 0, 0, imageSide, imageSide);
+                    bitmap.close();
+                    return Array.from(context.getImageData(x, y, 1, 1).data);
+                };
+                const [wide, tall, small] = [
+                    paintImage(512, 256),
+                    paintImage(100, 300),
+                    paintImage(64, 64),
+                ];
+                const resized = await resizeImages([{
+                    role: LlmRole.user,
+                    content: [
+                        { type: `text`, text: `look` },
+                        { type: `image`, url: wide },
+                        { type: `image`, url: tall },
+                        { type: `image`, url: small },
+                    ],
+                }]);
+                const content = resized[0].content;
+                if (typeof content == `string`) throw new Error(`parts expected`);
+                const images = content.filter(part => part.type == `image`);
+                assertEqual(imageSide, 288, `square side`);
+                assertEqual(images.length, 3, `image parts`);
+                const [wideOut, tallOut, smallOut] = images;
+                if (wideOut.type != `image` || tallOut.type != `image`
+                    || smallOut.type != `image`) throw new Error(`image parts expected`);
+                const [wideSize, tallSize, smallSize, center] = await Promise.all([
+                    sizeOf(wideOut.url),
+                    sizeOf(tallOut.url),
+                    sizeOf(smallOut.url),
+                    pixelOf(wideOut.url, 10, imageSide / 2),
+                ]);
+                assertEqual(wideSize.width, 288, `wide width`);
+                assertEqual(wideSize.height, 288, `wide height`);
+                assertEqual(tallSize.width, 288, `tall width`);
+                assertEqual(tallSize.height, 288, `tall height`);
+                assertEqual(smallSize.width, 288, `small width`);
+                assertEqual(smallSize.height, 288, `small height`);
+                assert(center[1] > center[0], `center crop kept the green middle`);
+                const textOnly = await resizeImages([
+                    { role: LlmRole.user, content: `plain` },
+                ]);
+                assertEqual(textOnly[0].content, `plain`, `text kept`);
+                const bad = await resizeImageUrl(`not-an-image`);
+                assertEqual(bad, `not-an-image`, `bad url kept`);
+            },
+        },
+    ];
+
+/** Run every test and publish the report. */
+const main = async (): Promise<void> => {
+    for (const definition of definitions)
+        await test(definition.name, definition.run);
+    const
+        pass = outcomes.filter(outcome => outcome.ok).length,
+        fail = outcomes.length - pass,
+        report = { pass, fail, tests: outcomes },
+        json = JSON.stringify(report).replace(`"fail":`, `"fail": `),
+        results = document.getElementById(`results`);
+    if (results) results.textContent = json;
+    console.log(`TESTS_RESULT`, json);
+};
+
+void main();

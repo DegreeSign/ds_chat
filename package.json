@@ -1,0 +1,71 @@
+{
+    "name": "@degreesign/chat",
+    "version": "0.1.0",
+    "description": "Headless on-device AI chat for browsers, workers and Node with a wllama CPU engine",
+    "main": "dist/node/chat.node.min.js",
+    "module": "dist/browser/chat.min.mjs",
+    "browser": "dist/browser/chat.min.mjs",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "browser": "./dist/browser/chat.min.mjs",
+            "node": {
+                "import": "./dist/node/chat.node.min.mjs",
+                "require": "./dist/node/chat.node.min.js"
+            },
+            "default": "./dist/node/chat.node.min.mjs"
+        },
+        "./dist/*": "./dist/*",
+        "./package.json": "./package.json"
+    },
+    "sideEffects": false,
+    "scripts": {
+        "build": "tsc --emitDeclarationOnly && webpack && node scripts/banner-wllama.cjs",
+        "typecheck": "tsc --noEmit",
+        "verify:node": "node test/node.cjs"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/DegreeSign/ds_chat.git"
+    },
+    "keywords": [
+        "ai chat",
+        "chat",
+        "llm",
+        "on-device",
+        "local inference",
+        "wllama",
+        "typescript",
+        "browser",
+        "node",
+        "react",
+        "degreesign"
+    ],
+    "author": "DegreeSign",
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
+    "bugs": {
+        "url": "https://github.com/DegreeSign/ds_chat/issues"
+    },
+    "homepage": "https://github.com/DegreeSign/ds_chat#readme",
+    "engines": {
+        "node": ">=24"
+    },
+    "files": [
+        "dist/"
+    ],
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "@wllama/wllama": "^3.8.1",
+        "@wllama/wllama-compat": "^3.8.1",
+        "terser-webpack-plugin": "^5.3.11",
+        "ts-loader": "^9.5.1",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.0",
+        "webpack": "^5.97.1",
+        "webpack-cli": "^6.0.1"
+    }
+}

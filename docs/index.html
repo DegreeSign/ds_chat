@@ -1,0 +1,1687 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@degreesign/chat · code structure</title>
+    <style>
+        :root {
+            --paper: #f4efe5;
+            --paper-2: #ece4d5;
+            --card: #fffdf7;
+            --ink: #2c271f;
+            --muted: #6f6657;
+            --faint: #9a9080;
+            --line: #d7cbb7;
+            --host: #8a7a5f;
+            --entry: #274b6b;
+            --stores: #2f6b52;
+            --pure: #9c7833;
+            --llm: #6e3354;
+            --test: #3c5f70;
+            --build: #5c574f;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; height: 100%; }
+        body {
+            font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            color: var(--ink);
+            background: var(--paper);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        #app { display: flex; flex-direction: column; height: 100vh; }
+        #bar {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+            padding: 9px 16px 8px;
+            border-bottom: 1px solid var(--line);
+            background: #f7f2e8;
+            z-index: 5;
+        }
+        .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+        .brand h1 {
+            margin: 0;
+            font: 600 17px/1.1 "Iowan Old Style", Palatino, Georgia, serif;
+            letter-spacing: 0.01em;
+        }
+        .brand .meta {
+            margin: 0;
+            font: 10.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: var(--faint);
+            white-space: nowrap;
+        }
+        .bands { display: flex; gap: 4px; flex-wrap: wrap; }
+        .bands button {
+            font-size: 10.5px;
+            padding: 3px 7px;
+            border-left-width: 3px;
+            border-left-color: var(--band);
+        }
+        .tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+        #search {
+            width: 158px;
+            font: 11.5px ui-monospace, monospace;
+            padding: 4px 8px;
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            background: var(--card);
+            color: var(--ink);
+        }
+        #search:focus { outline: 2px solid #b9a887; outline-offset: 0; }
+        button {
+            font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+            padding: 5px 9px;
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            background: #fbf7ef;
+            color: #453d31;
+            cursor: pointer;
+        }
+        button:hover { background: #fffdf7; border-color: #bfae92; }
+        button.on { background: #2c271f; color: #f7f2e8; border-color: #2c271f; }
+        #zoom {
+            font: 10.5px ui-monospace, monospace;
+            color: var(--muted);
+            min-width: 36px;
+            text-align: center;
+        }
+        #stage { position: relative; flex: 1; display: flex; min-height: 0; }
+        #viewport {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+            cursor: grab;
+            background-image:
+                linear-gradient(#e6ddcd 1px, transparent 1px),
+                linear-gradient(90deg, #e6ddcd 1px, transparent 1px);
+            background-size: 48px 48px;
+            background-position: -1px -1px;
+            touch-action: none;
+        }
+        #viewport.drag { cursor: grabbing; }
+        #canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+        #edges { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+        .band {
+            position: absolute;
+            left: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding-top: 5px;
+            border-top: 1px solid var(--line);
+            pointer-events: none;
+        }
+        .band b {
+            font: 650 10.5px/1 ui-sans-serif, system-ui, sans-serif;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: #4c4234;
+        }
+        .band span { font-size: 10px; color: var(--faint); }
+        .wash {
+            position: absolute;
+            left: 6px;
+            border-radius: 6px;
+            background: var(--band);
+            opacity: 0.075;
+            pointer-events: none;
+        }
+        .file { position: absolute; }
+        .file-head {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            height: 18px;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .file-head b {
+            font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: var(--band);
+        }
+        .file-head i {
+            font-style: normal;
+            font: 9px/1 ui-monospace, monospace;
+            color: #ada291;
+        }
+        .file-cols { display: flex; gap: 12px; align-items: flex-start; }
+        .col { width: 208px; display: flex; flex-direction: column; gap: 6px; }
+        [data-band="host"] { --band: var(--host); }
+        [data-band="entry"] { --band: var(--entry); }
+        [data-band="stores"] { --band: var(--stores); }
+        [data-band="pure"] { --band: var(--pure); }
+        [data-band="llm"] { --band: var(--llm); }
+        [data-band="test"] { --band: var(--test); }
+        [data-band="build"] { --band: var(--build); }
+        .node {
+            position: relative;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--band);
+            border-radius: 3px;
+            padding: 5px 7px 6px;
+            cursor: pointer;
+            transition: opacity 0.16s ease, box-shadow 0.16s ease;
+        }
+        .node .lbl {
+            font-weight: 650;
+            font-size: 11px;
+            line-height: 1.3;
+            letter-spacing: 0.005em;
+            padding-right: 22px;
+            word-break: break-word;
+        }
+        .node .sig {
+            margin-top: 1px;
+            font: 9.5px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: #5d5446;
+            word-break: break-word;
+        }
+        .node .ln {
+            position: absolute;
+            top: 4px;
+            right: 5px;
+            font: 8.5px/1 ui-monospace, monospace;
+            color: #b3a895;
+        }
+        .node .no {
+            display: none;
+            position: absolute;
+            left: -8px;
+            top: -8px;
+            width: 17px;
+            height: 17px;
+            border-radius: 50%;
+            background: #2c271f;
+            color: #f7f2e8;
+            font: 600 9.5px/17px ui-sans-serif, sans-serif;
+            text-align: center;
+        }
+        .node.lit {
+            box-shadow: 0 0 0 2px var(--band), 0 6px 16px rgba(70, 52, 22, 0.14);
+            z-index: 3;
+        }
+        .node.dim { background: #f6f1e7; border-color: #e7dfd0; border-left-color: #ded4c2; }
+        .node.dim > * { opacity: 0.3; }
+        .node.sel {
+            background: #fff;
+            box-shadow: 0 0 0 2px #2c271f, 0 8px 22px rgba(70, 52, 22, 0.2);
+            z-index: 4;
+        }
+        .node.step { box-shadow: 0 0 0 2px #2c271f; }
+        .node.step .no { display: block; }
+        .node.hit { box-shadow: 0 0 0 2px #c08a4a; }
+        .node:focus-visible { outline: 2px solid #c08a4a; outline-offset: 1px; }
+        .edge { fill: none; stroke-width: 1.15; opacity: 0.24; transition: opacity 0.16s ease; }
+        .edge.lit { opacity: 0.95; stroke-width: 1.8; }
+        .edge.dim { opacity: 0.035; }
+        .k-build { stroke: #6f9464; }
+        .k-call { stroke: #5579a4; }
+        .k-event { stroke: #c08a4a; stroke-dasharray: 5 3; }
+        .k-store { stroke: #9878ad; stroke-dasharray: 2 3; }
+        .k-type { stroke: #a49b8c; stroke-width: 1; opacity: 0.1; }
+        .k-inner { stroke: #b9ab95; stroke-dasharray: 1 3; opacity: 0.1; }
+        .k-type.lit, .k-inner.lit { opacity: 0.95; }
+        #hint {
+            position: absolute;
+            left: 14px;
+            bottom: 12px;
+            font: 10.5px ui-monospace, monospace;
+            color: #8c8272;
+            background: rgba(247, 242, 232, 0.86);
+            border: 1px solid var(--line);
+            border-radius: 3px;
+            padding: 4px 8px;
+            pointer-events: none;
+        }
+        #panel {
+            flex: 0 0 322px;
+            width: 322px;
+            border-left: 1px solid var(--line);
+            background: var(--paper-2);
+            overflow: auto;
+            padding: 13px 15px 40px;
+        }
+        #panel h2 {
+            margin: 15px 0 7px;
+            font: 650 10px/1 ui-sans-serif, sans-serif;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #7b7060;
+        }
+        #panel h2:first-child { margin-top: 2px; }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            padding: 10px 11px;
+        }
+        .card .path {
+            font: 9.5px/1.4 ui-monospace, monospace;
+            color: var(--faint);
+            word-break: break-all;
+        }
+        .card .name {
+            margin: 2px 0 0;
+            font: 650 14px/1.25 ui-sans-serif, sans-serif;
+        }
+        .card .sig {
+            margin-top: 3px;
+            font: 10px/1.4 ui-monospace, monospace;
+            color: #4f4739;
+            word-break: break-word;
+        }
+        .card .note { margin-top: 6px; font-size: 11.5px; color: #5c5345; }
+        .card .note code { font: 10px ui-monospace, monospace; color: #6e3354; }
+        .rel { margin-top: 10px; }
+        .rel b {
+            display: block;
+            font: 600 9px/1 ui-sans-serif, sans-serif;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--faint);
+            margin-bottom: 4px;
+        }
+        .rel button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            font: 10.5px/1.35 ui-monospace, monospace;
+            padding: 2px 0;
+            border: 0;
+            background: none;
+            color: #3f5f86;
+        }
+        .rel button:hover { color: #1c3550; text-decoration: underline; }
+        .rel button span { color: #a89c88; }
+        .bandlist button {
+            padding: 5px 0 5px 8px;
+            color: inherit;
+            border-left: 3px solid var(--band);
+        }
+        .bandlist button b {
+            display: block;
+            font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+            color: #2c271f;
+        }
+        .bandlist button span {
+            display: block;
+            font: 10px/1.35 ui-sans-serif, system-ui, sans-serif;
+            color: #8c8272;
+        }
+        .route {
+            font: 9.5px/1.55 ui-monospace, monospace;
+            color: #756a58;
+            word-break: break-word;
+        }
+        .route b { color: #2c271f; }
+        .empty { font-size: 11.5px; color: #7d7363; }
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-size: 11px; }
+        .stats div { display: flex; justify-content: space-between; gap: 6px; }
+        .stats span { color: var(--faint); }
+        .stats b { font: 600 11px ui-monospace, monospace; }
+        .legend { display: grid; gap: 3px; font-size: 10.5px; color: #635a4b; }
+        .legend i {
+            display: inline-block;
+            width: 22px;
+            height: 0;
+            border-top: 2px solid;
+            margin-right: 7px;
+            vertical-align: middle;
+        }
+        .legend .dash { border-top-style: dashed; }
+        .legend .dot { border-top-style: dotted; }
+        .steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding: 3px 0 5px 22px;
+            font-size: 11px;
+            color: #5c5345;
+            border-bottom: 1px solid #e2d9ca;
+        }
+        .steps li:last-child { border-bottom: 0; }
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 4px;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #2c271f;
+            color: #f7f2e8;
+            font: 600 9px/15px ui-sans-serif, sans-serif;
+            text-align: center;
+        }
+        .steps li b { display: block; color: #2c271f; font: 600 10.5px ui-monospace, monospace; }
+        #state-box svg { width: 100%; height: auto; display: block; }
+        .state-title { font: 600 9.5px ui-monospace, monospace; fill: #7b7060; }
+        .state-box { font: 9.5px ui-monospace, monospace; fill: #3c352b; }
+        .state-arrow { stroke: #9b8f7c; stroke-width: 1; fill: none; }
+        @media (max-width: 900px) {
+            #panel {
+                position: absolute;
+                right: 0;
+                top: 0;
+                bottom: 0;
+                width: 300px;
+                flex-basis: 300px;
+                box-shadow: -10px 0 30px rgba(60, 45, 20, 0.12);
+            }
+            #hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <header id="bar">
+        <div class="brand">
+            <h1>@degreesign/chat</h1>
+            <p class="meta" id="meta">one-shot on-device chat</p>
+        </div>
+        <div class="bands" id="bands"></div>
+        <div class="tools">
+            <input id="search" type="search" placeholder="find a function" autocomplete="off"
+                spellcheck="false">
+            <button id="flow" title="Number the createChat pipeline">flow</button>
+            <button id="fit" title="Fit the whole map">fit</button>
+            <button id="minus" title="Zoom out">-</button>
+            <span id="zoom">100%</span>
+            <button id="plus" title="Zoom in">+</button>
+        </div>
+    </header>
+    <div id="stage">
+        <div id="viewport">
+            <div id="canvas">
+                <svg id="edges" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div id="hint">drag to pan · wheel to zoom · click to pin</div>
+        </div>
+        <aside id="panel">
+            <div id="panel-main"></div>
+            <h2>State machines</h2>
+            <div class="card" id="state-box"></div>
+            <h2>Legend</h2>
+            <div class="card">
+                <div class="legend">
+                    <div><i class="k-build"></i>builds or wires</div>
+                    <div><i class="k-call"></i>calls</div>
+                    <div><i class="k-store dot"></i>runtime model download</div>
+                    <div><i class="k-type"></i>type only</div>
+                    <div><i class="k-inner dot"></i>inner closure</div>
+                </div>
+            </div>
+            <h2>Reading the map</h2>
+            <div class="card empty" style="font-size:11px">
+                Bands run top to bottom in dependency order: the host passes one
+                <b>ChatInput</b>, <b>createChat</b> binds its callbacks to the
+                shared runtime, the runtime lazily imports an engine, and the
+                engine streams the reply back. Hover brightens one function and
+                its neighbours, click pins it, and the panel lists every caller
+                and every callee plus the shortest path back to
+                <b>createChat</b>.
+            </div>
+        </aside>
+    </div>
+</div>
+<script>
+// DATA BEGIN
+const BANDS = [
+    {
+        id: `host`,
+        title: `1 · host boundary`,
+        hint: `one input owned by the app`,
+    },
+    {
+        id: `entry`,
+        title: `2 · public entry, enums and types`,
+        hint: `createChat is the only runtime export`,
+    },
+    {
+        id: `runtime`,
+        title: `3 · model runtime`,
+        hint: `service, catalog, load and chat`,
+    },
+    {
+        id: `engines`,
+        title: `4 · prompt and engines`,
+        hint: `budgets, streaming, wllama`,
+    },
+    {
+        id: `assets`,
+        title: `5 · assets and weights`,
+        hint: `wasm URLs and runtime downloads`,
+    },
+    {
+        id: `test`,
+        title: `6 · headless verification`,
+        hint: `browser cdp suite and node bundle suite`,
+    },
+    {
+        id: `build`,
+        title: `7 · build and package`,
+        hint: `three bundles, assets, publish`,
+    },
+];
+
+const FILES = [];
+const NODES = [];
+const EDGES = [];
+
+const f = (id, band, label, path, loc) =>
+    FILES.push({ id, band, label, path, loc });
+
+const n = (file, id, line, label, sig, note = ``) =>
+    NODES.push({ id: file + `.` + id, file, line, label, sig, note });
+
+const e = (from, to, kind) => EDGES.push({ from, to, kind });
+
+f(`host`, `host`, `host app`, `host app`, 0);
+f(`entry`, `entry`, `index.ts`, `src/index.ts`, 17);
+f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 48);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 302);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 186);
+f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 241);
+f(`models`, `runtime`, `models.ts`, `src/models.ts`, 31);
+f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 362);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 314);
+f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 102);
+f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
+f(`assets`, `assets`, `browser.js`, `src/assets/browser.js`, 13);
+f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 9);
+f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 11);
+f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 11);
+f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1158);
+f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
+f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 86);
+f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 204);
+f(`vwebpack`, `test`, `webpack.config.cjs`, `test/webpack.config.cjs`, 41);
+f(`vassets`, `test`, `assets.ts`, `test/assets.ts`, 8);
+f(`webpack`, `build`, `webpack.config.ts`, `webpack.config.ts`, 137);
+f(`scripts`, `build`, `banner-wllama.cjs`, `scripts/banner-wllama.cjs`, 19);
+f(`package`, `build`, `package.json`, `package.json`, 0);
+f(`tsconfig`, `build`, `tsconfig.json`, `tsconfig.json`, 0);
+
+// host boundary
+n(`host`, `input`, 0, `ChatInput`,
+    `model · messages · limits · reasoning · logging · callbacks`,
+    `One request, assembled and owned by the host app, images included`);
+n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
+    `Returned by createChat; cancels the call or frees the model`);
+
+// entry, enums and types
+n(`entry`, `exports`, 1, `public exports`, `createChat + 6 enums`,
+    `Only createChat and the public types leave the package`);
+n(`chat`, `createChat`, 184, `createChat`, `(input: ChatInput) => CancelChat`,
+    `One call per response, bound to the module singleton`);
+n(`chat`, `createChatOn`, 19, `createChatOn`,
+    `(service: Runtime) => (input: ChatInput) => CancelChat`,
+    `Testable factory over one runtime`);
+n(`chat`, `emitStatus`, 26, `emitStatus`, `(call: ActiveCall) => void`,
+    `Derive availability and image support, publish one snapshot`);
+n(`chat`, `run`, 51, `run`, `(call: ActiveCall) => Promise<void>`,
+    `Resolve the model, load it, strip unsupported images, stream`);
+n(`chat`, `cancel`, 154, `cancel`, `(call: ActiveCall) => void`,
+    `Stale no-op, abort the stream, cancel the load, or unload`);
+n(`enums`, `enums`, 2, `enums`, `6 exported enums`,
+    `LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, ChatModelId`);
+n(`types`, `records`, 11, `records`,
+    `ChatMessage, ChatModel, LlmLimits, WllamaAssets`,
+    `One turn with optional images, one catalog entry`
+    + ` with an optional projector, budgets, a CPU thread cap and asset URLs`);
+n(`types`, `snapshots`, 54, `ChatStatusSnapshot`,
+    `availability · status · backend · supportsImages`
+    + ` · ready · loading · requesting · phase · percent · error`,
+    `Every lifecycle value the host renders`);
+n(`types`, `input`, 73, `ChatInput · CancelChat`,
+    `(input: ChatInput) => CancelChat`,
+    `The whole public input and the only return value`);
+n(`types`, `call`, 106, `ActiveCall · Runtime`,
+    `token · input · controller · percent · phase · requesting`
+    + ` · load · chat · unload · cancelLoad · model`,
+    `One live call and the on-device runtime it drives`);
+n(`types`, `params`, 160, `EngineChatParams · StartLlmParams`
+    + ` · StreamReplyParams`,
+    `messages · limits · reasoning · logging · onReason · onText · signal`,
+    `Per-call budgets and accumulated text callbacks`);
+n(`types`, `runtimeContract`, 190, `LlmRuntime · LlmEngine`,
+    `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`,
+    `The engine returns model, backend, contextSize, chat and unload`);
+n(`types`, `contentParts`, 219, `EngineContentPart`,
+    `text | image`,
+    `One segment of a user turn before an engine maps it`);
+n(`types`, `messages`, 235, `EngineMessage`, `role + content`,
+    `One OpenAI-style turn, a user turn may carry image parts`);
+
+// model runtime
+n(`llm`, `createRuntime`, 14, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
+    `One module singleton, fake engines in tests`);
+n(`llm`, `probes`, 33, `probes`,
+    `wasmSupported · persistStorage`
+    + ` · isOverQuota · isQuotaError`,
+    `Capability and storage checks, guarded`);
+n(`llm`, `bestBackend`, 39, `bestBackend`, `() => LlmBackend`,
+    `Test override, CPU when wasm is available, none`);
+n(`llm`, `purgeModelCaches`, 43, `purgeModelCaches`, `() => Promise<void>`,
+    `Purge the CPU engine`);
+n(`llm`, `evictPrevious`, 69, `evictPrevious`,
+    `(model) => Promise<void>`,
+    `Keep only the model being loaded, on an engine with a cache`);
+n(`llm`, `reportProgress`, 85, `reportProgress`, `(value, phase?) => void`,
+    `Clamp 0..1 and forward to the active request`);
+n(`llm`, `setStatus`, 93, `setStatus`, `(next: LlmStatus) => void`,
+    `Store the engine status for the next snapshot`);
+n(`llm`, `ready`, 97, `ready`, `() => boolean`,
+    `Ready status plus a runtime and an active model`);
+n(`llm`, `load`, 100, `load`,
+    `({ model, limits, assets, logging, onProgress }) => Promise<boolean>`,
+    `Join the same load, abort a different one, evict, cache check,`
+    + ` startLLM, keep one runtime`);
+n(`llm`, `unload`, 189, `unload`, `() => Promise<void>`,
+    `Bump the load token, release the engine, keep the cache`);
+n(`llm`, `cancelLoad`, 201, `cancelLoad`, `() => void`,
+    `Abort the download or load and return to idle`);
+n(`llm`, `chat`, 209, `chat`, `(params) => Promise<string | undefined>`,
+    `Serialize one engine turn, then stream on the loaded runtime`);
+n(`llm`, `isLoading`, 223, `isLoading`, `() => boolean`,
+    `Not ready and downloading`);
+n(`llm`, `model`, 235, `runtime.model`, `() => ChatModel | undefined`,
+    `The model currently loaded on the runtime`);
+n(`llm`, `runtime`, 239, `runtime`, `createRuntime()`,
+    `The process-wide loaded model`);
+
+// model catalog
+n(`models`, `llmModels`, 5, `llmModels`, `ChatModel[1]`,
+    `qwen3_vl_2b, CPU only with its mmproj`);
+n(`models`, `snapshots`, 19, `size`,
+    `cpuContextWindow`,
+    `8k context on the CPU engine`);
+n(`models`, `findLlmModel`, 21, `findLlmModel`,
+    `(id?) => ChatModel | undefined`,
+    `Catalog lookup by stable id`);
+n(`models`, `supportsImages`, 24, `supportsImages`,
+    `(model) => boolean`,
+    `The CPU projector decides vision`);
+
+// prompt and streaming
+n(`engine`, `limits`, 15, `defaultLlmLimits`, `LlmLimits`,
+    `Reply 200 tokens, thinking 64, reasoning total 150,`
+    + ` 2 images, 1000 chars each, 10000 prompt chars, 2 CPU threads`);
+n(`engine`, `budgetLimit`, 26, `budgetLimit`,
+    `(value, fallback, min) => number`,
+    `Finite values at or above the floor are floored, anything else falls back`);
+n(`engine`, `resolveLimits`, 36, `resolveLlmLimits`, `(partial?) => LlmLimits`,
+    `Clamp every budget, including the thread cap, then fill every default`);
+n(`engine`, `replyOptions`, 78, `replyOptions`, `(limits, reasoning) => object`,
+    `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
+n(`engine`, `userContent`, 95, `userContent`, `(text, images) => string | parts`,
+    `Text first, then each image, or plain text when no image is kept`);
+n(`engine`, `contentParts`, 106, `contentParts`, `(content) => EngineContentPart[]`,
+    `Flatten string or part content for a merge`);
+n(`engine`, `mergeContent`, 113, `mergeContent`, `(first, next) => content`,
+    `Join same-role turns and collapse adjacent text parts`);
+n(`engine`, `buildMessages`, 132, `buildMessages`,
+    `(messages, limits?) => EngineMessage[]`,
+    `Keep text or images, cap images newest first, fold system,`
+    + ` drop leading assistant, merge same roles`);
+n(`engine`, `createThinkSplitter`, 191, `createThinkSplitter`,
+    `(onReason, onText) => { feed, flush }`,
+    `Separates inline reasoning markers from the visible reply`);
+n(`engine`, `findTag`, 199, `findTag`, `(data, tags) => { at, tag }`,
+    `Earliest occurrence of any marker`);
+n(`engine`, `holdPartial`, 211, `holdPartial`, `(data, tags) => string`,
+    `Holds back the longest suffix that may still become a marker`);
+n(`engine`, `feed`, 224, `feed`, `(text) => void`,
+    `Consume a chunk, switch on the current in-reason state`);
+n(`engine`, `flush`, 256, `flush`, `() => void`, `Emit whatever was held back`);
+n(`engine`, `logs`, 266, `logChatCall`, `(model, messages) => void`,
+    `Message text and image data are censored, the caller checks the flag`);
+n(`engine`, `streamReply`, 279, `streamReply`, `(params) => Promise<string?>`,
+    `Run the chunk loop, read inline or structured reasoning, collect reply`
+    + ` and thought, log when enabled, honour stop`);
+
+n(`engine`, `runEngineChat`, 334, `runEngineChat`,
+    `(model, params, start, stopped) => Promise<string?>`,
+    `Build the prompt and image parts, log when enabled, stream one reply`);
+n(`wllama`, `wllamaEngine`, 274, `wllamaEngine`, `LlmEngine`,
+    `backend cpu, startLLM, cached, hasCache, remove, purge`);
+n(`wllama`, `resolveAssets`, 49, `resolveAssets`, `(overrides?) => WllamaAssets`,
+    `Merge per-start overrides over the auto-resolved asset URLs`);
+n(`wllama`, `cpuLogger`, 58, `cpuLogger`, `(base) => WllamaLogger`,
+    `Follows the per-call logging flag and hides the GPU probe`);
+n(`wllama`, `getWllama`, 75, `getWllama`, `() => Promise<Wllama>`,
+    `Lazy singleton, default assets resolved and cached on first use`);
+n(`wllama`, `entryOf`, 102, `entryOf`, `(entry, file) => boolean`,
+    `Cache entry matches by file name or original URL`);
+n(`wllama`, `modelFiles`, 106, `modelFiles`, `(model) => string[]`,
+    `The model file plus its vision projector when present`);
+n(`wllama`, `modelUrl`, 109, `modelUrl`, `(repo, file) => string`,
+    `Resolve one GGUF file on huggingface.co`);
+n(`wllama`, `imageBuffer`, 112, `imageBuffer`, `(url) => Promise<ArrayBuffer>`,
+    `Decode a data URL or fetch an image URL into bytes`);
+n(`wllama`, `toWllamaMessages`, 128, `toWllamaMessages`,
+    `(messages) => Promise<WllamaMessage[]>`,
+    `Map text and image parts to wllama content segments`);
+n(`wllama`, `hasImages`, 151, `hasImages`, `(messages) => boolean`,
+    `Whether any built turn carries an image part`);
+n(`wllama`, `dropWllama`, 96, `dropWllama`, `() => Promise<void>`,
+    `Drop the worker, a crashed or exited one cannot be reused`);
+n(`wllama`, `runtime`, 24, `runtime`,
+    `contextSize · cpuThreads · hfBase · gpuProbeLog · loggingOn`,
+    `8k context, hardware threads capped by limits.maxThreads,`
+    + ` weights from huggingface.co, 0 GPU layers`);
+n(`wllama`, `cpuThreads`, 31, `cpuThreads`, `(cores, maxThreads) => number`,
+    `Raw hardware maximum first, then the caller cap, minimum 1`);
+n(`wllama`, `startLLM`, 182, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    `Load the model and its projector, cap CPU threads, abortable,`
+    + ` then return the runtime`);
+n(`wllama`, `cached`, 277, `cached`, `(model) => Promise<boolean>`,
+    `Every file including the projector must be in the cache manager`);
+n(`wllama`, `hasCache`, 286, `hasCache`, `() => Promise<boolean>`,
+    `Any entry in the wllama cache manager`);
+n(`wllama`, `chat`, 156, `chatOn`, `(instance, model, params)`,
+    `Reject unsupported images, map parts, pass abortSignal, stream`);
+n(`wllama`, `unload`, 268, `runtime.unload`, `() => Promise<void>`,
+    `Exit the worker through dropWllama, a crashed one is not reused`);
+n(`wllama`, `remove`, 292, `remove`, `(model) => Promise<void>`,
+    `deleteMany by every model file, including the projector`);
+n(`wllama`, `purge`, 299, `purge`, `() => Promise<void>`, `cacheManager.clear()`);
+
+// image resizing
+n(`images`, `maxSide`, 4, `imageSide`, `288`,
+    `Square side sent to an engine, a multiple of 48`);
+n(`images`, `resizeUrl`, 40, `resizeImageUrl`, `(url) => Promise<string>`,
+    `Decode an image, center-crop it to a square, resize to 288 x 288,`
+    + ` encode JPEG`);
+n(`images`, `resizeImages`, 79, `resizeImages`,
+    `(messages) => Promise<EngineMessage[]>`,
+    `Center-crop and resize every image part before the engine starts`);
+
+// loader and assets
+n(`loader`, `loadWllama`, 4, `loadWllama`, `() => Promise<typeof wllama>`,
+    `import() of the bundled engine-wllama chunk, fetched on demand`);
+n(`external`, `ggufWeights`, 0, `GGUF weights`, `runtime download`,
+    `The GGUF artifact of a model, never shipped in the package`);
+n(`assets`, `defaultWllamaAssets`, 7, `defaultWllamaAssets`, `() => WllamaAssets`,
+    `Browser build: asset/resource URLs emitted beside the bundle`);
+n(`assetsNode`, `defaultWllamaAssets`, 6, `defaultWllamaAssets`, `() => WllamaAssets`,
+    `Node CommonJS build: paths joined beside dist/assets/wllama`);
+n(`assetsNodePaths`, `wllamaAssetsAt`, 5, `wllamaAssetsAt`, `(base) => WllamaAssets`,
+    `One wasm, compat wasm and compat worker mapping below a base path`);
+n(`assetsNodeEsm`, `defaultWllamaAssets`, 7, `defaultWllamaAssets`, `() => WllamaAssets`,
+    `Node ESM build: paths resolved from import.meta.url`);
+
+// verification
+n(`harness`, `test`, 59, `test`, `(name, run) => Promise<void>`,
+    `Runs one case, records the error, the suite keeps going`);
+n(`harness`, `assertions`, 68, `assertions`,
+    `assert · assertEqual · deferred · waitFor`,
+    `Small synchronous checks and short timing gates`);
+n(`harness`, `modelOf`, 90, `modelOf`, `(id) => ChatModel`,
+    `Catalog lookup or a failed test`);
+n(`harness`, `runtimeWith`, 96, `runtimeWith`, `(options?) => fake runtime`,
+    `Fake CPU engine plus createRuntime`);
+n(`harness`, `chatWith`, 106, `chatWith`, `(options?) => fake chat`,
+    `runtimeWith plus createChatOn`);
+n(`harness`, `streamOf`, 115, `streamOf`, `(...chunks) => AsyncIterable`,
+    `One scripted engine stream`);
+n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
+    `Controllable engine: cached, gates, failure flags, call log`);
+n(`harness`, `definitions`, 138, `definitions`, `32 deferred cases`,
+    `exports, limits, prompt, images, stream, runtime, chat, threads, square`);
+n(`harness`, `main`, 1145, `main`, `() => Promise<void>`,
+    `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
+n(`vnode`, `main`, 24, `main`, `() => Promise<void>`,
+    `Requires both node entries, proves createChat works without a DOM`);
+n(`drive`, `getJson`, 54, `getJson`, `(url) => Promise<unknown>`,
+    `Reads CDP targets from the debug port`);
+n(`drive`, `serve`, 71, `serve`, `() => Promise<Server>`,
+    `Static file server for the built harness on port 17544`);
+n(`drive`, `run`, 95, `run`, `() => Promise<void>`,
+    `Spawn chromium headless, attach over WebSocket, collect the report`);
+n(`vwebpack`, `vwebpack`, 6, `bundle harness`, `module.exports`,
+    `ts-loader with tsconfig.test.json, swaps ../assets/browser for the stub`);
+n(`vassets`, `defaultWllamaAssets`, 1, `defaultWllamaAssets`, `() => WllamaAssets`,
+    `stub:// URLs so tests never download wasm`);
+
+// build and package
+n(`webpack`, `assetRules`, 7, `assetRules`, `RuleSetRule[]`,
+    `Copies wllama wasm, compat wasm and the compat worker to dist/assets`);
+n(`webpack`, `engineChunks`, 54, `engine chunks`, `dynamic import`,
+    `The CPU engine is bundled, the loader splits it into a named chunk`);
+n(`webpack`, `commonConfig`, 25, `commonConfig`, `webpack.Configuration`,
+    `ts-loader, asset rules, banner, terser, usedExports, sideEffects false`);
+n(`webpack`, `browserConfig`, 63, `browserConfig`, `webpack.Configuration`,
+    `ESM output chat.min.mjs plus engine chunks and wllama assets`);
+n(`webpack`, `nodeBase`, 97, `nodeBase`, `webpack.Configuration`,
+    `Shared Node target: entry, target and module resolution`);
+n(`webpack`, `nodeConfig`, 104, `nodeConfig`, `webpack.Configuration`,
+    `nodeBase plus CommonJS output, aliases ../assets/browser to node.js`);
+n(`webpack`, `nodeEsmConfig`, 120, `nodeEsmConfig`, `webpack.Configuration`,
+    `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
+n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
+    `Prepends the compat license banner and copies the licence file`);
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.1.0`,
+    `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
+    + ` exports point at dist/browser, dist/node cjs and dist/node esm`);
+n(`tsconfig`, `tsconfig`, 1, `tsconfig.json`, `strict, ES2022, CommonJS`,
+    `declarations into dist, skipLibCheck, node types`);
+
+// host to entry
+e(`entry.exports`, `chat.createChat`, `type`);
+e(`host.input`, `chat.createChatOn`, `type`);
+e(`host.cancel`, `chat.createChat`, `type`);
+
+// createChat wiring
+e(`chat.createChat`, `llm.runtime`, `call`);
+e(`chat.createChatOn`, `emitStatus`, `inner`);
+e(`chat.createChatOn`, `chat.run`, `inner`);
+e(`chat.createChatOn`, `chat.cancel`, `inner`);
+e(`chat.createChatOn`, `types.input`, `type`);
+e(`chat.createChatOn`, `types.call`, `type`);
+e(`chat.run`, `emitStatus`, `call`);
+e(`chat.run`, `findLlmModel`, `call`);
+e(`chat.run`, `resolveLimits`, `call`);
+e(`chat.run`, `load`, `call`);
+e(`chat.run`, `llm.chat`, `call`);
+e(`chat.cancel`, `llm.unload`, `call`);
+e(`chat.cancel`, `cancelLoad`, `call`);
+e(`chat.emitStatus`, `ready`, `call`);
+e(`chat.emitStatus`, `isLoading`, `call`);
+e(`chat.emitStatus`, `llm.model`, `call`);
+e(`chat.emitStatus`, `supportsImages`, `call`);
+e(`chat.emitStatus`, `types.snapshots`, `type`);
+e(`chat.run`, `supportsImages`, `call`);
+e(`chat.run`, `types.records`, `type`);
+e(`chat.run`, `types.call`, `type`);
+e(`chat.run`, `types.input`, `type`);
+e(`chat.cancel`, `types.records`, `type`);
+e(`chat.cancel`, `types.call`, `type`);
+
+// runtime relations
+e(`createRuntime`, `probes`, `inner`);
+e(`createRuntime`, `bestBackend`, `inner`);
+e(`createRuntime`, `purgeModelCaches`, `inner`);
+e(`createRuntime`, `evictPrevious`, `inner`);
+e(`createRuntime`, `reportProgress`, `inner`);
+e(`createRuntime`, `setStatus`, `inner`);
+e(`createRuntime`, `ready`, `inner`);
+e(`createRuntime`, `load`, `inner`);
+e(`llm.createRuntime`, `llm.unload`, `inner`);
+e(`createRuntime`, `cancelLoad`, `inner`);
+e(`llm.createRuntime`, `llm.chat`, `inner`);
+e(`createRuntime`, `isLoading`, `inner`);
+e(`llm.createRuntime`, `types.records`, `type`);
+e(`llm.createRuntime`, `types.call`, `type`);
+e(`llm.createRuntime`, `types.runtimeContract`, `type`);
+e(`llm.runtime`, `llm.createRuntime`, `call`);
+e(`bestBackend`, `probes`, `call`);
+e(`load`, `bestBackend`, `call`);
+e(`load`, `evictPrevious`, `call`);
+e(`load`, `probes`, `call`);
+e(`load`, `purgeModelCaches`, `call`);
+e(`load`, `reportProgress`, `call`);
+e(`load`, `setStatus`, `call`);
+e(`load`, `wllama.startLLM`, `call`);
+e(`llm.load`, `types.runtimeContract`, `build`);
+e(`evictPrevious`, `llmModels`, `call`);
+e(`evictPrevious`, `wllama.hasCache`, `call`);
+e(`evictPrevious`, `wllama.remove`, `call`);
+e(`purgeModelCaches`, `wllama.purge`, `call`);
+e(`llm.unload`, `wllama.unload`, `call`);
+e(`llm.chat`, `wllama.chat`, `call`);
+e(`llm.chat`, `types.runtimeContract`, `type`);
+e(`isLoading`, `ready`, `call`);
+e(`llm.reportProgress`, `types.snapshots`, `type`);
+
+// model catalog relations
+e(`findLlmModel`, `llmModels`, `call`);
+e(`supportsImages`, `llmModels`, `call`);
+e(`supportsImages`, `types.records`, `type`);
+e(`llmModels`, `types.records`, `type`);
+e(`models.snapshots`, `types.records`, `type`);
+
+// prompt relations
+e(`resolveLimits`, `budgetLimit`, `call`);
+e(`resolveLimits`, `limits`, `call`);
+e(`buildMessages`, `types.messages`, `type`);
+e(`buildMessages`, `limits`, `call`);
+e(`buildMessages`, `types.records`, `type`);
+e(`buildMessages`, `enums.enums`, `type`);
+e(`buildMessages`, `userContent`, `call`);
+e(`buildMessages`, `mergeContent`, `call`);
+e(`userContent`, `types.contentParts`, `type`);
+e(`mergeContent`, `contentParts`, `call`);
+e(`replyOptions`, `limits`, `type`);
+e(`streamReply`, `createThinkSplitter`, `call`);
+e(`streamReply`, `logs`, `call`);
+e(`streamReply`, `types.params`, `type`);
+e(`runEngineChat`, `buildMessages`, `call`);
+e(`runEngineChat`, `logs`, `call`);
+e(`runEngineChat`, `streamReply`, `call`);
+e(`runEngineChat`, `types.params`, `type`);
+e(`runEngineChat`, `images.resizeImages`, `call`);
+e(`createThinkSplitter`, `findTag`, `inner`);
+e(`createThinkSplitter`, `holdPartial`, `inner`);
+e(`createThinkSplitter`, `feed`, `inner`);
+e(`createThinkSplitter`, `flush`, `inner`);
+e(`feed`, `findTag`, `call`);
+e(`feed`, `holdPartial`, `call`);
+e(`types.params`, `types.records`, `type`);
+e(`types.params`, `enums.enums`, `type`);
+e(`types.runtimeContract`, `types.records`, `type`);
+e(`types.input`, `types.records`, `type`);
+e(`types.input`, `enums.enums`, `type`);
+e(`types.snapshots`, `enums.enums`, `type`);
+e(`types.call`, `types.input`, `type`);
+
+// wllama relations
+e(`wllamaEngine`, `wllama.startLLM`, `inner`);
+e(`wllamaEngine`, `wllama.cached`, `inner`);
+e(`wllamaEngine`, `wllama.hasCache`, `inner`);
+e(`wllamaEngine`, `wllama.remove`, `inner`);
+e(`wllamaEngine`, `wllama.purge`, `inner`);
+e(`wllama.startLLM`, `resolveAssets`, `call`);
+e(`wllama.startLLM`, `getWllama`, `call`);
+e(`wllama.startLLM`, `dropWllama`, `call`);
+e(`wllama.startLLM`, `modelUrl`, `call`);
+e(`wllama.startLLM`, `entryOf`, `call`);
+e(`wllama.startLLM`, `models.snapshots`, `call`);
+e(`wllama.startLLM`, `wllama.chat`, `inner`);
+e(`wllama.startLLM`, `wllama.unload`, `inner`);
+e(`wllama.startLLM`, `types.params`, `type`);
+e(`resolveAssets`, `assets.defaultWllamaAssets`, `call`);
+e(`getWllama`, `loadWllama`, `call`);
+e(`getWllama`, `resolveAssets`, `call`);
+e(`getWllama`, `cpuLogger`, `call`);
+e(`wllama.cached`, `getWllama`, `call`);
+e(`wllama.cached`, `entryOf`, `call`);
+e(`wllama.cached`, `modelFiles`, `call`);
+e(`wllama.hasCache`, `getWllama`, `call`);
+e(`wllama.remove`, `getWllama`, `call`);
+e(`wllama.remove`, `entryOf`, `call`);
+e(`wllama.remove`, `modelFiles`, `call`);
+e(`wllama.purge`, `getWllama`, `call`);
+e(`wllama.chat`, `replyOptions`, `call`);
+e(`wllama.chat`, `wllama.hasImages`, `call`);
+e(`wllama.chat`, `wllama.toWllamaMessages`, `call`);
+e(`wllama.chat`, `runEngineChat`, `call`);
+e(`wllama.chat`, `types.params`, `type`);
+e(`wllama.toWllamaMessages`, `wllama.imageBuffer`, `call`);
+e(`wllama.toWllamaMessages`, `types.messages`, `type`);
+e(`wllama.unload`, `dropWllama`, `call`);
+e(`wllama.startLLM`, `wllama.cpuThreads`, `call`);
+
+// image resizing relations
+e(`images.resizeImages`, `images.resizeImageUrl`, `call`);
+e(`images.resizeImageUrl`, `images.maxSide`, `call`);
+
+// loader and assets
+e(`loadWllama`, `ggufWeights`, `store`);
+e(`assetsNode.defaultWllamaAssets`, `assetsNodePaths.wllamaAssetsAt`, `call`);
+e(`assetsNodeEsm.defaultWllamaAssets`, `assetsNodePaths.wllamaAssetsAt`, `call`);
+
+// verification relations
+e(`harness.definitions`, `createChat`, `call`);
+e(`harness.definitions`, `createChatOn`, `call`);
+e(`harness.definitions`, `createRuntime`, `call`);
+e(`harness.definitions`, `buildMessages`, `call`);
+e(`harness.definitions`, `createThinkSplitter`, `call`);
+e(`harness.definitions`, `resolveLimits`, `call`);
+e(`harness.definitions`, `streamReply`, `call`);
+e(`harness.definitions`, `replyOptions`, `call`);
+e(`harness.definitions`, `wllamaEngine`, `call`);
+e(`harness.definitions`, `findLlmModel`, `call`);
+e(`harness.definitions`, `supportsImages`, `call`);
+e(`harness.definitions`, `imageBuffer`, `call`);
+e(`harness.definitions`, `cpuThreads`, `call`);
+e(`harness.definitions`, `resizeImages`, `call`);
+e(`harness.runtimeWith`, `createRuntime`, `call`);
+e(`harness.runtimeWith`, `createFakeEngine`, `call`);
+e(`harness.chatWith`, `harness.runtimeWith`, `call`);
+e(`harness.chatWith`, `createChatOn`, `call`);
+e(`harness.definitions`, `harness.runtimeWith`, `call`);
+e(`harness.definitions`, `harness.chatWith`, `call`);
+e(`harness.main`, `harness.definitions`, `call`);
+e(`harness.definitions`, `harness.test`, `call`);
+e(`harness.definitions`, `harness.assertions`, `call`);
+e(`vnode.main`, `createChat`, `call`);
+e(`drive.run`, `harness.main`, `call`);
+e(`drive.run`, `drive.serve`, `call`);
+e(`drive.run`, `drive.getJson`, `call`);
+e(`vwebpack`, `harness.main`, `call`);
+e(`vwebpack`, `vassets.defaultWllamaAssets`, `call`);
+
+// build relations
+e(`package`, `browserConfig`, `call`);
+e(`package`, `nodeConfig`, `call`);
+e(`package`, `nodeEsmConfig`, `call`);
+e(`package`, `banner`, `call`);
+e(`browserConfig`, `commonConfig`, `type`);
+e(`nodeBase`, `commonConfig`, `type`);
+e(`nodeConfig`, `nodeBase`, `type`);
+e(`nodeEsmConfig`, `nodeBase`, `type`);
+e(`commonConfig`, `assetRules`, `call`);
+e(`commonConfig`, `engineChunks`, `call`);
+e(`browserConfig`, `createChat`, `call`);
+e(`browserConfig`, `engineChunks`, `call`);
+e(`nodeConfig`, `createChat`, `call`);
+e(`nodeConfig`, `engineChunks`, `call`);
+e(`nodeEsmConfig`, `createChat`, `call`);
+e(`nodeEsmConfig`, `engineChunks`, `call`);
+e(`nodeConfig`, `assetsNode.defaultWllamaAssets`, `type`);
+e(`nodeEsmConfig`, `assetsNodeEsm.defaultWllamaAssets`, `type`);
+e(`tsconfig`, `types.records`, `type`);
+e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
+// DATA END
+
+(() => {
+    const FILES_BY_ID = new Map(FILES.map(file => [file.id, file]));
+    const NODE_BY_ID = new Map(NODES.map(node => [node.id, node]));
+    const SHORT = new Map();
+    for (const node of NODES) {
+        const key = node.id.split(`.`).pop();
+        SHORT.set(key, SHORT.has(key) ? null : node);
+    }
+    const find = key => NODE_BY_ID.get(key) || SHORT.get(key) || null;
+    const LINKS = EDGES.map(edge => {
+        const a = find(edge.from);
+        const b = find(edge.to);
+        return a && b ? { a: a.id, b: b.id, kind: edge.kind } : null;
+    }).filter(Boolean);
+
+    const NEAR = new Map(NODES.map(node => [node.id, new Set()]));
+    for (const link of LINKS) {
+        NEAR.get(link.a).add(link.b);
+        NEAR.get(link.b).add(link.a);
+    }
+
+    const BAND_INDEX = new Map(BANDS.map((band, index) => [band.id, index]));
+    const bandOf = id => BAND_INDEX.get(FILES_BY_ID.get(NODE_BY_ID.get(id).file).band);
+
+    const COL_W = 208;
+    const COLS_MAX = 8;
+    const GAP = { row: 6, col: 12, file: 30, band: 38, pad: 26, head: 24 };
+
+    const canvas = document.getElementById(`canvas`);
+    const svg = document.getElementById(`edges`);
+    const viewport = document.getElementById(`viewport`);
+    const panelMain = document.getElementById(`panel-main`);
+    const stateBox = document.getElementById(`state-box`);
+    const search = document.getElementById(`search`);
+    const zoomLabel = document.getElementById(`zoom`);
+    const flowButton = document.getElementById(`flow`);
+    const bandsBar = document.getElementById(`bands`);
+    const meta = document.getElementById(`meta`);
+
+    const state = { scale: 1, x: 0, y: 0 };
+    const pos = new Map();
+    const bandBox = new Map();
+    let size = { w: 0, h: 0 };
+    let preview = null;
+    let selected = null;
+    let flow = null;
+    let query = ``;
+
+    const esc = value => `${value}`.replace(/&/g, `&amp;`).replace(/</g, `&lt;`)
+        .replace(/>/g, `&gt;`);
+
+    const nodeEl = (node, band) => {
+        const el = document.createElement(`div`);
+        el.className = `node`;
+        el.tabIndex = 0;
+        el.dataset.id = node.id;
+        el.dataset.band = band;
+        el.innerHTML = `<span class="no"></span>`
+            + `<div class="lbl">${esc(node.label)}</div>`
+            + `<div class="sig">${esc(node.sig)}</div>`
+            + `<span class="ln">${node.line ? `L` + node.line : ``}</span>`;
+        return el;
+    };
+
+    const buildCanvas = () => {
+        canvas.querySelectorAll(`.band, .file, .wash`).forEach(el => el.remove());
+        pos.clear();
+        bandBox.clear();
+        let cursorY = GAP.pad;
+        let maxRight = 0;
+        for (const band of BANDS) {
+            const title = document.createElement(`div`);
+            title.className = `band`;
+            title.style.top = `${cursorY}px`;
+            const count = NODES.filter(node =>
+                FILES_BY_ID.get(node.file).band === band.id).length;
+            title.innerHTML = `<b>${esc(band.title)}</b><span>${esc(band.hint)}</span>`
+                + `<span>${count} nodes</span>`;
+            canvas.appendChild(title);
+            const wash = document.createElement(`div`);
+            wash.className = `wash`;
+            wash.dataset.band = band.id;
+            wash.style.top = `${cursorY}px`;
+            canvas.appendChild(wash);
+            let cursorX = GAP.pad;
+            const placed = [];
+            for (const file of FILES.filter(item => item.band === band.id)) {
+                const nodes = NODES.filter(node => node.file === file.id);
+                const wrap = document.createElement(`div`);
+                wrap.className = `file`;
+                wrap.style.left = `${cursorX}px`;
+                wrap.style.top = `${cursorY + GAP.head}px`;
+                const head = document.createElement(`div`);
+                head.className = `file-head`;
+                head.dataset.band = band.id;
+                head.innerHTML = `<b>${esc(file.label)}</b><i>${esc(file.path)}</i>`;
+                wrap.appendChild(head);
+                const cols = document.createElement(`div`);
+                cols.className = `file-cols`;
+                for (let i = 0; i < nodes.length; i += COLS_MAX) {
+                    const col = document.createElement(`div`);
+                    col.className = `col`;
+                    for (const node of nodes.slice(i, i + COLS_MAX))
+                        col.appendChild(nodeEl(node, band.id));
+                    cols.appendChild(col);
+                }
+                const colCount = Math.ceil(nodes.length / COLS_MAX) || 1;
+                wrap.appendChild(cols);
+                canvas.appendChild(wrap);
+                placed.push({ wrap, file });
+                cursorX += colCount * COL_W + (colCount - 1) * GAP.col + GAP.file;
+            }
+            let bandH = 0;
+            let bandRight = GAP.pad;
+            for (const item of placed) bandH = Math.max(bandH, item.wrap.offsetHeight);
+            for (const item of placed) {
+                const left = item.wrap.offsetLeft;
+                const top = item.wrap.offsetTop;
+                const nodes = item.wrap.querySelectorAll(`.node`);
+                for (const el of nodes) {
+                    pos.set(el.dataset.id, {
+                        x: left + el.offsetLeft,
+                        y: top + el.offsetTop,
+                        w: el.offsetWidth,
+                        h: el.offsetHeight,
+                    });
+                }
+                maxRight = Math.max(maxRight, left + item.wrap.offsetWidth);
+                bandRight = Math.max(bandRight, left + item.wrap.offsetWidth);
+            }
+            wash.style.height = `${GAP.head + bandH + 12}px`;
+            bandBox.set(band.id, { y: cursorY, h: GAP.head + bandH, w: bandRight + GAP.pad });
+            cursorY += GAP.head + bandH + GAP.band;
+        }
+        size = { w: maxRight + GAP.pad, h: cursorY - GAP.band + GAP.pad };
+        canvas.style.width = `${size.w}px`;
+        canvas.style.height = `${size.h}px`;
+        svg.setAttribute(`width`, size.w);
+        svg.setAttribute(`height`, size.h);
+        canvas.querySelectorAll(`.band`).forEach(el => {
+            el.style.left = `10px`;
+            el.style.width = `${size.w - 20}px`;
+        });
+        canvas.querySelectorAll(`.wash`).forEach(el => {
+            el.style.width = `${size.w - 12}px`;
+        });
+    };
+
+    const ARROW = {
+        build: `#6f9464`,
+        call: `#5579a4`,
+        event: `#c08a4a`,
+        store: `#9878ad`,
+        type: `#a49b8c`,
+        inner: `#b9ab95`,
+    };
+
+    const shape = (a, b) => {
+        const pa = pos.get(a);
+        const pb = pos.get(b);
+        const vertical = bandOf(a) !== bandOf(b);
+        if (vertical) {
+            const down = pb.y > pa.y;
+            const p1 = { x: pa.x + pa.w / 2, y: down ? pa.y + pa.h : pa.y };
+            const p2 = { x: pb.x + pb.w / 2, y: down ? pb.y : pb.y + pb.h };
+            const d = Math.max(30, Math.abs(p2.y - p1.y) * 0.42) * (down ? 1 : -1);
+            return `M${p1.x},${p1.y}`
+                + `C${p1.x},${p1.y + d} ${p2.x},${p2.y - d} ${p2.x},${p2.y}`;
+        }
+        const right = pb.x > pa.x;
+        const p1 = { x: right ? pa.x + pa.w : pa.x, y: pa.y + pa.h / 2 };
+        const p2 = { x: right ? pb.x : pb.x + pb.w, y: pb.y + pb.h / 2 };
+        const d = Math.max(30, Math.abs(p2.x - p1.x) * 0.42) * (right ? 1 : -1);
+        return `M${p1.x},${p1.y}`
+            + `C${p1.x + d},${p1.y} ${p2.x - d},${p2.y} ${p2.x},${p2.y}`;
+    };
+
+    const drawEdges = () => {
+        let out = `<defs>`;
+        for (const [kind, color] of Object.entries(ARROW)) {
+            out += `<marker id="ar-${kind}" viewBox="0 0 8 8" refX="7.4" refY="4"`
+                + ` markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">`
+                + `<path d="M0,0.7 L7.4,4 L0,7.3 Z" fill="${color}"></path></marker>`;
+        }
+        out += `</defs>`;
+        for (const link of LINKS) {
+            out += `<path class="edge k-${link.kind}" data-from="${link.a}"`
+                + ` data-to="${link.b}" marker-end="url(#ar-${link.kind})"`
+                + ` d="${shape(link.a, link.b)}"></path>`;
+        }
+        svg.innerHTML = out;
+    };
+
+    const apply = () => {
+        canvas.style.transform =
+            `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+        zoomLabel.textContent = `${Math.round(state.scale * 100)}%`;
+    };
+
+    const fit = () => {
+        const rect = viewport.getBoundingClientRect();
+        const scale = Math.min((rect.width - 36) / size.w, (rect.height - 36) / size.h, 1);
+        state.scale = Math.max(0.16, scale);
+        state.x = (rect.width - size.w * state.scale) / 2;
+        state.y = (rect.height - size.h * state.scale) / 2;
+        apply();
+    };
+
+    const focusBand = id => {
+        const box = bandBox.get(id);
+        if (!box) return;
+        const rect = viewport.getBoundingClientRect();
+        const scale = Math.min((rect.width - 48) / box.w, (rect.height - 48) / box.h, 1.2);
+        state.scale = Math.max(0.2, scale);
+        state.x = (rect.width - box.w * state.scale) / 2;
+        state.y = (rect.height - box.h * state.scale) / 2 - box.y * state.scale;
+        apply();
+    };
+
+    const centerOn = id => {
+        const point = pos.get(id);
+        if (!point) return;
+        const rect = viewport.getBoundingClientRect();
+        state.scale = Math.min(1.25, Math.max(state.scale, 0.82));
+        state.x = rect.width / 2 - (point.x + point.w / 2) * state.scale;
+        state.y = rect.height / 2 - (point.y + point.h / 2) * state.scale;
+        apply();
+    };
+
+    const paint = () => {
+        const focus = preview || selected;
+        const around = focus ? NEAR.get(focus) : null;
+        document.querySelectorAll(`.node`).forEach(el => {
+            const id = el.dataset.id;
+            let lit = false;
+            let dim = false;
+            if (query) {
+                const node = NODE_BY_ID.get(id);
+                const hay = `${node.label} ${node.sig} ${node.id}`.toLowerCase();
+                lit = hay.includes(query);
+                dim = !lit;
+            } else if (flow) {
+                lit = flow.ids.has(id);
+                dim = !lit;
+            } else if (focus) {
+                lit = id === focus || around.has(id);
+                dim = !lit;
+            }
+            el.classList.toggle(`lit`, lit);
+            el.classList.toggle(`dim`, dim);
+            el.classList.toggle(`hit`, !!query && lit);
+            el.classList.toggle(`sel`, id === selected);
+            el.classList.toggle(`step`, !!(flow && flow.ids.has(id)));
+        });
+        svg.querySelectorAll(`.edge`).forEach(el => {
+            const from = el.dataset.from;
+            const to = el.dataset.to;
+            let lit = false;
+            let dim = false;
+            if (query) {
+                dim = true;
+            } else if (flow) {
+                lit = flow.links.has(`${from}>${to}`);
+                dim = !lit;
+            } else if (focus) {
+                lit = from === focus || to === focus;
+                dim = !lit;
+            }
+            el.classList.toggle(`lit`, lit);
+            el.classList.toggle(`dim`, dim);
+        });
+    };
+
+    const relations = id => {
+        const ins = new Map();
+        const outs = new Map();
+        const add = (map, key, kind) => {
+            if (!map.has(key)) map.set(key, new Set());
+            map.get(key).add(kind);
+        };
+        for (const link of LINKS) {
+            if (link.b === id) add(ins, link.a, link.kind);
+            if (link.a === id) add(outs, link.b, link.kind);
+        }
+        return { ins, outs };
+    };
+
+    const pathToRoot = id => {
+        const target = `entry.createChat`;
+        const prev = new Map([[id, null]]);
+        const queue = [id];
+        while (queue.length) {
+            const at = queue.shift();
+            if (at === target) break;
+            for (const link of LINKS) {
+                if (link.b !== at || prev.has(link.a)) continue;
+                prev.set(link.a, at);
+                queue.push(link.a);
+            }
+        }
+        if (!prev.has(target)) return [];
+        const chain = [];
+        let at = target;
+        while (at) {
+            chain.push(at);
+            at = prev.get(at);
+        }
+        return chain;
+    };
+
+    const stat = (label, value) =>
+        `<div><span>${label}</span><b>${value}</b></div>`;
+
+    const overview = () => {
+        const total = FILES.reduce((sum, file) => sum + file.loc, 0);
+        const list = BANDS.map(band => {
+            const count = NODES.filter(node =>
+                FILES_BY_ID.get(node.file).band === band.id).length;
+            return `<button data-band="${band.id}"><b>${esc(band.title)}</b>`
+                + `<span>${count} nodes · ${esc(band.hint)}</span></button>`;
+        }).join(``);
+        return `<h2>Overview</h2><div class="card"><div class="stats">`
+            + stat(`nodes`, NODES.length)
+            + stat(`relations`, LINKS.length)
+            + stat(`files`, FILES.length)
+            + stat(`lines`, `${(Math.round(total / 100) / 10)}k`)
+            + `</div></div>`
+            + `<h2>Bands</h2><div class="card"><div class="bandlist">`
+            + list + `</div></div>`
+            + `<div class="card empty" style="margin-top:8px">`
+            + `Start from a band or search a name. Selecting a function here `
+            + `does not move the canvas.</div>`;
+    };
+
+    const linkButtons = map => [...map.entries()].map(([id, kinds]) => {
+        const node = NODE_BY_ID.get(id);
+        return `<button data-go="${id}">${esc(node.label)} `
+            + `<span>${[...kinds].join(` + `)} · ${node.file}</span></button>`;
+    }).join(``);
+
+    const nodePanel = id => {
+        const node = NODE_BY_ID.get(id);
+        const file = FILES_BY_ID.get(node.file);
+        const band = BANDS.find(item => item.id === file.band);
+        const { ins, outs } = relations(id);
+        const chain = pathToRoot(id);
+        const route = chain.length
+            ? chain.map(item => item === id
+                ? `<b>${esc(NODE_BY_ID.get(item).label)}</b>`
+                : esc(NODE_BY_ID.get(item).label)).join(` → `)
+            : `not reachable from createChat`;
+        return `<h2>${esc(band.title)}</h2>`
+            + `<div class="card"><div class="path">${esc(file.path)}`
+            + `${node.line ? ` · L` + node.line : ``}</div>`
+            + `<p class="name">${esc(node.label)}</p>`
+            + `<div class="sig">${esc(node.sig)}</div>`
+            + (node.note ? `<div class="note">${esc(node.note)}</div>` : ``)
+            + `</div>`
+            + `<h2>Path to createChat</h2><div class="card">`
+            + `<div class="route">${route}</div></div>`
+            + `<h2>Called by ${ins.size}</h2><div class="card"><div class="rel">`
+            + (ins.size ? linkButtons(ins) : `<div class="empty">No caller</div>`)
+            + `</div></div>`
+            + `<h2>Calls ${outs.size}</h2><div class="card"><div class="rel">`
+            + (outs.size ? linkButtons(outs) : `<div class="empty">No callee</div>`)
+            + `</div></div>`
+            + `<h2>Jump</h2><div class="card"><div class="rel">`
+            + `<button data-band="${file.band}">Show the ${esc(band.id)} band</button>`
+            + `<button data-go="${id}">Center this function</button>`
+            + `</div></div>`;
+    };
+
+    const flowPanel = () => {
+        const items = flow.steps.map(step => {
+            const node = NODE_BY_ID.get(step.ids[0]);
+            return `<li data-go="${step.ids[0]}"><b>${esc(node.label)}</b>`
+                + `${esc(step.text)}</li>`;
+        }).join(``);
+        return `<h2>Flow · ${esc(flow.def.title)}</h2>`
+            + `<div class="card"><ol class="steps">${items}</ol></div>`
+            + `<div class="card empty" style="margin-top:8px">`
+            + `Click a step to pin its function. Press flow again to clear.</div>`;
+    };
+
+    const renderPanel = () => {
+        if (flow) panelMain.innerHTML = flowPanel();
+        else panelMain.innerHTML = selected ? nodePanel(selected) : overview();
+        document.getElementById(`panel`).scrollTop = 0;
+    };
+
+    const clearFlow = () => {
+        flow = null;
+        flowButton.classList.remove(`on`);
+        document.querySelectorAll(`.node .no`).forEach(el => {
+            el.textContent = ``;
+        });
+    };
+
+    const select = id => {
+        selected = id;
+        preview = null;
+        clearFlow();
+        renderPanel();
+        paint();
+    };
+
+    const startFlow = () => {
+        const def = FLOWS.send;
+        const steps = def.steps.map(step => ({
+            text: step.text,
+            ids: step.ids.map(id => find(id).id),
+        }));
+        const ids = new Set();
+        const links = new Set();
+        let prev = null;
+        for (const step of steps) {
+            for (const id of step.ids) {
+                ids.add(id);
+                if (prev && prev !== id) links.add(`${prev}>${id}`);
+                prev = id;
+            }
+        }
+        flow = { def, steps, ids, links };
+        selected = null;
+        preview = null;
+        flowButton.classList.add(`on`);
+        const order = new Map();
+        steps.forEach((step, index) => step.ids.forEach(id => {
+            if (!order.has(id)) order.set(id, index + 1);
+        }));
+        document.querySelectorAll(`.node`).forEach(el => {
+            el.querySelector(`.no`).textContent = order.get(el.dataset.id) || ``;
+        });
+        renderPanel();
+        paint();
+    };
+
+    const resetSearch = () => {
+        query = ``;
+        search.value = ``;
+        paint();
+    };
+
+    const step = (ids, text) => ({ ids, text });
+
+    const FLOWS = {
+        send: {
+            title: `createChat, one reply end to end`,
+            steps: [
+                step([`host.input`, `chat.createChat`],
+                    ` The host passes the model, the whole message list, budgets`
+                    + ` and the three callbacks.`),
+                step([`chat.createChatOn`, `chat.emitStatus`],
+                    ` Bump the call token, abort the previous stream, emit the`
+                    + ` first snapshot synchronously.`),
+                step([`chat.run`],
+                    ` Reject an unknown model or a prompt with no user turn, then`
+                    + ` resolve the per-call limits.`),
+                step([`llm.load`],
+                    ` Reuse a ready model, join the same load, or abort a`
+                    + ` different one before starting.`),
+                step([`llm.probes`, `llm.bestBackend`],
+                    ` Persist storage, detect wasm, choose the backend.`),
+                step([`llm.evictPrevious`],
+                    ` Keep one model on device, unload the previous runtime.`),
+                step([`wllama.startLLM`],
+                    ` The engine downloads, loads and returns the unified`
+                    + ` runtime, reporting progress.`),
+                step([`chat.run`, `chat.emitStatus`],
+                    ` Snap to ready, requesting true, percent 100.`),
+                step([`llm.chat`, `wllama.chat`],
+                    ` Wait for the previous stream, then open one engine turn.`),
+                step([`buildMessages`],
+                    ` Fold system turns, take the limits window, drop a leading`
+                    + ` assistant, merge same roles.`),
+                step([`resizeImages`],
+                    ` Center-crop every image part to a square, then resize it to`
+                    + ` 288 x 288, before the engine starts.`),
+                step([`logChatCall`],
+                    ` Log the censored turn only when the call enables logging,`
+                    + ` otherwise stay silent.`),
+                step([`streamReply`, `createThinkSplitter`],
+                    ` Run the chunk loop, split reasoning markers, emit deltas.`),
+                step([`chat.run`],
+                    ` Accumulate thinking and reply, call onThinking and`
+                    + ` onResponse with the full text so far.`),
+                step([`chat.emitStatus`],
+                    ` requesting false, then ready or the last error.`),
+                step([`chat.cancel`],
+                    ` A stale handle does nothing; otherwise abort the stream,`
+                    + ` cancel the load, or unload the model.`),
+            ],
+        },
+    };
+
+    const llmStates = () => {
+        const box = (x, y, w, label) =>
+            `<rect x="${x}" y="${y}" width="${w}" height="24" rx="3"`
+            + ` fill="#fffdf7" stroke="#c9bda9"></rect>`
+            + `<text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text>`;
+        const arrow = (d, both) => `<path class="state-arrow" d="${d}"`
+            + ` marker-end="url(#s-ar)"${both ? ` marker-start="url(#s-ar)"` : ``}`
+            + `></path>`;
+        return `<svg viewBox="0 0 300 112" role="img" aria-label="LlmStatus">`
+            + `<defs><marker id="s-ar" viewBox="0 0 8 8" refX="7" refY="4"`
+            + ` markerWidth="5" markerHeight="5" orient="auto-start-reverse">`
+            + `<path d="M0,0.7 L7,4 L0,7.3 Z" fill="#9b8f7c"></path></marker></defs>`
+            + box(8, 16, 54, `idle`)
+            + box(84, 16, 92, `downloading`)
+            + box(196, 16, 50, `ready`)
+            + box(84, 72, 50, `error`)
+            + box(196, 72, 92, `unsupported`)
+            + arrow(`M62,28 L84,28`)
+            + arrow(`M176,28 L196,28`)
+            + arrow(`M130,40 C130,58 109,58 109,72`)
+            + arrow(`M122,72 C122,58 143,58 143,40`)
+            + arrow(`M84,38 C66,50 48,50 38,42`)
+            + `<text x="196" y="66" font-size="8">no adapter or wasm</text>`
+            + `</svg>`;
+    };
+
+    const chatStates = () => {
+        const box = (x, y, w, label) =>
+            `<rect x="${x}" y="${y}" width="${w}" height="24" rx="3"`
+            + ` fill="#fffdf7" stroke="#c9bda9"></rect>`
+            + `<text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text>`;
+        const arrow = (d, both) => `<path class="state-arrow" d="${d}"`
+            + ` marker-end="url(#c-ar)"${both ? ` marker-start="url(#c-ar)"` : ``}`
+            + `></path>`;
+        return `<svg viewBox="0 0 300 62" role="img" aria-label="ChatStatus">`
+            + `<defs><marker id="c-ar" viewBox="0 0 8 8" refX="7" refY="4"`
+            + ` markerWidth="5" markerHeight="5" orient="auto-start-reverse">`
+            + `<path d="M0,0.7 L7,4 L0,7.3 Z" fill="#9b8f7c"></path></marker></defs>`
+            + box(8, 20, 54, `online`)
+            + box(104, 20, 52, `away`)
+            + box(200, 20, 62, `offline`)
+            + arrow(`M62,32 L104,32`, true)
+            + arrow(`M156,32 L200,32`)
+            + arrow(`M231,20 C231,2 35,2 35,20`)
+            + `</svg>`;
+    };
+
+    const stateDiagrams = () => `<div class="state-title">LlmStatus</div>`
+        + llmStates()
+        + `<div class="state-title" style="margin-top:8px">ChatStatus (derived)</div>`
+        + chatStates();
+
+    const zoomAt = (factor, clientX, clientY) => {
+        const rect = viewport.getBoundingClientRect();
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
+        const next = Math.min(2.4, Math.max(0.14, state.scale * factor));
+        const k = next / state.scale;
+        state.x = mx - (mx - state.x) * k;
+        state.y = my - (my - state.y) * k;
+        state.scale = next;
+        apply();
+    };
+
+    let drag = null;
+
+    viewport.addEventListener(`pointerdown`, event => {
+        if (event.button !== 0) return;
+        drag = { x: event.clientX, y: event.clientY, sx: state.x, sy: state.y, moved: 0 };
+        viewport.classList.add(`drag`);
+        try { viewport.setPointerCapture(event.pointerId); } catch { }
+    });
+
+    viewport.addEventListener(`pointermove`, event => {
+        if (!drag) return;
+        const dx = event.clientX - drag.x;
+        const dy = event.clientY - drag.y;
+        drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+        state.x = drag.sx + dx;
+        state.y = drag.sy + dy;
+        apply();
+    });
+
+    viewport.addEventListener(`pointerup`, event => {
+        if (!drag) return;
+        const moved = drag.moved;
+        drag = null;
+        viewport.classList.remove(`drag`);
+        try { viewport.releasePointerCapture(event.pointerId); } catch { }
+        if (moved > 4) return;
+        const el = event.target.closest(`.node`);
+        if (el) select(el.dataset.id);
+        else {
+            selected = null;
+            clearFlow();
+            renderPanel();
+            paint();
+        }
+    });
+
+    viewport.addEventListener(`wheel`, event => {
+        event.preventDefault();
+        zoomAt(Math.exp(-event.deltaY * 0.0014), event.clientX, event.clientY);
+    }, { passive: false });
+
+    canvas.addEventListener(`keydown`, event => {
+        if (event.key !== `Enter` && event.key !== ` `) return;
+        const el = event.target.closest(`.node`);
+        if (!el) return;
+        event.preventDefault();
+        select(el.dataset.id);
+        centerOn(el.dataset.id);
+    });
+
+    canvas.addEventListener(`mouseover`, event => {
+        const el = event.target.closest(`.node`);
+        if (!el) return;
+        if (el.contains(event.relatedTarget)) return;
+        preview = el.dataset.id;
+        paint();
+    });
+
+    canvas.addEventListener(`mouseout`, event => {
+        const el = event.target.closest(`.node`);
+        if (!el) return;
+        if (el.contains(event.relatedTarget)) return;
+        if (preview === el.dataset.id) preview = null;
+        paint();
+    });
+
+    panelMain.addEventListener(`click`, event => {
+        const go = event.target.closest(`[data-go]`);
+        if (go) {
+            select(go.dataset.go);
+            centerOn(go.dataset.go);
+            return;
+        }
+        const band = event.target.closest(`[data-band]`);
+        if (band) focusBand(band.dataset.band);
+    });
+
+    search.addEventListener(`input`, () => {
+        query = search.value.trim().toLowerCase();
+        if (query) {
+            selected = null;
+            clearFlow();
+            renderPanel();
+        }
+        paint();
+    });
+
+    flowButton.addEventListener(`click`, () => {
+        resetSearch();
+        if (flow) {
+            clearFlow();
+            selected = null;
+            renderPanel();
+            paint();
+        } else startFlow();
+    });
+
+    document.getElementById(`fit`).addEventListener(`click`, fit);
+    document.getElementById(`plus`).addEventListener(`click`, () => {
+        const rect = viewport.getBoundingClientRect();
+        zoomAt(1.25, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    document.getElementById(`minus`).addEventListener(`click`, () => {
+        const rect = viewport.getBoundingClientRect();
+        zoomAt(0.8, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+
+    document.addEventListener(`keydown`, event => {
+        if (event.key === `Escape`) {
+            resetSearch();
+            selected = null;
+            preview = null;
+            clearFlow();
+            renderPanel();
+            paint();
+        }
+    });
+
+    BANDS.forEach(band => {
+        const button = document.createElement(`button`);
+        button.textContent = band.id;
+        button.title = band.title;
+        button.dataset.band = band.id;
+        button.addEventListener(`click`, () => focusBand(band.id));
+        bandsBar.appendChild(button);
+    });
+
+    const boot = () => {
+        buildCanvas();
+        drawEdges();
+        stateBox.innerHTML = stateDiagrams();
+        renderPanel();
+        paint();
+        fit();
+        const total = FILES.reduce((sum, file) => sum + file.loc, 0);
+        meta.textContent = `${NODES.length} nodes · ${LINKS.length} relations · `
+            + `${FILES.length} files · ${(Math.round(total / 100) / 10)}k lines`;
+    };
+
+    if (document.readyState === `complete`) boot();
+    else window.addEventListener(`load`, boot, { once: true });
+})();
+</script>
+</body>
+</html>
