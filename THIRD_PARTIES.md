@@ -4,25 +4,8 @@
 chat. The package bundles the inference engine into its browser and Node builds
 as a dynamic chunk. The model weights remain external and download at runtime.
 
-The runtime code in this repository is original work licensed under the MIT
-License. See [LICENSE](LICENSE).
-
-## Build-time dependencies
-
-### @wllama/wllama
-
-- License: MIT License
-- Source: https://github.com/ngxson/wllama
-- Contents: the CPU engine, bundled as an `engine-wllama` chunk. Its wasm
-  binary is shipped under `dist/assets/wllama`.
-
-### @wllama/wllama-compat
-
-- License: MIT License
-- Source: https://github.com/ngxson/wllama
-- Contents: the compatibility wasm binary and worker shipped under
-  `dist/assets/wllama/compat`. It is a build-time dependency. The shipped
-  license text is at `dist/assets/wllama/LICENCE`.
+The runtime code in this repository is licensed under the
+MIT License. See [LICENSE](LICENSE).
 
 ## Model weights
 

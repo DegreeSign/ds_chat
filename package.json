@@ -1,6 +1,6 @@
 {
     "name": "@degreesign/chat",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Headless on-device AI chat for browsers, workers and Node with a wllama CPU engine",
     "main": "dist/node/chat.node.min.js",
     "module": "dist/browser/chat.min.mjs",
@@ -57,10 +57,12 @@
     "files": [
         "dist/"
     ],
+    "dependencies": {
+        "@wllama/wllama": "^3.8.1",
+        "@wllama/wllama-compat": "^3.8.1"
+    },
     "devDependencies": {
         "@types/node": "^24.0.0",
-        "@wllama/wllama": "^3.8.1",
-        "@wllama/wllama-compat": "^3.8.1",
         "terser-webpack-plugin": "^5.3.11",
         "ts-loader": "^9.5.1",
         "ts-node": "^10.9.2",
