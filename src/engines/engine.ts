@@ -89,6 +89,9 @@ const
     /** Resolve one model file on the model host */
     modelUrl = (repo: string, file: string): string =>
         `${hfBase}/${repo}/resolve/main/${file}`,
+    /** Declared size of one download, zero when the host hides it */
+    contentLength = (response: Response): number =>
+        Number(response.headers.get(`content-length`)) || 0,
     /** Whether any turn carries an image */
     hasImages = (messages: EngineMessage[]): boolean =>
         messages.some(message =>
@@ -373,4 +376,5 @@ export {
     resolveLlmLimits,
     hasImages,
     modelUrl,
+    contentLength,
 };

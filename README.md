@@ -151,7 +151,7 @@ requested model is already loaded, no download or load happens.
 
 | State | Effect |
 | ----- | ------ |
-| Downloading or loading | Stops waiting for the load. A download another caller waits for keeps going. |
+| Downloading or loading | Stops waiting for the load. Bytes stay on disk, and a download another caller waits for keeps going. |
 | Ready | Aborts the reply and unloads the model. |
 | An older call | Nothing, because a newer call owns the runtime. |
 
@@ -221,7 +221,9 @@ follow the flag.
 | `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | No | Yes |
 
 The first call downloads the model through its engine and caches it. Later
-calls reuse the loaded runtime. Only one model stays in memory.
+calls reuse the loaded runtime. Only one model stays in memory. An interrupted
+download keeps the bytes it stored and resumes on the next attempt, including
+after a reload.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine.
@@ -299,15 +301,18 @@ same headers.
 
 Each engine keeps its own cache. Loading a model unloads the previous runtime
 and removes the previous model's cache. The CPU engine uses the wllama cache
-manager; the GPU engine stores the single `.litertlm` file in Cache Storage
-under `litertlm-models`. A quota failure purges the cache of the engine being
-loaded.
+manager. The GPU engine stores the single `.litertlm` file in the origin private
+file system under `litert-store`, and reads a Cache Storage entry under
+`litertlm-models` when an older version stored one. A quota failure purges the
+cache of the engine being loaded.
 
-The GPU engine stores the whole file before it compiles the model, and one
-download serves every caller. A failed compile, a cancelled call or a repeated
-`createChat` reads the stored file instead of downloading it again. The cache
-write is best effort: if the browser rejects it, the model still streams from
-the network and the next call downloads it again.
+The GPU engine stores the file before it compiles the model, and one download
+serves every caller. A failed compile, a cancelled call or a repeated
+`createChat` reads the stored file instead of downloading it again. A download
+cut short keeps its bytes and continues from that offset with a range request,
+checking the file size and entity tag so a changed model starts over. Hosts
+without a writable file system still stream from the network and fall back to
+Cache Storage, without resuming.
 
 A CPU vision model downloads its projector with the model and caches both. A
 GPU vision model keeps its encoder in the single `.litertlm` file.

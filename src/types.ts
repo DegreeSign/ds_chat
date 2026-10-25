@@ -170,6 +170,48 @@ interface RuntimeLoadWaiter {
     settle: (loaded: boolean) => void,
 }
 
+/** Bytes of one model file already stored on disk */
+interface StoredPart {
+    /** Bytes already stored */
+    size: number,
+    /** Full file size, zero while unknown */
+    total: number,
+    /** Entity tag of the stored bytes, empty when the host hides it */
+    etag: string,
+}
+
+/** One stored model file, complete or still downloading */
+interface StoredModel extends StoredPart {
+    /** The stored bytes, a snapshot of the file on disk */
+    file: File,
+    /** Whether every byte of the total is stored */
+    complete: boolean,
+}
+
+/** Download metadata kept beside one stored model file */
+interface StoredModelMeta {
+    total: number,
+    etag: string,
+    complete: boolean,
+}
+
+/** Where one response continues a stored part */
+interface ResumePlan {
+    /** Byte the response body starts at */
+    start: number,
+    /** Full file size, zero while unknown */
+    total: number,
+    etag: string,
+}
+
+/** One model file download into the store */
+interface StoreDownloadParams {
+    url: string,
+    /** Stop the download, the bytes stored so far are kept */
+    signal?: AbortSignal,
+    onProgress: StartLlmParams[`onProgress`],
+}
+
 /** One generation request */
 interface RuntimeChatParams {
     messages: ChatMessage[],
@@ -359,6 +401,11 @@ export type {
     RuntimeLoadParams,
     RuntimeLoadWaiter,
     RuntimeChatParams,
+    StoredPart,
+    StoredModel,
+    StoredModelMeta,
+    ResumePlan,
+    StoreDownloadParams,
     Runtime,
     EngineChatParams,
     StartLlmParams,

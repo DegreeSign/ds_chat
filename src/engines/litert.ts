@@ -1,13 +1,20 @@
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
-import { litertContextWindow } from '../models';
+import { litertContextWindow, llmModels } from '../models';
 import {
+    contentLength,
     hasImages,
     modelUrl,
     replyOptions,
     runEngineChat,
 } from './engine';
+import {
+    downloadModel,
+    purgeModels,
+    removeModel,
+    storedModel,
+} from './store';
 import { imageBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
@@ -49,23 +56,21 @@ const cacheOpen = async (): Promise<Cache | undefined> => {
     } catch { return undefined; };
 };
 
-/** Whether one model file is in the cache */
+/** Whether one model file is stored, in the cache or on disk */
 const modelCached = async (model: ChatModel): Promise<boolean> => {
+    const artifact = model.litert;
+    if (!artifact) return false;
+    const
+        url = modelUrl(artifact.repo, artifact.file),
+        [cache, stored] = await Promise.all([cacheOpen(), storedModel(url)]);
+    if (stored?.complete) return true;
     try {
-        const
-            artifact = model.litert,
-            cache = await cacheOpen();
-        if (!artifact || !cache) return false;
-        return !!(await cache.match(modelUrl(artifact.repo, artifact.file)));
+        return !!(cache && await cache.match(url));
     } catch { return false; };
 };
 
 /** Every model file download in flight, shared by every caller */
 const downloads = new Map<string, Promise<void>>();
-
-/** Declared size of one download, zero when the host hides it */
-const contentLength = (response: Response): number =>
-    Number(response.headers.get(`content-length`)) || 0;
 
 /** Stream one response body, reporting its download progress */
 const countStream = (
@@ -224,6 +229,11 @@ const chatOn = async ({
         },
     });
 
+/** Whether a failed store write comes from the file system, not the network */
+const isStoreError = (error: unknown): boolean =>
+    [`QuotaExceededError`, `NotAllowedError`, `NotSupportedError`, `InvalidStateError`]
+        .includes((error as DOMException)?.name || ``);
+
 /** Start the GPU runtime, the unified engine entry */
 const startLLM = async ({
     model,
@@ -241,21 +251,36 @@ const startLLM = async ({
         url = modelUrl(artifact.repo, artifact.file),
         cache = await cacheOpen();
     let source: ReadableStream<Uint8Array> | undefined;
-    if (cache) {
-        // the file lands on disk before the engine reads it, so a failed
-        // engine or a second caller never downloads it again
-        if (!await cache.match(url)) {
-            try {
-                await cacheModel(url, cache, signal, onProgress);
-            } catch (error) {
-                if (signal?.aborted) throw new Error(`Cancelled`);
-                if (logging) console.log(`Local model cache failed`, error);
-            };
-        };
-        const hit = await cache.match(url);
-        if (hit?.body) source = hit.body;
+    // a complete file in either store needs no network
+    const legacy = cache ? await cache.match(url) : undefined;
+    if (legacy?.body) source = legacy.body;
+    else {
+        const stored = await storedModel(url);
+        if (stored?.complete) source = stored.file.stream();
     };
-    // a cache the browser rejects still loads from the network stream
+    if (!source) {
+        // the file store keeps what it fetches, so a retry resumes it
+        const saved = await downloadModel({ url, signal, onProgress })
+            .catch(error => {
+                if (signal?.aborted) throw new Error(`Cancelled`);
+                // a store the browser cannot write still loads from the network
+                if (!isStoreError(error)) throw error;
+                if (logging) console.log(`Local model store failed`, error);
+                return undefined;
+            });
+        if (saved) source = saved.file.stream();
+    };
+    if (!source && cache) {
+        try {
+            await cacheModel(url, cache, signal, onProgress);
+            const hit = await cache.match(url);
+            if (hit?.body) source = hit.body;
+        } catch (error) {
+            if (signal?.aborted) throw new Error(`Cancelled`);
+            if (logging) console.log(`Local model cache failed`, error);
+        };
+    };
+    // a host without a file system still loads from the network stream
     if (!source) source = await fetchModel(url, signal, onProgress);
     if (signal?.aborted) throw new Error(`Cancelled`);
     onProgress(1, LlmPhase.load);
@@ -289,21 +314,31 @@ const litertEngine: LlmEngine = {
     cached: modelCached,
     hasCache: async () => {
         try {
+            for (const model of llmModels) {
+                const artifact = model.litert;
+                if (!artifact) continue;
+                const stored = await storedModel(
+                    modelUrl(artifact.repo, artifact.file));
+                if (stored) return true;
+            };
             const cache = await cacheOpen();
             return cache ? (await cache.keys()).length > 0 : false;
         } catch { return false; };
     },
     remove: async model => {
         try {
+            const artifact = model.litert;
+            if (!artifact) return;
             const
-                artifact = model.litert,
+                url = modelUrl(artifact.repo, artifact.file),
                 cache = await cacheOpen();
-            if (!artifact || !cache) return;
-            await cache.delete(modelUrl(artifact.repo, artifact.file));
+            await removeModel(url);
+            if (cache) await cache.delete(url);
         } catch { };
     },
     purge: async () => {
         try {
+            await purgeModels();
             if (typeof caches != `undefined`) await caches.delete(cacheName);
         } catch { };
     },

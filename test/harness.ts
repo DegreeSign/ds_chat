@@ -27,6 +27,13 @@ import {
 } from "../src/engines/wllama";
 import { cacheModel, toLitertMessages } from "../src/engines/litert";
 import {
+    downloadModel,
+    purgeModels,
+    removeModel,
+    resumePlan,
+    storedModel,
+} from "../src/engines/store";
+import {
     imageSide,
     imageBuffer,
     resizeImageUrl,
@@ -1461,6 +1468,224 @@ const definitions: Array<{
                     await caches.delete(name);
                 } finally {
                     globalThis.fetch = original;
+                };
+            },
+        },
+        {
+            name: `store/resume plan`,
+            run: () => {
+                const
+                    part = (size: number, total = 0, etag = ``) =>
+                        ({ size, total, etag }),
+                    status = (code: number, headers: Record<string, string>) =>
+                        new Response(null, { status: code, headers }),
+                    ranged = (range: string, etag = ``) => status(206, {
+                        'content-range': range,
+                        ...(etag ? { etag } : {}),
+                    });
+                const fresh = resumePlan(
+                    status(200, { 'content-length': `100` }),
+                    part(0),
+                );
+                assertEqual(fresh?.start, 0, `fresh start`);
+                assertEqual(fresh?.total, 100, `fresh total`);
+                assertEqual(fresh?.etag, ``, `fresh etag`);
+                assertEqual(
+                    resumePlan(status(200, { 'content-length': `100` }), part(40, 100)),
+                    undefined,
+                    `full body restarts`,
+                );
+                const next = resumePlan(
+                    ranged(`bytes 40-99/100`, `"a"`),
+                    part(40, 100, `"a"`),
+                );
+                assertEqual(next?.start, 40, `resume start`);
+                assertEqual(next?.total, 100, `resume total`);
+                assertEqual(next?.etag, `"a"`, `resume etag`);
+                assertEqual(
+                    resumePlan(ranged(`bytes 30-99/100`), part(40, 100)),
+                    undefined,
+                    `offset restarts`,
+                );
+                assertEqual(
+                    resumePlan(ranged(`bytes 40-99/200`), part(40, 100)),
+                    undefined,
+                    `size restarts`,
+                );
+                assertEqual(
+                    resumePlan(ranged(`bytes 40-99/100`, `"b"`), part(40, 100, `"a"`)),
+                    undefined,
+                    `etag restarts`,
+                );
+                assertEqual(
+                    resumePlan(status(206, {}), part(40, 100)),
+                    undefined,
+                    `missing range restarts`,
+                );
+                const zero = resumePlan(ranged(`bytes 0-99/100`), part(0));
+                assertEqual(zero?.start, 0, `zero start`);
+                assertEqual(zero?.total, 100, `zero total`);
+            },
+        },
+        {
+            name: `store/resume download`,
+            run: async () => {
+                const
+                    url = `https://models.test/resume.litertlm`,
+                    body = new Uint8Array(3000).map((_, index) => index % 251),
+                    requests: Array<Record<string, string>> = [],
+                    progress: number[] = [],
+                    original = globalThis.fetch;
+                let dropped = false;
+                globalThis.fetch = (async (
+                    _input: RequestInfo | URL,
+                    init?: RequestInit,
+                ) => {
+                    const headers = (init?.headers || {}) as Record<string, string>;
+                    requests.push(headers);
+                    if (!dropped) {
+                        dropped = true;
+                        // a connection cut short delivers a prefix, then ends
+                        const short = new ReadableStream<Uint8Array>({
+                            start(controller) {
+                                controller.enqueue(body.slice(0, 1000));
+                                controller.close();
+                            },
+                        });
+                        return new Response(short, {
+                            status: 200,
+                            headers: { 'content-length': `3000` },
+                        });
+                    };
+                    const start = Number(
+                        /bytes=(\d+)-(\d+)/.exec(headers.Range || ``)?.[1] || 0);
+                    if (headers.Range) {
+                        const rest = body.slice(start);
+                        return new Response(new ReadableStream<Uint8Array>({
+                            start(controller) {
+                                const half = Math.ceil(rest.length / 2);
+                                controller.enqueue(rest.slice(0, half));
+                                controller.enqueue(rest.slice(half));
+                                controller.close();
+                            },
+                        }), {
+                            status: 206,
+                            headers: {
+                                'content-range':
+                                    `bytes ${start}-${body.length - 1}/${body.length}`,
+                            },
+                        });
+                    };
+                    return new Response(body, {
+                        status: 200,
+                        headers: { 'content-length': `${body.length}` },
+                    });
+                }) as typeof fetch;
+                try {
+                    await purgeModels();
+                    const failed = await downloadModel({
+                        url,
+                        onProgress: value => progress.push(value),
+                    }).then(() => false, () => true);
+                    assertEqual(failed, true, `dropped download fails`);
+                    const part = await storedModel(url);
+                    assertEqual(part?.size, 1000, `kept bytes`);
+                    assertEqual(part?.total, 3000, `known total`);
+                    assertEqual(part?.complete, false, `part open`);
+                    progress.length = 0;
+                    const saved = await downloadModel({
+                        url,
+                        onProgress: value => progress.push(value),
+                    });
+                    if (!saved) throw new Error(`store unavailable`);
+                    assertEqual(saved.complete, true, `resumed complete`);
+                    assertEqual(saved.size, 3000, `full size`);
+                    assertEqual(requests[1].Range, `bytes=1000-2999`, `range request`);
+                    assertEqual(Math.round(progress[0] * 3000), 2000, `resume progress`);
+                    assertEqual(progress[progress.length - 1], 1, `complete progress`);
+                    const bytes = new Uint8Array(await saved.file.arrayBuffer());
+                    assertEqual(bytes.length, body.length, `stored length`);
+                    assertEqual(bytes[1500], body[1500], `stored middle`);
+                    assertEqual(bytes[2999], body[2999], `stored tail`);
+                    await removeModel(url);
+                    assertEqual(await storedModel(url), undefined, `removed`);
+                } finally {
+                    globalThis.fetch = original;
+                    await purgeModels();
+                };
+            },
+        },
+        {
+            name: `store/changed file restarts`,
+            run: async () => {
+                const
+                    url = `https://models.test/changed.litertlm`,
+                    first = new Uint8Array(1000).fill(1),
+                    second = new Uint8Array(2000).fill(2),
+                    requests: Array<Record<string, string>> = [],
+                    original = globalThis.fetch;
+                let step = 0;
+                globalThis.fetch = (async (
+                    _input: RequestInfo | URL,
+                    init?: RequestInit,
+                ) => {
+                    const headers = (init?.headers || {}) as Record<string, string>;
+                    requests.push(headers);
+                    step += 1;
+                    if (step == 1) {
+                        // the first version ends early, a prefix is kept
+                        const short = new ReadableStream<Uint8Array>({
+                            start(controller) {
+                                controller.enqueue(first);
+                                controller.close();
+                            },
+                        });
+                        return new Response(short, {
+                            status: 200,
+                            headers: {
+                                'content-length': `2000`,
+                                etag: `"v1"`,
+                            },
+                        });
+                    };
+                    if (headers.Range)
+                        return new Response(second.slice(1000), {
+                            status: 206,
+                            headers: {
+                                'content-range': `bytes 1000-1999/2000`,
+                                etag: `"v2"`,
+                            },
+                        });
+                    return new Response(second, {
+                        status: 200,
+                        headers: {
+                            'content-length': `2000`,
+                            etag: `"v2"`,
+                        },
+                    });
+                }) as typeof fetch;
+                try {
+                    await purgeModels();
+                    await downloadModel({ url, onProgress: () => { } })
+                        .catch(() => undefined);
+                    const part = await storedModel(url);
+                    assertEqual(part?.size, 1000, `part kept`);
+                    assertEqual(part?.etag, `"v1"`, `first etag`);
+                    const saved = await downloadModel({
+                        url,
+                        onProgress: () => { },
+                    });
+                    if (!saved) throw new Error(`store unavailable`);
+                    assertEqual(requests[1].Range, `bytes=1000-1999`, `range tried`);
+                    assertEqual(requests[2].Range, undefined, `restart without range`);
+                    assertEqual(saved.etag, `"v2"`, `new etag`);
+                    const bytes = new Uint8Array(await saved.file.arrayBuffer());
+                    assertEqual(bytes.length, 2000, `new length`);
+                    assertEqual(bytes[0], 2, `new bytes`);
+                    assertEqual(bytes[1999], 2, `new tail`);
+                } finally {
+                    globalThis.fetch = original;
+                    await purgeModels();
                 };
             },
         },

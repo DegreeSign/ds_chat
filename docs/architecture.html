@@ -484,13 +484,14 @@ const e = (from, to, kind) => EDGES.push({ from, to, kind });
 f(`host`, `host`, `host app`, `host app`, 0);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 18);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 50);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 381);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 428);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 248);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 296);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 44);
-f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 376);
+f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 380);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 295);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 316);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 351);
+f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 308);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
 f(`litertLoader`, `engines`, `litertLoader.js`,
@@ -500,7 +501,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1549);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 1774);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 148);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 204);
@@ -571,7 +572,12 @@ n(`types`, `load`, 154, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
     + ` · report · settle`,
     `One load request and one caller waiting on the load it joined`);
-n(`types`, `params`, 200, `EngineChatParams · StartLlmParams`
+n(`types`, `store`, 174, `StoredPart · StoredModel · StoredModelMeta`
+    + ` · ResumePlan · StoreDownloadParams`,
+    `size · total · etag · complete · file · start · signal`,
+    `What the model file store keeps on disk, where one response resumes and`
+    + ` one download request`);
+n(`types`, `params`, 242, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · signal`,
     `Per-call budgets and accumulated text callbacks`);
@@ -660,6 +666,8 @@ n(`engine`, `replyOptions`, 78, `replyOptions`, `(limits, reasoning) => object`,
     `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
 n(`engine`, `modelUrl`, 90, `modelUrl`, `(repo, file) => string`,
     `Resolve one model file on huggingface.co`);
+n(`engine`, `contentLength`, 93, `contentLength`, `(response) => number`,
+    `Declared size of one download, zero when the host hides it`);
 n(`engine`, `hasImages`, 93, `hasImages`, `(messages) => boolean`,
     `Whether any built turn carries an image part`);
 n(`engine`, `userContent`, 107, `userContent`, `(text, images) => string | parts`,
@@ -729,49 +737,81 @@ n(`wllama`, `remove`, 274, `remove`, `(model) => Promise<void>`,
 n(`wllama`, `purge`, 282, `purge`, `() => Promise<void>`, `cacheManager.clear()`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 286, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 311, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, hasCache, remove, purge`);
 n(`litert`, `cache`, 29, `cacheName · backendConfig`,
     `litertlm-models · GPU executor settings`,
     `Cache Storage bucket and the GPU config tuned by the LiteRT demo`);
 n(`litert`, `cacheOpen`, 45, `cacheOpen`, `() => Promise<Cache | undefined>`,
     `Open the model cache, absent in Node and on an insecure origin`);
-n(`litert`, `modelCached`, 53, `modelCached`, `(model) => Promise<boolean>`,
-    `Whether the model URL is a complete Cache Storage entry`);
-n(`litert`, `downloads`, 64, `downloads`, `Map<string, Promise<void>>`,
+n(`litert`, `modelCached`, 60, `modelCached`, `(model) => Promise<boolean>`,
+    `Whether the model file is complete in the store or in Cache Storage`);
+n(`litert`, `downloads`, 73, `downloads`, `Map<string, Promise<void>>`,
     `Every model file download in flight, shared by every caller`);
-n(`litert`, `contentLength`, 67, `contentLength`, `(response) => number`,
-    `Declared size of one download, zero when the host hides it`);
-n(`litert`, `countStream`, 71, `countStream`, `(body, total, onProgress) => stream`,
+n(`litert`, `countStream`, 76, `countStream`, `(body, total, onProgress) => stream`,
     `Report download progress while the file streams to the cache`);
-n(`litert`, `cacheModel`, 87, `cacheModel`, `(url, cache, signal, onProgress)`,
-    `Fetch a model file into Cache Storage once per URL, the engine reads`
-    + ` it back from disk, so a retry never downloads it again`);
-n(`litert`, `fetchModel`, 117, `fetchModel`, `(url, signal, onProgress) => stream`,
-    `Network stream for a cache the browser rejects`);
-n(`litert`, `toLitertMessages`, 129, `toLitertMessages`,
+n(`litert`, `cacheModel`, 92, `cacheModel`, `(url, cache, signal, onProgress)`,
+    `Fallback for a host without a file store, Cache Storage holds the file`);
+n(`litert`, `fetchModel`, 122, `fetchModel`, `(url, signal, onProgress) => stream`,
+    `Network stream for a host without a cache or a store`);
+n(`litert`, `toLitertMessages`, 134, `toLitertMessages`,
     `(messages) => Promise<LitertMessage[]>`,
     `Map built turns to LiteRT turns and decode image parts into bytes`);
-n(`litert`, `streamLitert`, 149, `streamLitert`,
+n(`litert`, `streamLitert`, 154, `streamLitert`,
     `(engine, mod, params, messages) => AsyncGenerator<EngineChunk>`,
     `Create a conversation, stream content and thought channels, cancel`
     + ` through the abort signal, delete the conversation`);
-n(`litert`, `chat`, 209, `chatOn`, `(engine, model, mod, params)`,
+n(`litert`, `chat`, 214, `chatOn`, `(engine, model, mod, params)`,
     `Reject unsupported images, then stream through the shared reply loop`);
-n(`litert`, `startLLM`, 228, `startLLM`, `(params) => Promise<LlmRuntime>`,
-    `Load wasm and module, store the model in Cache Storage once, then`
-    + ` compile it from the cached file with progress`);
-n(`litert`, `unload`, 282, `runtime.unload`, `() => Promise<void>`,
+n(`litert`, `startLLM`, 238, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    `Load wasm and module, read the stored file or download it with resume,`
+    + ` then compile it with progress`);
+n(`litert`, `unload`, 307, `runtime.unload`, `() => Promise<void>`,
     `Delete the wasm engine, keeping the model cache`);
-n(`litert`, `hasCache`, 290, `hasCache`, `() => Promise<boolean>`,
-    `Any entry in the LiteRT model cache`);
-n(`litert`, `remove`, 296, `remove`, `(model) => Promise<void>`,
-    `Delete the model URL from Cache Storage`);
-n(`litert`, `purge`, 305, `purge`, `() => Promise<void>`,
-    `Delete the whole LiteRT model cache`);
+n(`litert`, `hasCache`, 315, `hasCache`, `() => Promise<boolean>`,
+    `A stored file of any catalog model or any Cache Storage entry`);
+n(`litert`, `remove`, 328, `remove`, `(model) => Promise<void>`,
+    `Delete the model file from the store and from Cache Storage`);
+n(`litert`, `purge`, 339, `purge`, `() => Promise<void>`,
+    `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
     `import() of the bundled engine-litert chunk, fetched on demand`);
+
+// model file store
+n(`store`, `dir`, 12, `storeDirName · downloads · unsupported`,
+    `litert-store · Map<string, Promise<StoredModel>> · boolean`,
+    `Directory under the origin private file system, the downloads in`
+    + ` flight and whether this process has no writable file system`);
+n(`store`, `storeName`, 24, `storeName`, `(url) => string`,
+    `Stable file name for one model URL, a hash and the file name`);
+n(`store`, `storeRoot`, 33, `storeRoot`,
+    `() => Promise<FileSystemDirectoryHandle | undefined>`,
+    `Open the origin private file system, absent in Node`);
+n(`store`, `storeDir`, 44, `storeDir`,
+    `() => Promise<FileSystemDirectoryHandle | undefined>`,
+    `Open the store directory, created on demand`);
+n(`store`, `files`, 52, `readFile · readMeta · writeMeta · removeFrom`,
+    `(dir, name) => Promise<File | StoredModelMeta | void>`,
+    `Read the bytes, read and write the metadata beside them, delete both`);
+n(`store`, `readStored`, 101, `readStored`, `(dir, name) => Promise<StoredModel?>`,
+    `Stored bytes plus metadata, undefined when either is missing`);
+n(`store`, `resumePlan`, 120, `resumePlan`, `(response, part) => ResumePlan?`,
+    `Accept a 206 that continues the stored part and matches its size and`
+    + ` entity tag, restart on anything else`);
+n(`store`, `downloadInto`, 147, `downloadInto`,
+    `(dir, url, signal, onProgress) => Promise<StoredModel>`,
+    `Request only the missing bytes with a closed range, write each chunk`
+    + ` at its offset, keep the part on any failure, record size and etag`);
+n(`store`, `storedModel`, 268, `storedModel`, `(url) => Promise<StoredModel?>`,
+    `Bytes and metadata of one stored model file`);
+n(`store`, `downloadModel`, 273, `downloadModel`,
+    `({ url, signal, onProgress }) => Promise<StoredModel?>`,
+    `Share one download per URL and store it, undefined without a file system`);
+n(`store`, `removeModel`, 289, `removeModel`, `(url) => Promise<void>`,
+    `Delete one stored model file and its metadata`);
+n(`store`, `purgeModels`, 295, `purgeModels`, `() => Promise<void>`,
+    `Delete the whole store directory and every model file in it`);
 
 // image resizing
 n(`images`, `maxSide`, 4, `imageSide`, `288`,
@@ -827,7 +867,7 @@ n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
 n(`harness`, `definitions`, 145, `definitions`, `45 deferred cases`,
     `exports, limits, prompt, images, stream, runtime, preload, chat, threads, square`);
-n(`harness`, `main`, 1536, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 1761, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 26, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat and preloadModel run without a DOM`);
@@ -864,7 +904,7 @@ n(`webpack`, `nodeEsmConfig`, 131, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.3.2`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.3.3`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1051,15 +1091,19 @@ e(`litert.startLLM`, `models.litertWindow`, `call`);
 e(`litert.startLLM`, `litert.cacheOpen`, `call`);
 e(`litert.startLLM`, `litert.cacheModel`, `call`);
 e(`litert.startLLM`, `litert.fetchModel`, `call`);
+e(`litert.startLLM`, `store.storedModel`, `call`);
+e(`litert.startLLM`, `store.downloadModel`, `call`);
+e(`litert.startLLM`, `store.removeModel`, `call`);
+e(`litert.startLLM`, `store.purgeModels`, `call`);
 e(`litert.startLLM`, `engine.modelUrl`, `call`);
 e(`litert.startLLM`, `litert.chat`, `inner`);
 e(`litert.startLLM`, `litert.unload`, `inner`);
 e(`litert.startLLM`, `types.params`, `type`);
 e(`litert.cacheModel`, `litert.countStream`, `call`);
-e(`litert.cacheModel`, `litert.contentLength`, `call`);
+e(`litert.cacheModel`, `engine.contentLength`, `call`);
 e(`litert.cacheModel`, `litert.downloads`, `store`);
 e(`litert.fetchModel`, `litert.countStream`, `call`);
-e(`litert.fetchModel`, `litert.contentLength`, `call`);
+e(`litert.fetchModel`, `engine.contentLength`, `call`);
 e(`litert.countStream`, `enums.enums`, `type`);
 e(`litert.chat`, `engine.hasImages`, `call`);
 e(`litert.chat`, `engine.runEngineChat`, `call`);
@@ -1072,6 +1116,7 @@ e(`litert.toLitertMessages`, `images.buffer`, `call`);
 e(`litert.toLitertMessages`, `types.messages`, `type`);
 e(`litert.toLitertMessages`, `types.litertRuntime`, `type`);
 e(`litert.modelCached`, `litert.cacheOpen`, `call`);
+e(`litert.modelCached`, `store.storedModel`, `call`);
 e(`litert.modelCached`, `engine.modelUrl`, `call`);
 e(`litert.remove`, `litert.cacheOpen`, `call`);
 e(`litert.remove`, `engine.modelUrl`, `call`);
@@ -1080,6 +1125,26 @@ e(`loadLitert`, `litertWeights`, `store`);
 e(`assets.defaultLitertAssets`, `types.litert`, `type`);
 e(`assetsNode.defaultLitertAssets`, `assetsNodePaths.litertAssetsAt`, `call`);
 e(`assetsNodeEsm.defaultLitertAssets`, `assetsNodePaths.litertAssetsAt`, `call`);
+
+// model file store relations
+e(`store.downloadModel`, `store.downloadInto`, `call`);
+e(`store.downloadModel`, `store.storeDir`, `call`);
+e(`store.downloadModel`, `store.downloads`, `store`);
+e(`store.downloadInto`, `store.readStored`, `call`);
+e(`store.downloadInto`, `store.resumePlan`, `call`);
+e(`store.downloadInto`, `store.files`, `call`);
+e(`store.downloadInto`, `store.storeName`, `call`);
+e(`store.storeDir`, `store.storeRoot`, `call`);
+e(`store.downloadInto`, `enums.enums`, `type`);
+e(`store.downloadInto`, `types.store`, `type`);
+e(`store.storedModel`, `store.readStored`, `call`);
+e(`store.storedModel`, `store.storeDir`, `call`);
+e(`store.readStored`, `store.files`, `call`);
+e(`store.removeModel`, `store.files`, `call`);
+e(`store.purgeModels`, `store.storeRoot`, `call`);
+e(`store.resumePlan`, `engine.contentLength`, `call`);
+e(`store.resumePlan`, `types.store`, `type`);
+e(`store.downloadModel`, `types.store`, `type`);
 
 // image resizing relations
 e(`images.resizeImages`, `images.resizeUrl`, `call`);
@@ -1626,7 +1691,8 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
                     ` Keep one model in memory, unload the previous runtime and`
                     + ` remove its cache.`),
                 step([`wllama.startLLM`, `litert.startLLM`],
-                    ` The selected engine downloads or reads its cache, loads and`
+                    ` The selected engine downloads or reads its cache and its`
+                    + ` stored file, resuming a cut download, then loads and`
                     + ` returns the unified runtime, reporting progress.`),
                 step([`chat.run`, `chat.emitStatus`],
                     ` Snap to ready, requesting true, percent 100.`),
