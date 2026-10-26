@@ -49,6 +49,10 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
 - Never leave `dist/` in the worktree and never add it to a change. The owner
   generates and adds the build output after validating the source. If a test
   needs the bundles, build, run the check, then delete `dist/`.
+- Never delete the `build/` directory, ever. Leave the harness output in place
+  between runs.
+- Keep the model weights used for manual testing in `build/models`. They stay
+  there between runs, are never committed and are never deleted.
 - Verify with `yarn typecheck`, capped at 60 seconds per run.
 - Never run release, publish or deploy commands.
 - Node >= 24. The source is TypeScript built with webpack and `tsc`, imports
@@ -73,7 +77,7 @@ Headless browser suite, for any runtime change:
 2. Bundle it: `npx webpack --config test/webpack.config.cjs`.
 3. Run it: `node test/drive.cjs "$PWD/build"`.
 4. The driver exits 0 only on `"fail": 0`.
-5. Delete `build/` after the run. Never commit build output.
+5. Leave `build/` in place. Never commit build output.
 
 Harness rules:
 
