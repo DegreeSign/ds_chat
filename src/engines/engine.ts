@@ -17,6 +17,7 @@ const defaultLlmLimits: LlmLimits = {
     maxThinkingTokens: 128,
     maxReasoningTokens: 320,
     maxImages: 2,
+    maxAudio: 1,
     maxContentLength: 1000,
     promptCharBudget: 10000,
     maxThreads: 6,
@@ -62,6 +63,11 @@ const resolveLlmLimits = (
             defaults.maxImages,
             0,
         ),
+        maxAudio: budgetLimit(
+            overrides.maxAudio,
+            defaults.maxAudio,
+            0,
+        ),
         maxContentLength: budgetLimit(
             overrides.maxContentLength,
             defaults.maxContentLength,
@@ -98,11 +104,20 @@ const
     /** Declared size of one download, zero when the host hides it */
     contentLength = (response: Response): number =>
         Number(response.headers.get(`content-length`)) || 0,
-    /** Whether any turn carries an image */
-    hasImages = (messages: EngineMessage[]): boolean =>
+    /** Whether any turn carries a part of one type */
+    hasPart = (
+        messages: EngineMessage[],
+        type: EngineContentPart[`type`],
+    ): boolean =>
         messages.some(message =>
             Array.isArray(message.content)
-            && message.content.some(part => part.type == `image`));
+            && message.content.some(part => part.type == type)),
+    /** Whether any turn carries an image */
+    hasImages = (messages: EngineMessage[]): boolean =>
+        hasPart(messages, `image`),
+    /** Whether any turn carries audio */
+    hasAudio = (messages: EngineMessage[]): boolean =>
+        hasPart(messages, `audio`);
 
 const
     /** Reasoning markers emitted inline in the streamed content */
@@ -116,11 +131,13 @@ const
     userContent = (
         text: string,
         images: string[],
+        audio: string[],
     ): string | EngineContentPart[] =>
-        images.length
+        images.length || audio.length
             ? [
                 ...(text ? [{ type: `text` as const, text }] : []),
                 ...images.map(url => ({ type: `image` as const, url })),
+                ...audio.map(url => ({ type: `audio` as const, url })),
             ]
             : text,
     /** Flatten one message content to parts */
@@ -159,12 +176,14 @@ const
             /** Redacted (empty) messages are skipped */
             usable = messages
                 .filter(m => (typeof m.content == `string` && !!m.content.trim())
-                    || !!(m.role == LlmRole.user && m.images?.length)),
+                    || !!(m.role == LlmRole.user
+                        && (m.images?.length || m.audio?.length))),
             systemParts: string[] = [],
             history: EngineMessage[] = [];
         let
             used = 0,
-            imagesLeft = limits.maxImages;
+            imagesLeft = limits.maxImages,
+            audioLeft = limits.maxAudio;
         for (let i = usable.length - 1; i >= 0; i--) {
             const
                 m = usable[i],
@@ -174,17 +193,23 @@ const
                     ? (m.images || [])
                         .filter(url => typeof url == `string` && !!url)
                         .slice(0, Math.max(0, imagesLeft))
+                    : [],
+                audio = m.role == LlmRole.user
+                    ? (m.audio || [])
+                        .filter(url => typeof url == `string` && !!url)
+                        .slice(0, Math.max(0, audioLeft))
                     : [];
-            if (!text && !images.length) continue;
+            if (!text && !images.length && !audio.length) continue;
             if (text && used + text.length > limits.promptCharBudget) break;
             used += text.length;
             imagesLeft -= images.length;
+            audioLeft -= audio.length;
             if (m.role == LlmRole.system) systemParts.unshift(text);
             else if (m.role == LlmRole.assistant)
                 history.unshift({ role: `assistant`, content: text });
             else history.unshift({
                 role: `user`,
-                content: userContent(text, images),
+                content: userContent(text, images, audio),
             });
         };
         // drop leading assistant turns, the transcript starts with user
@@ -326,7 +351,10 @@ const
                 role,
                 content: `****`,
                 ...(Array.isArray(content)
-                    ? { images: content.filter(part => part.type == `image`).length }
+                    ? {
+                        images: content.filter(part => part.type == `image`).length,
+                        audio: content.filter(part => part.type == `audio`).length,
+                    }
                     : {}),
             })),
         ),
@@ -462,6 +490,7 @@ export {
     defaultLlmLimits,
     resolveLlmLimits,
     hasImages,
+    hasAudio,
     modelUrl,
     contentLength,
 };

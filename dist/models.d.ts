@@ -14,5 +14,7 @@ defaultLlmModel: () => Promise<ChatModelId | undefined>,
 /** Resolve the requested model or the default of this device */
 resolveLlmModel: (id?: ChatModelId) => Promise<ChatModel | undefined>, 
 /** Whether a model accepts images */
-supportsImages: (model: ChatModel) => boolean;
-export { llmModels, cpuContextWindow, litertContextWindow, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, };
+supportsImages: (model: ChatModel) => boolean, 
+/** Whether a model accepts audio */
+supportsAudio: (model: ChatModel) => boolean;
+export { llmModels, cpuContextWindow, litertContextWindow, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };

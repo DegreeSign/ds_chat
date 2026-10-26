@@ -4,13 +4,14 @@ import { loadLitert } from './litertLoader';
 import { litertContextWindow, llmModels } from '../models';
 import {
     contentLength,
+    hasAudio,
     hasImages,
     modelUrl,
     replyOptions,
     runEngineChat,
 } from './engine';
 import { createModelStore, isStoreError } from './store';
-import { imageBuffer } from './images';
+import { contentBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
@@ -144,7 +145,7 @@ const fetchModel = async (
 /** Map built messages to LiteRT turns */
 const toLitertMessages = async (
     messages: EngineMessage[],
-    keepImages = true,
+    keepMedia = true,
 ): Promise<LitertMessage[]> => {
     const result: LitertMessage[] = [];
     for (const message of messages) {
@@ -153,12 +154,21 @@ const toLitertMessages = async (
             continue;
         };
         const parts: LitertContentPart[] = [];
-        for (const part of message.content)
-            parts.push(part.type == `text`
-                ? { type: `text`, text: part.text }
-                : keepImages
-                    ? { type: `image`, data: await imageBuffer(part.url) }
-                    : { type: `text`, text: `[image]` });
+        for (const part of message.content) {
+            if (part.type == `text`) {
+                parts.push({ type: `text`, text: part.text });
+                continue;
+            };
+            if (keepMedia) {
+                parts.push({
+                    type: part.type,
+                    data: await contentBuffer(part.url),
+                });
+                continue;
+            };
+            // history media becomes text
+            parts.push({ type: `text`, text: `[${part.type}]` });
+        };
         result.push({ role: message.role, content: parts });
     };
     return result;
@@ -180,7 +190,8 @@ const sameMessage = (
         if (left.type != right.type) return false;
         if (left.type == `text` && right.type == `text`) {
             if (left.text != right.text) return false;
-        } else if (left.type == `image` && right.type == `image`) {
+        } else if ((left.type == `image` && right.type == `image`)
+            || (left.type == `audio` && right.type == `audio`)) {
             if (left.url != right.url) return false;
         };
     };
@@ -232,7 +243,7 @@ const streamLitert = async function* ({
     if (reuse && session.conversation)
         conversation = session.conversation;
     else {
-        // history images become text notes
+        // history media becomes text notes
         const previous = await toLitertMessages(history, false);
         session.conversation = undefined;
         session.sent = [];
@@ -325,6 +336,8 @@ const chatOn = async ({
                 if (params.signal?.aborted) throw new Error(`Cancelled`);
                 if (hasImages(messages) && !model.litert?.vision)
                     throw new Error(`Model does not accept images`);
+                if (hasAudio(messages) && !model.litert?.audio)
+                    throw new Error(`Model does not accept audio`);
                 return streamLitert({ engine, mod, params, messages, session });
             },
         });
@@ -357,6 +370,8 @@ const litertSettings = ({
             minVisionTokensPerImage: visionTokens,
         }
         : {}),
+    // audio encoder on demand
+    ...(model.litert?.audio ? { audioBackend: mod.Backend.GPU } : {}),
 });
 
 /** Start the GPU runtime, the unified engine entry */

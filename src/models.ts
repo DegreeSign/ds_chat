@@ -21,6 +21,7 @@ const
                 repo: `litert-community/gemma-4-E2B-it-litert-lm`,
                 file: `gemma-4-E2B-it.litertlm`,
                 vision: true,
+                audio: true,
             },
         },
     ],
@@ -53,7 +54,10 @@ const
         id ? findLlmModel(id) : findLlmModel(await defaultLlmModel()),
     /** Whether a model accepts images */
     supportsImages = (model: ChatModel): boolean =>
-        !!model.cpu?.mmproj || !!model.litert?.vision;
+        !!model.cpu?.mmproj || !!model.litert?.vision,
+    /** Whether a model accepts audio */
+    supportsAudio = (model: ChatModel): boolean =>
+        !!model.cpu?.mmproj?.audio || !!model.litert?.audio;
 
 export {
     llmModels,
@@ -64,4 +68,5 @@ export {
     defaultLlmModel,
     resolveLlmModel,
     supportsImages,
+    supportsAudio,
 };

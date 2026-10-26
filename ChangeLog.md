@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Add `ChatMessage.audio`, a list of audio data URLs or URLs attached to a user
+  turn.
+- Add `LlmLimits.maxAudio`, the number of audio clips kept in one prompt,
+  default 1.
+- Add `ChatStatusSnapshot.supportsAudio`, whether the requested model accepts
+  audio.
+- Gemma 4 E2B accepts WAV, MP3 and FLAC on the WebGPU engine; Qwen3-VL 2B does
+  not accept audio on the CPU engine.
+
 ## 0.3.7
 
 - Add `onSpeed` to `ChatInput`, a per-call callback that receives the current

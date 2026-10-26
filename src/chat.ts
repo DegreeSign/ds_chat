@@ -1,4 +1,4 @@
-import { findLlmModel, resolveLlmModel, supportsImages } from './models';
+import { findLlmModel, resolveLlmModel, supportsAudio, supportsImages } from './models';
 import { runtime } from './service';
 import { resolveLlmLimits } from './engines/engine';
 import {
@@ -37,6 +37,7 @@ const statusSnapshot = (
         status,
         backend: service.backend(),
         supportsImages: catalog ? supportsImages(catalog) : false,
+        supportsAudio: catalog ? supportsAudio(catalog) : false,
         ready: service.ready(),
         loading: service.loading(),
         requesting: state.requesting,
@@ -75,7 +76,11 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     message.role == LlmRole.user
                     && !!message.images?.some(url =>
                         typeof url == `string` && !!url)),
-                prompt = hasText || hasImages;
+                hasAudio = input.messages.some(message =>
+                    message.role == LlmRole.user
+                    && !!message.audio?.some(url =>
+                        typeof url == `string` && !!url)),
+                prompt = hasText || hasImages || hasAudio;
             if (!model) {
                 call.error = `Unknown model`;
                 emitStatus(call);
@@ -85,9 +90,17 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 emitStatus(call);
                 return;
             };
-            // reject image-only prompts before downloading a text model
-            if (hasImages && !hasText && !supportsImages(model)) {
-                call.error = `Model does not accept images`;
+            const
+                acceptsImages = supportsImages(model),
+                acceptsAudio = supportsAudio(model),
+                keepsImages = hasImages && acceptsImages,
+                keepsAudio = hasAudio && acceptsAudio;
+            // reject media-only prompts before downloading a text model
+            if (!hasText && !keepsImages && !keepsAudio) {
+                if (hasAudio && !acceptsAudio)
+                    call.error = `Model does not accept audio`;
+                else if (hasImages && !acceptsImages)
+                    call.error = `Model does not accept images`;
                 emitStatus(call);
                 return;
             };
@@ -118,16 +131,14 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 return;
             };
             const
-                acceptsImages = supportsImages(model),
-                messages = hasImages && !acceptsImages
-                    ? input.messages.map(({ images, ...message }) => message)
+                messages = (hasImages && !acceptsImages)
+                    || (hasAudio && !acceptsAudio)
+                    ? input.messages.map(({ images, audio, ...message }) => ({
+                        ...message,
+                        ...(images && acceptsImages ? { images } : {}),
+                        ...(audio && acceptsAudio ? { audio } : {}),
+                    }))
                     : input.messages;
-            // a loaded backend may still reject images it cannot process
-            if (hasImages && !acceptsImages && !hasText) {
-                call.error = `Model does not accept images`;
-                emitStatus(call);
-                return;
-            };
             call.requesting = true;
             call.error = undefined;
             call.percent = 100;

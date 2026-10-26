@@ -3,13 +3,14 @@ import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
 import { cpuContextWindow, llmModels } from '../models';
 import {
+    hasAudio,
     hasImages,
     modelUrl,
     replyOptions,
     runEngineChat,
 } from './engine';
 import { createModelStore, isStoreError } from './store';
-import { imageBuffer } from './images';
+import { contentBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
@@ -181,10 +182,14 @@ const
                 continue;
             };
             const parts: WllamaContentPart[] = [];
-            for (const part of message.content)
-                parts.push(part.type == `text`
-                    ? { type: `text`, text: part.text }
-                    : { type: `image`, data: await imageBuffer(part.url) });
+            for (const part of message.content) {
+                if (part.type == `text`)
+                    parts.push({ type: `text`, text: part.text });
+                else parts.push({
+                    type: part.type,
+                    data: await contentBuffer(part.url),
+                });
+            };
             result.push({ role: `user`, content: parts });
         };
         return result;
@@ -204,6 +209,8 @@ const
             start: async messages => {
                 if (hasImages(messages) && !instance.supportInputModality(`image`))
                     throw new Error(`Model does not accept images`);
+                if (hasAudio(messages) && !instance.supportInputModality(`audio`))
+                    throw new Error(`Model does not accept audio`);
                 return await instance.createChatCompletion({
                     messages: await toWllamaMessages(messages),
                     ...replyOptions(params.limits, params.reasoning),

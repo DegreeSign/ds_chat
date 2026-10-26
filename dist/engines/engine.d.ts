@@ -15,7 +15,9 @@ modelUrl: (repo: string, file: string) => string,
 /** Declared size of one download, zero when the host hides it */
 contentLength: (response: Response) => number, 
 /** Whether any turn carries an image */
-hasImages: (messages: EngineMessage[]) => boolean;
+hasImages: (messages: EngineMessage[]) => boolean, 
+/** Whether any turn carries audio */
+hasAudio: (messages: EngineMessage[]) => boolean;
 declare const 
 /** Map the host messages to OpenAI-style turns, bounded for local context */
 buildMessages: (messages: ChatMessage[], limits?: LlmLimits) => EngineMessage[], 
@@ -32,4 +34,4 @@ streamReply: ({ model, logging, onReason, onText, onSpeed, start, stopped, first
 declare const 
 /** Build the prompt and stream one reply through an engine */
 runEngineChat: ({ model, params, start, stopped, onStall, }: EngineRunParams) => Promise<string | undefined>;
-export { buildMessages, createThinkSplitter, logChatCall, runEngineChat, streamReply, replyOptions, defaultLlmLimits, resolveLlmLimits, hasImages, modelUrl, contentLength, };
+export { buildMessages, createThinkSplitter, logChatCall, runEngineChat, streamReply, replyOptions, defaultLlmLimits, resolveLlmLimits, hasImages, hasAudio, modelUrl, contentLength, };

@@ -7,6 +7,7 @@ import {
     buildMessages,
     createThinkSplitter,
     defaultLlmLimits,
+    hasAudio,
     hasImages,
     modelUrl,
     replyOptions,
@@ -21,6 +22,7 @@ import {
     litertContextWindow,
     llmModels,
     resolveLlmModel,
+    supportsAudio,
     supportsImages,
 } from "../src/models";
 import {
@@ -45,7 +47,7 @@ import {
 } from "../src/engines/store";
 import {
     imageSide,
-    imageBuffer,
+    contentBuffer,
     resizeImageUrl,
     resizeImages,
 } from "../src/engines/images";
@@ -226,6 +228,11 @@ const definitions: Array<{
                     true,
                     `cpu images`,
                 );
+                assertEqual(
+                    supportsAudio(modelOf(ChatModelId.qwen3_vl_2b)),
+                    false,
+                    `cpu no audio`,
+                );
                 const gemma = modelOf(ChatModelId.gemma4_e2b);
                 assertEqual(gemma.reasoning, true, `gemma reasoning`);
                 assertEqual(
@@ -234,7 +241,9 @@ const definitions: Array<{
                     `gemma file`,
                 );
                 assertEqual(gemma.litert?.vision, true, `gemma vision`);
+                assertEqual(gemma.litert?.audio, true, `gemma audio`);
                 assertEqual(supportsImages(gemma), true, `gpu images`);
+                assertEqual(supportsAudio(gemma), true, `gpu audio`);
                 const textOnly: ChatModel = {
                     id: ChatModelId.qwen3_vl_2b,
                     reasoning: false,
@@ -245,6 +254,17 @@ const definitions: Array<{
                     false,
                     `text images`,
                 );
+                assertEqual(supportsAudio(textOnly), false, `text audio`);
+                const cpuAudio: ChatModel = {
+                    id: ChatModelId.qwen3_vl_2b,
+                    reasoning: false,
+                    cpu: {
+                        repo: `audio`,
+                        file: `audio.gguf`,
+                        mmproj: { file: `audio-mmproj.gguf`, audio: true },
+                    },
+                };
+                assertEqual(supportsAudio(cpuAudio), true, `cpu audio`);
                 const textOnlyGpu: ChatModel = {
                     id: ChatModelId.gemma4_e2b,
                     reasoning: false,
@@ -252,6 +272,7 @@ const definitions: Array<{
                         repo: `text-only`,
                         file: `text-only.litertlm`,
                         vision: false,
+                        audio: false,
                     },
                 };
                 assertEqual(
@@ -259,6 +280,19 @@ const definitions: Array<{
                     false,
                     `gpu text images`,
                 );
+                assertEqual(supportsAudio(textOnlyGpu), false, `gpu text audio`);
+                const audioGpu: ChatModel = {
+                    id: ChatModelId.gemma4_e2b,
+                    reasoning: false,
+                    litert: {
+                        repo: `audio`,
+                        file: `audio.litertlm`,
+                        vision: false,
+                        audio: true,
+                    },
+                };
+                assertEqual(supportsImages(audioGpu), false, `gpu audio images`);
+                assertEqual(supportsAudio(audioGpu), true, `gpu audio only`);
                 assertEqual(findLlmModel(`missing`), undefined, `unknown model`);
             },
         },
@@ -291,6 +325,7 @@ const definitions: Array<{
                 assertEqual(defaults.maxReplyTokens, defaultLlmLimits.maxReplyTokens, `reply`);
                 assertEqual(defaults.promptCharBudget, 10000, `budget`);
                 assertEqual(defaults.maxImages, 2, `images`);
+                assertEqual(defaults.maxAudio, 1, `audio`);
                 assertEqual(defaults.maxThreads, 6, `threads`);
                 assertEqual(
                     defaults.maxReasoningTokens,
@@ -318,10 +353,13 @@ const definitions: Array<{
                 assertEqual(custom.promptCharBudget, 12, `floored budget`);
                 assertEqual(resolveLlmLimits({ maxImages: 3 }).maxImages, 3, `custom images`);
                 assertEqual(resolveLlmLimits({ maxImages: 0 }).maxImages, 0, `zero images`);
+                assertEqual(resolveLlmLimits({ maxAudio: 2 }).maxAudio, 2, `custom audio`);
+                assertEqual(resolveLlmLimits({ maxAudio: 0 }).maxAudio, 0, `zero audio`);
                 const invalid = resolveLlmLimits({
                     maxReplyTokens: 0,
                     maxThinkingTokens: -1,
                     maxImages: -1,
+                    maxAudio: -1,
                     maxThreads: 0,
                 });
                 assertEqual(invalid.maxReplyTokens, defaultLlmLimits.maxReplyTokens, `bad reply`);
@@ -331,6 +369,7 @@ const definitions: Array<{
                     `bad thinking`,
                 );
                 assertEqual(invalid.maxImages, defaultLlmLimits.maxImages, `bad images`);
+                assertEqual(invalid.maxAudio, defaultLlmLimits.maxAudio, `bad audio`);
                 assertEqual(invalid.maxThreads, defaultLlmLimits.maxThreads, `bad threads`);
             },
         },
@@ -459,7 +498,7 @@ const definitions: Array<{
                 ], limits);
                 assertEqual(assistantImages[1].content, `ok`, `assistant image ignored`);
                 const
-                    buffer = await imageBuffer(image),
+                    buffer = await contentBuffer(image),
                     wllama = await toWllamaMessages(mixed),
                     wllamaParts = wllama[0].content as Array<{
                         type: string,
@@ -497,6 +536,110 @@ const definitions: Array<{
                     hasImages([{ role: LlmRole.user, content: `plain` }]),
                     false,
                     `no images`,
+                );
+            },
+        },
+        {
+            name: `prompt/audio`,
+            run: async () => {
+                const
+                    audio = `data:audio/wav;base64,QQ==`,
+                    image = `data:image/png;base64,QQ==`,
+                    limits = { ...defaultLlmLimits, maxAudio: 2 },
+                    partsOf = (message?: EngineMessage): Array<{
+                        type: string,
+                        text?: string,
+                        url?: string,
+                    }> => typeof message?.content == `string`
+                        ? message.content
+                            ? [{ type: `text`, text: message.content }]
+                            : []
+                        : message?.content || [];
+                const only = buildMessages([
+                    { role: LlmRole.user, content: ``, audio: [audio] },
+                ], limits);
+                assertEqual(only.length, 1, `audio only turn`);
+                const onlyParts = partsOf(only[0]);
+                assertEqual(onlyParts.length, 1, `audio only parts`);
+                assertEqual(onlyParts[0].type, `audio`, `audio only type`);
+                assertEqual(onlyParts[0].url, audio, `audio only url`);
+                const mixed = buildMessages([
+                    {
+                        role: LlmRole.user,
+                        content: `hear`,
+                        images: [image],
+                        audio: [audio],
+                    },
+                ], limits);
+                const mixedParts = partsOf(mixed[0]);
+                assertEqual(mixedParts.length, 3, `mixed media parts`);
+                assertEqual(mixedParts[0].text, `hear`, `audio text first`);
+                assertEqual(mixedParts[1].type, `image`, `audio image second`);
+                assertEqual(mixedParts[2].type, `audio`, `audio third`);
+                const capped = buildMessages([
+                    { role: LlmRole.user, content: `one`, audio: [`a`, `b`] },
+                    { role: LlmRole.assistant, content: `ok` },
+                    { role: LlmRole.user, content: `two`, audio: [`c`] },
+                ], { ...limits, maxAudio: 1 });
+                assertEqual(capped.length, 3, `audio capped turns`);
+                assertEqual(
+                    partsOf(capped[0])
+                        .filter(part => part.type == `audio`).length,
+                    0,
+                    `older audio cap`,
+                );
+                const newestParts = partsOf(capped[2]);
+                assertEqual(newestParts[1].url, `c`, `newest audio`);
+                const zero = buildMessages([
+                    { role: LlmRole.user, content: `hi`, audio: [audio] },
+                ], { ...limits, maxAudio: 0 });
+                assertEqual(typeof zero[0].content, `string`, `zero audio`);
+                const systemAudio = buildMessages([
+                    { role: LlmRole.system, content: `sys`, audio: [audio] },
+                    { role: LlmRole.user, content: `hi` },
+                ], limits);
+                assertEqual(systemAudio[0].content, `sys`, `system audio ignored`);
+                const assistantAudio = buildMessages([
+                    { role: LlmRole.user, content: `hi` },
+                    { role: LlmRole.assistant, content: `ok`, audio: [audio] },
+                ], limits);
+                assertEqual(
+                    assistantAudio[1].content,
+                    `ok`,
+                    `assistant audio ignored`,
+                );
+                const
+                    buffer = await contentBuffer(audio),
+                    wllama = await toWllamaMessages(mixed),
+                    wllamaParts = wllama[0].content as Array<{
+                        type: string,
+                        text?: string,
+                        data?: ArrayBuffer,
+                    }>,
+                    litert = await toLitertMessages(mixed),
+                    litertParts = litert[0].content as Array<{
+                        type: string,
+                        text?: string,
+                        data?: ArrayBuffer,
+                    }>;
+                assertEqual(new Uint8Array(buffer)[0], 65, `decoded audio`);
+                assertEqual(wllamaParts[2].type, `audio`, `wllama audio`);
+                assertEqual(wllamaParts[2].data?.byteLength, 1, `wllama audio bytes`);
+                assertEqual(litertParts[2].type, `audio`, `litert audio`);
+                assertEqual(litertParts[2].data?.byteLength, 1, `litert audio bytes`);
+                const
+                    preface = await toLitertMessages([mixed[0]], false),
+                    prefaceParts = preface[0].content as Array<{
+                        type: string,
+                        text?: string,
+                    }>;
+                assertEqual(prefaceParts[1].text, `[image]`, `preface image note`);
+                assertEqual(prefaceParts[2].text, `[audio]`, `preface audio note`);
+                assertEqual(hasAudio(mixed), true, `has audio`);
+                assertEqual(
+                    hasAudio([{ role: LlmRole.user, content: `plain` }]),
+                    false,
+                    `no audio`,
                 );
             },
         },
@@ -544,6 +687,18 @@ const definitions: Array<{
                         ],
                     }] as EngineMessage[];
                 assertEqual(continuesHistory(left, right), false, `image added`);
+                const audioRight = [{
+                    role: LlmRole.user,
+                    content: [
+                        { type: `text`, text: `hear` },
+                        { type: `audio`, url: `one` },
+                    ],
+                }] as EngineMessage[];
+                assertEqual(
+                    continuesHistory([user(`hear`)], audioRight),
+                    false,
+                    `audio added`,
+                );
             },
         },
         {
@@ -678,6 +833,22 @@ const definitions: Array<{
                                 repo: `text-only`,
                                 file: `text-only.litertlm`,
                                 vision: false,
+                                audio: false,
+                            },
+                        },
+                        limits: defaultLlmLimits,
+                        source,
+                        mod,
+                    }),
+                    audio = litertSettings({
+                        model: {
+                            id: ChatModelId.gemma4_e2b,
+                            reasoning: false,
+                            litert: {
+                                repo: `audio-only`,
+                                file: `audio-only.litertlm`,
+                                vision: false,
+                                audio: true,
                             },
                         },
                         limits: defaultLlmLimits,
@@ -688,6 +859,7 @@ const definitions: Array<{
                 assertEqual(vision.maxVisionTokensPerImage, 70, `max tokens`);
                 assertEqual(vision.minVisionTokensPerImage, 70, `min tokens`);
                 assertEqual(vision.visionBackend, 3, `vision backend`);
+                assertEqual(vision.audioBackend, 3, `audio backend`);
                 assertEqual(
                     vision.mainExecutorSettings?.maxNumImages,
                     defaultLlmLimits.maxImages,
@@ -696,6 +868,9 @@ const definitions: Array<{
                 assertEqual(text.visionBackend, undefined, `no text vision`);
                 assertEqual(text.maxVisionTokensPerImage, undefined, `no text tokens`);
                 assertEqual(text.minVisionTokensPerImage, undefined, `no text min`);
+                assertEqual(text.audioBackend, undefined, `no text audio`);
+                assertEqual(audio.visionBackend, undefined, `no audio vision`);
+                assertEqual(audio.audioBackend, 3, `audio only backend`);
             },
         },
         {
@@ -1278,6 +1453,7 @@ const definitions: Array<{
                 assertEqual(last.ready, true, `gpu ready`);
                 assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
                 assertEqual(last.supportsImages, true, `gpu images`);
+                assertEqual(last.supportsAudio, true, `gpu audio`);
                 assertEqual(last.error, undefined, `gpu no error`);
             },
         },
@@ -1426,6 +1602,7 @@ const definitions: Array<{
                 assertEqual(vision.requests[0].messages[0].content, `what`, `text passed`);
                 assertEqual(vision.requests[0].messages[0].images?.[0], image, `image passed`);
                 assertEqual(visionStatuses[0].supportsImages, true, `vision status`);
+                assertEqual(visionStatuses[0].supportsAudio, false, `no audio status`);
                 await waitFor(() => replies[replies.length - 1] == `seen`, `vision reply`);
                 assertEqual(replies[replies.length - 1], `seen`, `vision reply`);
                 assertEqual(visionStatuses[visionStatuses.length - 1].requesting, false, `done`);
@@ -1465,7 +1642,95 @@ const definitions: Array<{
                 const last = statuses[statuses.length - 1];
                 assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
                 assertEqual(last.supportsImages, true, `gpu supports images`);
+                assertEqual(last.supportsAudio, true, `gpu supports audio`);
                 assertEqual(last.error, undefined, `gpu no error`);
+            },
+        },
+        {
+            name: `chat/audio`,
+            run: async () => {
+                const audio = `data:audio/wav;base64,QQ==`;
+                const
+                    gpu = chatWith({ backend: LlmBackend.gpu, chatText: `heard` }),
+                    gpuStatuses: ChatStatusSnapshot[] = [],
+                    gpuReplies: string[] = [];
+                gpu.chat({
+                    model: ChatModelId.gemma4_e2b,
+                    messages: [{ role: LlmRole.user, content: `listen`, audio: [audio] }],
+                    onResponse: value => gpuReplies.push(value),
+                    onStatus: value => gpuStatuses.push(value),
+                });
+                await waitFor(
+                    () => gpuReplies[gpuReplies.length - 1] == `heard`,
+                    `gpu audio reply`,
+                );
+                assertEqual(gpu.requests.length, 1, `gpu audio chat`);
+                assertEqual(
+                    gpu.requests[0].messages[0].audio?.[0],
+                    audio,
+                    `gpu audio passed`,
+                );
+                assertEqual(gpu.requests[0].messages[0].content, `listen`, `gpu audio text`);
+                assertEqual(gpuStatuses[0].supportsAudio, true, `gpu audio status`);
+                assertEqual(
+                    gpuStatuses[gpuStatuses.length - 1].error,
+                    undefined,
+                    `gpu audio no error`,
+                );
+                const only = chatWith({ backend: LlmBackend.gpu, chatText: `heard` });
+                only.chat({
+                    model: ChatModelId.gemma4_e2b,
+                    messages: [{ role: LlmRole.user, content: ``, audio: [audio] }],
+                    onResponse: () => { },
+                });
+                await waitFor(() => only.requests.length == 1, `audio only chat`);
+                assertEqual(only.requests[0].messages[0].audio?.length, 1, `only audio passed`);
+                assertEqual(only.requests[0].messages[0].content, ``, `audio no text`);
+                const
+                    cpu = chatWith(),
+                    cpuStatuses: ChatStatusSnapshot[] = [];
+                cpu.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [{ role: LlmRole.user, content: ``, audio: [audio] }],
+                    onResponse: () => { },
+                    onStatus: value => cpuStatuses.push(value),
+                });
+                await waitFor(() => cpuStatuses.some(value => !!value.error), `audio rejected`);
+                assertEqual(cpu.requests.length, 0, `no cpu audio chat`);
+                assertEqual(
+                    cpuStatuses[cpuStatuses.length - 1].error,
+                    `Model does not accept audio`,
+                    `audio error`,
+                );
+                const
+                    stripped = chatWith({ chatText: `ok` }),
+                    strippedStatuses: ChatStatusSnapshot[] = [];
+                stripped.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [{
+                        role: LlmRole.user,
+                        content: `read this`,
+                        audio: [audio],
+                    }],
+                    onResponse: () => { },
+                    onStatus: value => strippedStatuses.push(value),
+                });
+                await waitFor(() => stripped.requests.length == 1, `stripped audio chat`);
+                assertEqual(
+                    stripped.requests[0].messages[0].audio,
+                    undefined,
+                    `audio stripped`,
+                );
+                assertEqual(
+                    stripped.requests[0].messages[0].content,
+                    `read this`,
+                    `stripped text kept`,
+                );
+                assertEqual(
+                    strippedStatuses[strippedStatuses.length - 1].error,
+                    undefined,
+                    `stripped no error`,
+                );
             },
         },
         {

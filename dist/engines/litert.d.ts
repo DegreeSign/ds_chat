@@ -5,7 +5,7 @@ visionTokens = 70;
 /** Fetch one model file into the cache, once per URL */
 declare const cacheModel: (url: string, cache: Cache, signal: AbortSignal | undefined, onProgress: StartLlmParams[`onProgress`]) => Promise<void>;
 /** Map built messages to LiteRT turns */
-declare const toLitertMessages: (messages: EngineMessage[], keepImages?: boolean) => Promise<LitertMessage[]>;
+declare const toLitertMessages: (messages: EngineMessage[], keepMedia?: boolean) => Promise<LitertMessage[]>;
 /** Whether the live conversation already holds the incoming history */
 declare const continuesHistory: (sent: EngineMessage[], history: EngineMessage[]) => boolean;
 /** Stream one LiteRT reply as engine chunks */

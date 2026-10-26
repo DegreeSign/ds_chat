@@ -13,6 +13,8 @@ interface ChatMessage {
     content: string,
     /** Image data URLs or URLs attached to the turn */
     images?: string[],
+    /** Audio data URLs or URLs attached to the turn */
+    audio?: string[],
 }
 
 /** One on-device model */
@@ -28,6 +30,8 @@ interface ChatModel {
         /** Vision projector, present when the CPU build accepts images */
         mmproj?: {
             file: string,
+            /** Whether the projector also accepts audio */
+            audio?: boolean,
         },
     },
     /** LiteRT-LM (WebGPU) artifact */
@@ -36,6 +40,8 @@ interface ChatModel {
         file: string,
         /** Whether the build accepts images */
         vision: boolean,
+        /** Whether the build accepts audio */
+        audio: boolean,
     },
 }
 
@@ -49,6 +55,8 @@ interface LlmLimits {
     maxReasoningTokens: number,
     /** Max images sent in one prompt */
     maxImages: number,
+    /** Max audio clips sent in one prompt */
+    maxAudio: number,
     /** Max characters kept per message */
     maxContentLength: number,
     /** Max characters of the whole prompt */
@@ -65,6 +73,8 @@ interface ChatStatusSnapshot {
     backend: LlmBackend,
     /** Whether the requested model accepts images on this backend */
     supportsImages: boolean,
+    /** Whether the requested model accepts audio on this backend */
+    supportsAudio: boolean,
     ready: boolean,
     loading: boolean,
     /** Whether a reply is streaming right now */
@@ -330,15 +340,17 @@ interface LlmEngine {
     purge: () => Promise<void>,
 }
 
-/** One text or image segment of a user turn */
+/** One text, image or audio segment of a user turn */
 type EngineContentPart =
     | { type: `text`, text: string }
-    | { type: `image`, url: string };
+    | { type: `image`, url: string }
+    | { type: `audio`, url: string };
 
 /** One wllama content segment */
 type WllamaContentPart =
     | { type: `text`, text: string }
-    | { type: `image`, data: ArrayBuffer };
+    | { type: `image`, data: ArrayBuffer }
+    | { type: `audio`, data: ArrayBuffer };
 
 /** One wllama chat turn */
 type WllamaMessage =
@@ -346,7 +358,7 @@ type WllamaMessage =
     | { role: `user`, content: string | WllamaContentPart[] }
     | { role: `assistant`, content: string };
 
-/** One OpenAI-style message */
+/** One OpenAI-style message, a user turn may carry media parts */
 type EngineMessage =
     | { role: `system`, content: string }
     | { role: `user`, content: string | EngineContentPart[] }

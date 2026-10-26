@@ -37,6 +37,8 @@ package loads one model, streams one reply and reports status.
   `startLLM` runtime contract.
 - Images: a user turn can carry image URLs, sent only to a vision model and
   capped by the prompt budgets.
+- Audio: a user turn can carry an audio URL, sent only to a model with audio
+  support and capped by the prompt budgets.
 - Reusable: the loaded model stays in memory for the next call.
 - Typed: written in TypeScript with declarations for every export.
 - Portable: importing and calling works in browsers, workers, React and Node.
@@ -125,6 +127,13 @@ WebGPU engine asks LiteRT for the smallest Gemma 4 vision budget (70 tokens,
 630 patches), so it encodes the crop at 384 x 384 instead of upscaling it to
 768 x 768. The CPU engine uses the 288 crop directly.
 
+Attach a recording with `audio: [dataUrl]`. Gemma 4 E2B accepts WAV, MP3 and
+FLAC on the WebGPU engine and loads its audio encoder on demand. A short 16 kHz
+mono WAV is the best input. `limits.maxAudio` caps the clips (default 1). A
+model without audio drops the clip when the turn also has text; an audio-only
+turn reports `Model does not accept audio`. The package does not transcode, so
+the host supplies one of those formats.
+
 The package never writes storage, so the host appends the user message before
 the call and appends the assistant message after the last `onResponse`.
 
@@ -185,15 +194,17 @@ CPU, not the GPU. Remove it when measuring speed. Headless Chromium hides
 `--enable-features=Vulkan,WebGPU` and `--use-angle=vulkan`; check the adapter
 there too, because a missing adapter silently selects the CPU model.
 
-### GPU memory and images
+### GPU memory, images and audio
 
-The WebGPU engine keeps the model, its KV cache and the vision encoder in GPU
-memory. A card that is already busy can lose the device (`VK_ERROR_DEVICE_LOST`)
-on the first image turn. The package requests the smallest Gemma 4 vision
-budget, 70 tokens and 630 patches, so the encoder runs one small signature and
-the crop is resized to 384 x 384 rather than the full 768 x 768. If the error
-still appears, close other GPU tabs, unload the model, or switch to the CPU
-model. A lost device needs a page or model reload; later calls cannot reuse it.
+The WebGPU engine keeps the model, its KV cache, the vision encoder and the
+audio encoder in GPU memory. The vision encoder loads on the first image turn
+and the audio encoder loads on the first audio turn. A card that is already busy
+can lose the device (`VK_ERROR_DEVICE_LOST`) on the first image turn. The
+package requests the smallest Gemma 4 vision budget, 70 tokens and 630 patches,
+so the encoder runs one small signature and the crop is resized to 384 x 384
+rather than the full 768 x 768. If the error still appears, close other GPU
+tabs, unload the model, or switch to the CPU model. A lost device needs a page
+or model reload; later calls cannot reuse it.
 
 ## Public API
 
@@ -222,8 +233,8 @@ requested model is already loaded, no download or load happens.
 Without `model` the package picks the GPU build when the browser provides a
 WebGPU adapter and the CPU build when it does not. The budget defaults are 250
 reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning tokens (320 on the
-CPU), 2 images, 1000 characters per message, 10000 prompt characters and 6 CPU
-threads.
+CPU), 2 images, 1 audio clip, 1000 characters per message, 10000 prompt
+characters and 6 CPU threads.
 
 `CancelChat` is `() => void`. Its meaning depends on the current state:
 
@@ -273,6 +284,7 @@ on failure. A preload owns no cancel function; a new load replaces it.
 | `status` | `LlmStatus`: `idle`, `downloading`, `ready`, `error` or `unsupported`. |
 | `backend` | `LlmBackend.cpu`, `.gpu` or `.none`. |
 | `supportsImages` | Whether the requested model accepts images. |
+| `supportsAudio` | Whether the requested model accepts audio. |
 | `ready` | Whether a model is loaded and accepts a reply. |
 | `loading` | Whether a download or load is in flight. |
 | `requesting` | Whether a reply is streaming right now. |
@@ -296,10 +308,10 @@ without it goes quiet again.
 
 ## Models
 
-| `ChatModelId` | Name | Reasoning | Images | CPU | WebGPU |
-| ------------- | ---- | --------- | ------ | --- | ------ |
-| `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | Yes | No |
-| `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | No | Yes |
+| `ChatModelId` | Name | Reasoning | Images | Audio | CPU | WebGPU |
+| ------------- | ---- | --------- | ------ | ----- | --- | ------ |
+| `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
+| `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | Yes | No | Yes |
 
 The first call downloads the model before its engine loads it. Later calls
 reuse the loaded runtime. Only one model stays in memory. An interrupted
@@ -310,13 +322,13 @@ Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine.
 
 Gemma 4 E2B downloads one `gemma-4-E2B-it.litertlm` file of about 2.6 GB. It
-runs on the WebGPU engine with its vision encoder in the same file, so an
-image prompt does not download a projector.
+runs on the WebGPU engine with its vision and audio encoders in the same file,
+so an image or audio prompt does not download a projector.
 
 The WebGPU engine keeps one LiteRT conversation for consecutive turns. When the
 next prompt continues that history, only the new user turn is sent. A changed
-history opens a fresh conversation, and older images become `[image]` notes in
-its preface.
+history opens a fresh conversation, and older images and audio become `[image]`
+and `[audio]` notes in its preface.
 
 ## Prompt assembly
 
@@ -333,20 +345,24 @@ user:      {next turn}
 - Leading assistant turns are dropped, because the transcript must start with a
   user turn.
 - Consecutive same-role turns are merged.
-- Messages with no text and no images are skipped.
+- Messages with no text, images or audio are skipped.
 - `maxContentLength` clips each message and `promptCharBudget` bounds the whole
   prompt.
 - System messages are folded into one leading system turn.
-- User turns may carry `images`. They are sent only to a model with vision
-  support.
+- User turns may carry `images` or `audio`. They are sent only to a model with
+  vision or audio support.
 - Images are collected from the newest turns first and capped by `maxImages`
   (default 2). Older image parts are dropped and their text stays.
 - Every image part is center-cropped to a square, then resized to 288 x 288.
   Non-square edges are discarded and smaller images are upscaled. The WebGPU
   engine is told to use a 70-token vision budget, so it encodes the crop at
   384 x 384, the smallest Gemma 4 encoder signature.
-- Image payloads do not count against `promptCharBudget`.
-- An image-only turn with a text model reports `Model does not accept images`.
+- Audio is collected from the newest turns first and capped by `maxAudio`
+  (default 1). Older audio parts are dropped and their text stays. WAV, MP3 and
+  FLAC are accepted, and a short 16 kHz mono WAV is the best input.
+- Image and audio payloads do not count against `promptCharBudget`.
+- An image-only turn with a text model reports `Model does not accept images`,
+  and an audio-only turn reports `Model does not accept audio`.
 
 ## Engines and assets
 
@@ -488,9 +504,9 @@ const useReply = () => {
 | `ChatInput` | One request: model, messages, budgets, reasoning and callbacks. |
 | `ChatPreloadInput` | Model, limits, logging and status, the subset `preloadModel` needs. |
 | `CancelChat` | The function returned by `createChat`. |
-| `ChatMessage` | One prompt turn, `role`, `content` and optional `images`. |
+| `ChatMessage` | One prompt turn, `role`, `content` and optional `images` and `audio`. |
 | `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |
-| `LlmLimits` | Token, prompt, image and thread budgets, all overridable. |
+| `LlmLimits` | Token, prompt, image, audio and thread budgets, all overridable. |
 | `WllamaAssets` | Wasm, compat wasm and compat worker URLs. |
 
 The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,
@@ -524,6 +540,15 @@ crop at 384 x 384 with the smallest Gemma 4 vision budget. A model without
 vision drops images when the turn also has text; an image-only turn reports
 `Model does not accept images`.
 
+### Does it support audio?
+
+Yes, on models with audio support. Put an audio URL in a user turn's `audio`
+array. Gemma 4 E2B accepts WAV, MP3 and FLAC on the WebGPU engine, and a short
+16 kHz mono WAV is the best input. `limits.maxAudio` caps the clips (default 1).
+The package does not transcode, so the host supplies one of those formats. A
+model without audio drops the clip when the turn also has text; an audio-only
+turn reports `Model does not accept audio`.
+
 ### Does it need a server?
 
 No. Local chat, model download and inference work without a server. The package
@@ -546,9 +571,9 @@ when an older version stored the file. The package stores no model data itself.
 ### Which model should I pick?
 
 Qwen3-VL 2B supports reasoning and images on the CPU. Gemma 4 E2B supports
-reasoning and images on WebGPU, with much faster image prompts but a larger
-download and a slower first compile. Use Qwen for broad browser support and
-Gemma when the host has Chromium WebGPU.
+reasoning, images and audio on WebGPU, with much faster media prompts but a
+larger download and a slower first compile. Use Qwen for broad browser support
+and Gemma when the host has Chromium WebGPU.
 
 ## Licensing
 

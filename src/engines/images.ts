@@ -36,8 +36,8 @@ const isOffscreen = (
 ): canvas is OffscreenCanvas =>
     typeof OffscreenCanvas != `undefined` && canvas instanceof OffscreenCanvas;
 
-/** Decode an image URL into bytes for an engine */
-const imageBuffer = async (url: string): Promise<ArrayBuffer> => {
+/** Decode a data URL or fetch a URL into bytes for an engine */
+const contentBuffer = async (url: string): Promise<ArrayBuffer> => {
     if (!url.startsWith(`data:`))
         return await (await fetch(url)).arrayBuffer();
     const
@@ -114,7 +114,7 @@ const resizeImages = async (
 
 export {
     imageSide,
-    imageBuffer,
+    contentBuffer,
     resizeImageUrl,
     resizeImages,
 };
