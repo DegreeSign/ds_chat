@@ -98,6 +98,7 @@ const cancel = createChat({
   messages,
   onResponse: (text) => renderReply(text),
   // onThinking: (text) => renderThinking(text),
+  // onSpeed: (tokensPerSecond) => renderSpeed(tokensPerSecond),
   // onStatus: (snapshot) => renderStatus(snapshot),
 });
 
@@ -107,16 +108,22 @@ cancel();
 
 Without `model` the package picks the GPU model when the browser provides a
 WebGPU adapter and the CPU model when it does not. `limits`, `reasoning`,
-`onThinking` and `onStatus` are optional per call; see the API below.
+`onThinking`, `onSpeed` and `onStatus` are optional per call; see the API
+below.
 
 There is no promise and no controller object on `createChat`. Every result
 arrives through `onResponse`, and `onStatus` reports `requesting: false` when
-the reply ends. `preloadModel` is the one promise: it resolves once the model
-is loaded, or `false` when it cannot load.
+the reply ends. `onSpeed` reports the streamed generation speed in tokens per
+second, measured from the first token so prompt processing is excluded.
+`preloadModel` is the one promise: it resolves once the model is loaded, or
+`false` when it cannot load.
 
 Attach images to a user turn with `images: [dataUrl]`. The package sends them
 only to a model with vision support, center-crops each image to a square,
-resizes it to 288 x 288, and caps the number with `limits.maxImages`.
+resizes it to 288 x 288, and caps the number with `limits.maxImages`. The
+WebGPU engine asks LiteRT for the smallest Gemma 4 vision budget (70 tokens,
+630 patches), so it encodes the crop at 384 x 384 instead of upscaling it to
+768 x 768. The CPU engine uses the 288 crop directly.
 
 The package never writes storage, so the host appends the user message before
 the call and appends the assistant message after the last `onResponse`.
@@ -174,7 +181,19 @@ them to the `Exec` line of the browser entry under
 `--enable-unsafe-webgpu` is a different switch: it only unlocks software
 adapters, so an adapter whose `info.vendor` reads `google` is SwiftShader on the
 CPU, not the GPU. Remove it when measuring speed. Headless Chromium hides
-`navigator.gpu` entirely, so check the adapter in a normal window.
+`navigator.gpu` unless it starts with `--enable-unsafe-webgpu`,
+`--enable-features=Vulkan,WebGPU` and `--use-angle=vulkan`; check the adapter
+there too, because a missing adapter silently selects the CPU model.
+
+### GPU memory and images
+
+The WebGPU engine keeps the model, its KV cache and the vision encoder in GPU
+memory. A card that is already busy can lose the device (`VK_ERROR_DEVICE_LOST`)
+on the first image turn. The package requests the smallest Gemma 4 vision
+budget, 70 tokens and 630 patches, so the encoder runs one small signature and
+the crop is resized to 384 x 384 rather than the full 768 x 768. If the error
+still appears, close other GPU tabs, unload the model, or switch to the CPU
+model. A lost device needs a page or model reload; later calls cannot reuse it.
 
 ## Public API
 
@@ -197,6 +216,7 @@ requested model is already loaded, no download or load happens.
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
 | `onThinking?` | Receives the accumulated reasoning text as it streams. |
 | `onResponse` | Receives the accumulated reply text as it streams. Required. |
+| `onSpeed?` | Receives the current generation speed in tokens per second. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every state change. |
 
 Without `model` the package picks the GPU build when the browser provides a
@@ -270,10 +290,9 @@ silence ends the stream and keeps the text already delivered.
 ## Logging
 
 Console output stays off by default. Pass `logging: true` in a call to receive
-the package's censored engine logs and the wllama engine's own logs for that
-call. The flag is per call, so a later call without it goes quiet again.
-LiteRT-LM writes its wasm diagnostics straight to the console and does not
-follow the flag.
+the package's censored engine logs, the wllama engine's own logs and the
+LiteRT-LM wasm diagnostics for that call. The flag is per call, so a later call
+without it goes quiet again.
 
 ## Models
 
@@ -323,7 +342,9 @@ user:      {next turn}
 - Images are collected from the newest turns first and capped by `maxImages`
   (default 2). Older image parts are dropped and their text stays.
 - Every image part is center-cropped to a square, then resized to 288 x 288.
-  Non-square edges are discarded and smaller images are upscaled.
+  Non-square edges are discarded and smaller images are upscaled. The WebGPU
+  engine is told to use a 70-token vision budget, so it encodes the crop at
+  384 x 384, the smallest Gemma 4 encoder signature.
 - Image payloads do not count against `promptCharBudget`.
 - An image-only turn with a text model reports `Model does not accept images`.
 
@@ -498,8 +519,9 @@ No. The host passes the full prompt on every call and keeps the reply.
 Yes, on models with vision support. Put image URLs in a user turn's `images`
 array. Qwen3-VL 2B accepts images on the CPU engine and Gemma 4 E2B accepts
 images on the WebGPU engine. Each image is center-cropped to a square and
-resized to 288 x 288 before the engine sees it. A model without vision drops
-images when the turn also has text; an image-only turn reports
+resized to 288 x 288 before the engine sees it. The WebGPU engine encodes that
+crop at 384 x 384 with the smallest Gemma 4 vision budget. A model without
+vision drops images when the turn also has text; an image-only turn reports
 `Model does not accept images`.
 
 ### Does it need a server?

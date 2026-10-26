@@ -80,6 +80,8 @@ interface ChatInput {
     onThinking?: (text: string) => void;
     /** Accumulated reply text, streamed while the model answers */
     onResponse: (text: string) => void;
+    /** Current generation speed in tokens per second, streamed while the model answers */
+    onSpeed?: (tokensPerSecond: number) => void;
     /** Model and request state, reported on every change */
     onStatus?: (snapshot: ChatStatusSnapshot) => void;
 }
@@ -221,6 +223,8 @@ interface RuntimeChatParams {
     logging?: boolean;
     onReason: (text: string) => void;
     onText: (text: string) => void;
+    /** Current generation speed in tokens per second */
+    onSpeed?: (tokensPerSecond: number) => void;
     signal?: AbortSignal;
 }
 /** On-device runtime shared by every request */
@@ -248,6 +252,8 @@ interface EngineChatParams {
     onReason: (text: string) => void;
     /** Streamed reply delta */
     onText: (text: string) => void;
+    /** Current generation speed in tokens per second */
+    onSpeed?: (tokensPerSecond: number) => void;
     signal?: AbortSignal;
 }
 /** Params of the engine startLLM */
@@ -337,6 +343,19 @@ type LitertMessage = import('@litert-lm/core').Message;
 type LitertEngine = import('@litert-lm/core').Engine;
 /** The LiteRT-LM module namespace */
 type LitertModule = typeof import('@litert-lm/core');
+/** Settings handed to the LiteRT-LM engine */
+type LitertSettings = import('@litert-lm/core').EngineSettings;
+/** Params of one LiteRT-LM settings build */
+interface LitertSettingsParams {
+    /** Model with the artifact */
+    model: ChatModel;
+    /** Image and context budgets */
+    limits: LlmLimits;
+    /** Model file stream */
+    source: ReadableStream<Uint8Array>;
+    /** Loaded LiteRT module */
+    mod: LitertModule;
+}
 /** One reused LiteRT-LM conversation and the turns it already holds */
 interface LitertSession {
     /** Live conversation, dropped when a turn cannot be continued */
@@ -384,6 +403,8 @@ interface StreamReplyParams {
     onReason: (text: string) => void;
     /** Streamed reply delta */
     onText: (text: string) => void;
+    /** Current generation speed in tokens per second */
+    onSpeed?: (tokensPerSecond: number) => void;
     /** Open the engine stream for the prepared messages */
     start: () => Promise<AsyncIterable<unknown>>;
     /** Whether the caller stopped the generation */
@@ -408,4 +429,4 @@ interface EngineRunParams {
     /** Called when a slow stream keeps the text already delivered */
     onStall?: () => void;
 }
-export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };

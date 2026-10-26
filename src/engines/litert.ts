@@ -21,6 +21,8 @@ import type {
     LitertContentPart,
     LitertMessage,
     LitertSession,
+    LitertSettings,
+    LitertSettingsParams,
     LlmEngine,
     LlmRuntime,
     StartLlmParams,
@@ -30,6 +32,8 @@ import type {
 const
     /** Cache Storage bucket for the downloaded LiteRT models */
     cacheName = `litertlm-models`,
+    /** Smallest Gemma 4 vision budget in tokens */
+    visionTokens = 70,
     /** Resumable file store of the GPU engine */
     store = createModelStore(`litert-store`),
     /** GPU executor settings tuned by the LiteRT web chat demo */
@@ -45,6 +49,15 @@ const
         use_submodel: false,
         use_autosized_ringbuffers: true,
     };
+
+/** Whether the LiteRT wasm logs reach the console */
+let loggingOn = false;
+
+const
+    /** Wasm stdout, quiet unless logging is on */
+    wasmOut = (...args: unknown[]) => { if (loggingOn) console.log(...args); },
+    /** Wasm stderr, quiet unless logging is on */
+    wasmErr = (...args: unknown[]) => { if (loggingOn) console.error(...args); };
 
 /** Open the model cache, absent in Node */
 const cacheOpen = async (): Promise<Cache | undefined> => {
@@ -296,6 +309,7 @@ const chatOn = async ({
     params,
     session,
 }: LitertChatParams): Promise<string | undefined> => {
+    loggingOn = params.logging === true;
     const reset = () => {
         try { session.conversation?.cancel(); } catch { };
         session.conversation = undefined;
@@ -320,6 +334,31 @@ const chatOn = async ({
     };
 };
 
+/** Build one engine settings object with the small vision budget */
+const litertSettings = ({
+    model,
+    limits,
+    source,
+    mod,
+}: LitertSettingsParams): LitertSettings => ({
+    model: source,
+    mainExecutorSettings: {
+        maxNumTokens: litertContextWindow,
+        ...(model.litert?.vision
+            ? { maxNumImages: Math.max(1, limits.maxImages) }
+            : {}),
+        backendConfig,
+    },
+    // one small signature
+    ...(model.litert?.vision
+        ? {
+            visionBackend: mod.Backend.GPU,
+            maxVisionTokensPerImage: visionTokens,
+            minVisionTokensPerImage: visionTokens,
+        }
+        : {}),
+});
+
 /** Start the GPU runtime, the unified engine entry */
 const startLLM = async ({
     model,
@@ -328,10 +367,19 @@ const startLLM = async ({
     signal,
     logging,
 }: StartLlmParams): Promise<LlmRuntime> => {
+    loggingOn = logging === true;
     const artifact = model.litert;
     if (!artifact) throw new Error(`Model has no LiteRT artifact`);
     const mod = await loadLitert();
-    await mod.getOrLoadGlobalLiteRtLm(defaultLitertAssets().script);
+    const
+        scope = globalThis as { Module?: unknown },
+        previous = scope.Module;
+    scope.Module = { print: wasmOut, printErr: wasmErr };
+    try {
+        await mod.getOrLoadGlobalLiteRtLm(defaultLitertAssets().script);
+    } finally {
+        scope.Module = previous;
+    };
     if (signal?.aborted) throw new Error(`Cancelled`);
     const
         url = modelUrl(artifact.repo, artifact.file),
@@ -370,17 +418,8 @@ const startLLM = async ({
     if (!source) source = await fetchModel(url, signal, onProgress);
     if (signal?.aborted) throw new Error(`Cancelled`);
     onProgress(1, LlmPhase.load);
-    const engine = await mod.Engine.create({
-        model: source,
-        mainExecutorSettings: {
-            maxNumTokens: litertContextWindow,
-            ...(artifact.vision
-                ? { maxNumImages: Math.max(1, limits.maxImages) }
-                : {}),
-            backendConfig,
-        },
-        ...(artifact.vision ? { visionBackend: mod.Backend.GPU } : {}),
-    });
+    const engine = await mod.Engine.create(
+        litertSettings({ model, limits, source, mod }));
     if (signal?.aborted) {
         await engine.delete();
         throw new Error(`Cancelled`);
@@ -443,6 +482,8 @@ export {
     cacheModel,
     continuesHistory,
     litertEngine,
+    litertSettings,
     streamLitert,
     toLitertMessages,
+    visionTokens,
 };

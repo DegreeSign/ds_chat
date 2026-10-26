@@ -28,7 +28,7 @@ declare const
 /** Log an engine chat call with all message text censored */
 logChatCall: (model: ChatModel, messages: EngineMessage[]) => void, 
 /** Stream one reply, logging it and returning undefined when stopped */
-streamReply: ({ model, logging, onReason, onText, start, stopped, firstTimeoutMs, idleTimeoutMs, onStall, }: StreamReplyParams) => Promise<string | undefined>;
+streamReply: ({ model, logging, onReason, onText, onSpeed, start, stopped, firstTimeoutMs, idleTimeoutMs, onStall, }: StreamReplyParams) => Promise<string | undefined>;
 declare const 
 /** Build the prompt and stream one reply through an engine */
 runEngineChat: ({ model, params, start, stopped, onStall, }: EngineRunParams) => Promise<string | undefined>;

@@ -68,6 +68,8 @@ const
             usedExports: true,
             sideEffects: false,
         },
+        // the engine binaries are large by design
+        performance: { hints: false },
         mode: `production`,
     },
     // Browser webpack configuration

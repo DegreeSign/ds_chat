@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7
+
+- Add `onSpeed` to `ChatInput`, a per-call callback that receives the current
+  generation speed in tokens per second, measured from the first streamed
+  token so prompt processing is excluded.
+
 ## 0.2.0
 
 - Add `preloadModel`, a promise that downloads and loads a model before the

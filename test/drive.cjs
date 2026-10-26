@@ -1,11 +1,13 @@
 // Headless Chromium test driver.
-// Usage: node test/drive.cjs <distDir> [port] [debugPort] [profile]
+// Usage: CHROME_BIN=brave-browser-beta node test/drive.cjs <distDir>
+//        [port] [debugPort] [profile]
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
 
+const BROWSER = process.env.CHROME_BIN || "chromium";
 const ROOT = path.resolve(process.argv[2] || "build");
 const PORT = Number(process.argv[3] || 17544);
 const DEBUG_PORT = Number(process.argv[4] || 9334);
@@ -101,7 +103,7 @@ const main = async () => {
     const server = await serve();
     const pageUrl = `http://127.0.0.1:${PORT}/index.html`;
     const chrome = spawn(
-        "chromium",
+        BROWSER,
         [
             "--headless=new",
             "--no-sandbox",

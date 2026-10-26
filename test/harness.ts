@@ -32,8 +32,10 @@ import {
 import {
     cacheModel,
     continuesHistory,
+    litertSettings,
     streamLitert,
     toLitertMessages,
+    visionTokens,
 } from "../src/engines/litert";
 import {
     chainParts,
@@ -656,6 +658,47 @@ const definitions: Array<{
             },
         },
         {
+            name: `litert/vision budget`,
+            run: () => {
+                const
+                    model = modelOf(ChatModelId.gemma4_e2b),
+                    mod = { Backend: { GPU: 3 } } as unknown as LitertModule,
+                    source = new ReadableStream<Uint8Array>(),
+                    vision = litertSettings({
+                        model,
+                        limits: defaultLlmLimits,
+                        source,
+                        mod,
+                    }),
+                    text = litertSettings({
+                        model: {
+                            id: ChatModelId.gemma4_e2b,
+                            reasoning: false,
+                            litert: {
+                                repo: `text-only`,
+                                file: `text-only.litertlm`,
+                                vision: false,
+                            },
+                        },
+                        limits: defaultLlmLimits,
+                        source,
+                        mod,
+                    });
+                assertEqual(visionTokens, 70, `smallest budget`);
+                assertEqual(vision.maxVisionTokensPerImage, 70, `max tokens`);
+                assertEqual(vision.minVisionTokensPerImage, 70, `min tokens`);
+                assertEqual(vision.visionBackend, 3, `vision backend`);
+                assertEqual(
+                    vision.mainExecutorSettings?.maxNumImages,
+                    defaultLlmLimits.maxImages,
+                    `max images`,
+                );
+                assertEqual(text.visionBackend, undefined, `no text vision`);
+                assertEqual(text.maxVisionTokensPerImage, undefined, `no text tokens`);
+                assertEqual(text.minVisionTokensPerImage, undefined, `no text min`);
+            },
+        },
+        {
             name: `stream/stall`,
             run: async () => {
                 const
@@ -805,6 +848,48 @@ const definitions: Array<{
                 assertEqual(built, `ok`, `engine run`);
                 assertEqual(sent[0].role, `system`, `engine system`);
                 assertEqual(sent[1].content, `hi`, `engine user`);
+            },
+        },
+        {
+            name: `speed/stream`,
+            run: async () => {
+                const
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    speeds: number[] = [],
+                    result = await streamReply({
+                        model,
+                        onReason: () => { },
+                        onText: () => { },
+                        onSpeed: value => speeds.push(value),
+                        start: async () => (async function* () {
+                            yield { choices: [{ delta: { reasoning_content: `why` } }] };
+                            await sleep(10);
+                            yield { choices: [{ delta: { content: `hel` } }] };
+                            await sleep(10);
+                            yield { choices: [{ delta: { content: `lo` } }] };
+                        })(),
+                        stopped: () => false,
+                    });
+                assertEqual(result, `hello`, `speed reply`);
+                assertEqual(speeds.length, 2, `speed updates`);
+                assert(
+                    speeds.every(value => Number.isFinite(value) && value > 0),
+                    `positive speed`,
+                );
+                const
+                    silent: number[] = [],
+                    single = await streamReply({
+                        model,
+                        onReason: () => { },
+                        onText: () => { },
+                        onSpeed: value => silent.push(value),
+                        start: async () => streamOf({
+                            choices: [{ delta: { content: `one` } }],
+                        }),
+                        stopped: () => false,
+                    });
+                assertEqual(single, `one`, `single reply`);
+                assertEqual(silent.length, 0, `no speed for one token`);
             },
         },
         {
@@ -1298,6 +1383,28 @@ const definitions: Array<{
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
                 assertEqual(replies[replies.length - 1], `hello`, `accumulated reply`);
                 assertEqual(reasoned[reasoned.length - 1], `why`, `accumulated thinking`);
+            },
+        },
+        {
+            name: `speed/opt-in`,
+            run: async () => {
+                const
+                    speeds: number[] = [],
+                    { chat } = chatWith({
+                        chatImpl: async params => {
+                            params.onSpeed?.(12.5);
+                            params.onText(`ok`);
+                            return `ok`;
+                        },
+                    });
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                    onSpeed: value => speeds.push(value),
+                });
+                await waitFor(() => speeds.length == 1, `speed callback`);
+                assertEqual(speeds[0], 12.5, `speed forwarded`);
             },
         },
         {

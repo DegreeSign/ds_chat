@@ -336,6 +336,7 @@ const
         logging,
         onReason,
         onText,
+        onSpeed,
         start,
         stopped,
         firstTimeoutMs = firstReplyTimeout,
@@ -346,7 +347,9 @@ const
             reply = ``,
             thought = ``,
             finish = ``,
-            seen = false;
+            seen = false,
+            tokens = 0,
+            startedAt = 0;
         const splitter = createThinkSplitter(
             text => { thought += text; onReason(text); },
             text => { reply += text; onText(text); },
@@ -397,6 +400,13 @@ const
                     onReason(reasoned);
                 };
                 if (delta?.content) splitter.feed(delta.content);
+                if (reasoned || delta?.content) {
+                    const now = performance.now();
+                    if (!tokens) startedAt = now;
+                    tokens += 1;
+                    if (tokens > 1 && now > startedAt)
+                        onSpeed?.(tokens * 1000 / (now - startedAt));
+                };
             };
             splitter.flush();
         } catch (error) {
@@ -435,6 +445,7 @@ const
             logging: params.logging,
             onReason: params.onReason,
             onText: params.onText,
+            onSpeed: params.onSpeed,
             start: () => start(messages),
             stopped,
             onStall,

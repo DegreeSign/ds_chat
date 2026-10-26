@@ -153,6 +153,10 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                         reply += delta;
                         input.onResponse?.(reply);
                     },
+                    onSpeed: speed => {
+                        if (call.token != token || call.cancelled) return;
+                        input.onSpeed?.(speed);
+                    },
                     signal: call.controller.signal,
                 });
             } catch (error) {

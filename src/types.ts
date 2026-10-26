@@ -92,6 +92,8 @@ interface ChatInput {
     onThinking?: (text: string) => void,
     /** Accumulated reply text, streamed while the model answers */
     onResponse: (text: string) => void,
+    /** Current generation speed in tokens per second, streamed while the model answers */
+    onSpeed?: (tokensPerSecond: number) => void,
     /** Model and request state, reported on every change */
     onStatus?: (snapshot: ChatStatusSnapshot) => void,
 }
@@ -248,6 +250,8 @@ interface RuntimeChatParams {
     logging?: boolean,
     onReason: (text: string) => void,
     onText: (text: string) => void,
+    /** Current generation speed in tokens per second */
+    onSpeed?: (tokensPerSecond: number) => void,
     signal?: AbortSignal,
 }
 
@@ -277,6 +281,8 @@ interface EngineChatParams {
     onReason: (text: string) => void,
     /** Streamed reply delta */
     onText: (text: string) => void,
+    /** Current generation speed in tokens per second */
+    onSpeed?: (tokensPerSecond: number) => void,
     signal?: AbortSignal,
 }
 
@@ -358,6 +364,21 @@ type LitertEngine = import('@litert-lm/core').Engine;
 /** The LiteRT-LM module namespace */
 type LitertModule = typeof import('@litert-lm/core');
 
+/** Settings handed to the LiteRT-LM engine */
+type LitertSettings = import('@litert-lm/core').EngineSettings;
+
+/** Params of one LiteRT-LM settings build */
+interface LitertSettingsParams {
+    /** Model with the artifact */
+    model: ChatModel,
+    /** Image and context budgets */
+    limits: LlmLimits,
+    /** Model file stream */
+    source: ReadableStream<Uint8Array>,
+    /** Loaded LiteRT module */
+    mod: LitertModule,
+}
+
 /** One reused LiteRT-LM conversation and the turns it already holds */
 interface LitertSession {
     /** Live conversation, dropped when a turn cannot be continued */
@@ -407,6 +428,8 @@ interface StreamReplyParams {
     onReason: (text: string) => void,
     /** Streamed reply delta */
     onText: (text: string) => void,
+    /** Current generation speed in tokens per second */
+    onSpeed?: (tokensPerSecond: number) => void,
     /** Open the engine stream for the prepared messages */
     start: () => Promise<AsyncIterable<unknown>>,
     /** Whether the caller stopped the generation */
@@ -470,6 +493,8 @@ export type {
     LitertMessage,
     LitertEngine,
     LitertModule,
+    LitertSettings,
+    LitertSettingsParams,
     LitertSession,
     LitertChatParams,
     StreamLitertParams,
