@@ -1,4 +1,4 @@
-import { findLlmModel, supportsImages } from './models';
+import { findLlmModel, resolveLlmModel, supportsImages } from './models';
 import { runtime } from './service';
 import { resolveLlmLimits } from './engines/engine';
 import {
@@ -21,7 +21,7 @@ import type {
 /** Build one model and request status snapshot */
 const statusSnapshot = (
     service: Runtime,
-    model: ChatModelId,
+    model: ChatModelId | undefined,
     state: ChatState,
 ): ChatStatusSnapshot => {
     const
@@ -56,13 +56,17 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
         /** Report the current model and request state */
         emitStatus = (call: ActiveCall) =>
             call.input.onStatus?.(
-                statusSnapshot(service, call.input.model, call)),
+                statusSnapshot(service, call.model ?? call.input.model, call)),
         /** Run one request: load the model, then stream one reply */
         run = async (call: ActiveCall): Promise<void> => {
             const
                 { input } = call,
                 logging = input.logging === true,
-                model = findLlmModel(input.model),
+                model = await resolveLlmModel(input.model);
+            call.model = model?.id;
+            // newer call owns runtime
+            if (call.token != token) return;
+            const
                 hasText = input.messages.some(message =>
                     message.role != LlmRole.system
                     && typeof message.content == `string`
@@ -88,7 +92,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 return;
             };
             const
-                limits = resolveLlmLimits(input.limits),
+                limits = resolveLlmLimits(input.limits, !!model.litert),
                 loaded = await service.load({
                     model,
                     limits,
@@ -196,13 +200,11 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
 
 /** Build a model preload over one runtime */
 const createPreloadOn = (service: Runtime) => async (
-    input: ChatPreloadInput,
+    input: ChatPreloadInput = {},
 ): Promise<boolean> => {
-    const
-        model = findLlmModel(input.model),
-        report = (state: ChatState) =>
-            input.onStatus?.(
-                statusSnapshot(service, input.model, state));
+    const model = await resolveLlmModel(input.model);
+    const report = (state: ChatState) =>
+        input.onStatus?.(statusSnapshot(service, model?.id, state));
     if (!model) {
         report({
             requesting: false,
@@ -220,7 +222,7 @@ const createPreloadOn = (service: Runtime) => async (
         wasReady = service.ready() && service.model()?.id == model.id,
         loaded = await service.load({
             model,
-            limits: resolveLlmLimits(input.limits),
+            limits: resolveLlmLimits(input.limits, !!model.litert),
             logging: input.logging === true,
             onProgress: (value, next) => {
                 percent = Math.round(value * 100);

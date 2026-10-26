@@ -20,6 +20,7 @@ import type {
     LitertChatParams,
     LitertContentPart,
     LitertMessage,
+    LitertSession,
     LlmEngine,
     LlmRuntime,
     StartLlmParams,
@@ -130,6 +131,7 @@ const fetchModel = async (
 /** Map built messages to LiteRT turns */
 const toLitertMessages = async (
     messages: EngineMessage[],
+    keepImages = true,
 ): Promise<LitertMessage[]> => {
     const result: LitertMessage[] = [];
     for (const message of messages) {
@@ -141,10 +143,56 @@ const toLitertMessages = async (
         for (const part of message.content)
             parts.push(part.type == `text`
                 ? { type: `text`, text: part.text }
-                : { type: `image`, data: await imageBuffer(part.url) });
-        result.push({ role: `user`, content: parts });
+                : keepImages
+                    ? { type: `image`, data: await imageBuffer(part.url) }
+                    : { type: `text`, text: `[image]` });
+        result.push({ role: message.role, content: parts });
     };
     return result;
+};
+
+/** Whether two built turns carry the same role and content */
+const sameMessage = (
+    first: EngineMessage,
+    next: EngineMessage,
+): boolean => {
+    if (first.role != next.role) return false;
+    if (typeof first.content == `string` || typeof next.content == `string`)
+        return first.content == next.content;
+    if (first.content.length != next.content.length) return false;
+    for (let i = 0; i < first.content.length; i++) {
+        const
+            left = first.content[i],
+            right = next.content[i];
+        if (left.type != right.type) return false;
+        if (left.type == `text` && right.type == `text`) {
+            if (left.text != right.text) return false;
+        } else if (left.type == `image` && right.type == `image`) {
+            if (left.url != right.url) return false;
+        };
+    };
+    return true;
+};
+
+/** Whether the live conversation already holds the incoming history */
+const continuesHistory = (
+    sent: EngineMessage[],
+    history: EngineMessage[],
+): boolean => {
+    const
+        sentSystem = sent[0]?.role == `system` ? sent[0] : undefined,
+        nextSystem = history[0]?.role == `system` ? history[0] : undefined;
+    if (!sentSystem != !nextSystem) return false;
+    if (sentSystem && nextSystem && !sameMessage(sentSystem, nextSystem))
+        return false;
+    const
+        sentTurns = sentSystem ? sent.slice(1) : sent,
+        nextTurns = nextSystem ? history.slice(1) : history;
+    if (!nextTurns.length || nextTurns.length > sentTurns.length) return false;
+    const offset = sentTurns.length - nextTurns.length;
+    for (let i = 0; i < nextTurns.length; i++)
+        if (!sameMessage(sentTurns[offset + i], nextTurns[i])) return false;
+    return true;
 };
 
 /** Stream one LiteRT reply as engine chunks */
@@ -153,31 +201,54 @@ const streamLitert = async function* ({
     mod,
     params,
     messages,
+    session,
 }: StreamLitertParams): AsyncGenerator<EngineChunk> {
     const
         last = messages[messages.length - 1],
         options = replyOptions(params.limits, params.reasoning);
     if (last?.role != `user`) throw new Error(`No user turn`);
     const
-        previous = await toLitertMessages(messages.slice(0, -1)),
+        history = messages.slice(0, -1),
         prompt = (await toLitertMessages([last]))[0];
     if (!prompt) throw new Error(`Empty prompt`);
-    const conversation = await engine.createConversation({
-        sessionConfig: {
-            maxOutputTokens: options.max_tokens,
-            samplerParams: {
-                type: mod.SamplerType.TOP_K,
-                temperature: options.temperature,
-                k: 40,
-                p: 0.95,
+    const reuse = !!session.conversation
+        && session.reasoning == params.reasoning
+        && session.maxTokens == options.max_tokens
+        && continuesHistory(session.sent, history);
+    let conversation: import('@litert-lm/core').Conversation;
+    if (reuse && session.conversation)
+        conversation = session.conversation;
+    else {
+        // history images become text notes
+        const previous = await toLitertMessages(history, false);
+        session.conversation = undefined;
+        session.sent = [];
+        conversation = await engine.createConversation({
+            sessionConfig: {
+                maxOutputTokens: options.max_tokens,
+                samplerParams: {
+                    type: mod.SamplerType.TOP_K,
+                    temperature: options.temperature,
+                    k: 40,
+                    p: 0.95,
+                },
             },
-        },
-        preface: {
-            ...(previous.length ? { messages: previous } : {}),
-            extra_context: { enable_thinking: params.reasoning },
-        },
-    });
-    let reader: ReadableStreamDefaultReader<LitertMessage> | undefined;
+            preface: {
+                ...(previous.length ? { messages: previous } : {}),
+                extra_context: { enable_thinking: params.reasoning },
+            },
+            prefillPrefaceOnInit: previous.length > 0,
+        });
+        session.conversation = conversation;
+        session.reasoning = params.reasoning;
+        session.maxTokens = options.max_tokens;
+        session.sent = [...history];
+    };
+    session.sent.push(last);
+    let
+        reader: ReadableStreamDefaultReader<LitertMessage> | undefined,
+        completed = false,
+        reply = ``;
     const stop = () => {
         if (reader) void reader.cancel().catch(() => { });
         try { conversation.cancel(); } catch { };
@@ -195,15 +266,25 @@ const streamLitert = async function* ({
             if (Array.isArray(value.content))
                 for (const part of value.content)
                     if (part.type == `text`) text += part.text;
-            if (text) delta.content = text;
+            if (text) {
+                delta.content = text;
+                reply += text;
+            };
             const thought = value.channels?.[`thought`];
             if (thought) delta.reasoning = thought;
             if (delta.content || delta.reasoning)
                 yield { choices: [{ delta }] };
-        }
+        };
+        completed = true;
     } finally {
         params.signal?.removeEventListener(`abort`, stop);
-        try { await conversation.delete(); } catch { };
+        // keep the conversation open
+        if (completed && reply)
+            session.sent.push({ role: `assistant`, content: reply });
+        else {
+            session.conversation = undefined;
+            session.sent = [];
+        };
     }
 };
 
@@ -213,18 +294,31 @@ const chatOn = async ({
     model,
     mod,
     params,
-}: LitertChatParams): Promise<string | undefined> =>
-    await runEngineChat({
-        model,
-        params,
-        stopped: () => !!params.signal?.aborted,
-        start: async messages => {
-            if (params.signal?.aborted) throw new Error(`Cancelled`);
-            if (hasImages(messages) && !model.litert?.vision)
-                throw new Error(`Model does not accept images`);
-            return streamLitert({ engine, mod, params, messages });
-        },
-    });
+    session,
+}: LitertChatParams): Promise<string | undefined> => {
+    const reset = () => {
+        try { session.conversation?.cancel(); } catch { };
+        session.conversation = undefined;
+        session.sent = [];
+    };
+    try {
+        return await runEngineChat({
+            model,
+            params,
+            stopped: () => !!params.signal?.aborted,
+            onStall: reset,
+            start: async messages => {
+                if (params.signal?.aborted) throw new Error(`Cancelled`);
+                if (hasImages(messages) && !model.litert?.vision)
+                    throw new Error(`Model does not accept images`);
+                return streamLitert({ engine, mod, params, messages, session });
+            },
+        });
+    } catch (error) {
+        reset();
+        throw error;
+    };
+};
 
 /** Start the GPU runtime, the unified engine entry */
 const startLLM = async ({
@@ -291,12 +385,21 @@ const startLLM = async ({
         await engine.delete();
         throw new Error(`Cancelled`);
     };
+    const session: LitertSession = {
+        sent: [],
+        reasoning: false,
+        maxTokens: 0,
+    };
     return {
         model,
         backend: LlmBackend.gpu,
         contextSize: litertContextWindow,
-        chat: params => chatOn({ engine, model, mod, params }),
-        unload: async () => { await engine.delete(); },
+        chat: params => chatOn({ engine, model, mod, params, session }),
+        unload: async () => {
+            session.conversation = undefined;
+            session.sent = [];
+            await engine.delete();
+        },
     };
 };
 
@@ -338,6 +441,8 @@ const litertEngine: LlmEngine = {
 
 export {
     cacheModel,
+    continuesHistory,
     litertEngine,
+    streamLitert,
     toLitertMessages,
 };

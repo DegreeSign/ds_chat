@@ -15,6 +15,7 @@ package loads one model, streams one reply and reports status.
 - [Why](#why)
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Enable WebGPU](#enable-webgpu)
 - [Public API](#public-api)
 - [Status](#status)
 - [Models](#models)
@@ -83,12 +84,7 @@ call returns one cancel function and starts the model behind the status
 callback.
 
 ```ts
-import {
-  ChatModelId,
-  LlmRole,
-  createChat,
-  preloadModel,
-} from "@degreesign/chat";
+import { LlmRole, createChat, preloadModel } from "@degreesign/chat";
 
 const messages = [
   { role: LlmRole.system, content: "Answer in two sentences." },
@@ -96,26 +92,27 @@ const messages = [
 ];
 
 // Optional: download and load the model before the first send.
-await preloadModel({ model: ChatModelId.qwen3_vl_2b });
+await preloadModel();
 
 const cancel = createChat({
-  model: ChatModelId.qwen3_vl_2b,
   messages,
-  limits: { maxReplyTokens: 320 },
-  reasoning: false,
-  onThinking: (text) => renderThinking(text),
   onResponse: (text) => renderReply(text),
-  onStatus: (snapshot) => renderStatus(snapshot),
+  // onThinking: (text) => renderThinking(text),
+  // onStatus: (snapshot) => renderStatus(snapshot),
 });
 
 // Later, stop the reply, cancel the load, or free the model.
 cancel();
 ```
 
+Without `model` the package picks the GPU model when the browser provides a
+WebGPU adapter and the CPU model when it does not. `limits`, `reasoning`,
+`onThinking` and `onStatus` are optional per call; see the API below.
+
 There is no promise and no controller object on `createChat`. Every result
-arrives through the three callbacks, and `onStatus` reports `requesting: false`
-when the reply ends. `preloadModel` is the one promise: it resolves once the
-model is loaded, or `false` when it cannot load.
+arrives through `onResponse`, and `onStatus` reports `requesting: false` when
+the reply ends. `preloadModel` is the one promise: it resolves once the model
+is loaded, or `false` when it cannot load.
 
 Attach images to a user turn with `images: [dataUrl]`. The package sends them
 only to a model with vision support, center-crops each image to a square,
@@ -124,11 +121,66 @@ resizes it to 288 x 288, and caps the number with `limits.maxImages`.
 The package never writes storage, so the host appends the user message before
 the call and appends the assistant message after the last `onResponse`.
 
+## Enable WebGPU
+
+A request without `model` picks `gemma4_e2b` when the browser exposes a WebGPU
+adapter and `qwen3_vl_2b` when it does not. The GPU engine is far faster, so
+check the browser before blaming the package:
+
+```js
+// Run in the console of the page that loads the package
+const adapter = await navigator.gpu?.requestAdapter();
+adapter
+    ? `${adapter.info.vendor} ${adapter.info.architecture}`
+    : `no adapter`;
+```
+
+`null` means the browser has the API but no usable adapter, and the package
+falls back to the CPU model. Chromium browsers report the whole state at
+`chrome://gpu`: `WebGPU` should read `Hardware accelerated` and `Vulkan` should
+read `Enabled`. Firefox lists the detected features at `about:support` under
+`Graphics`.
+
+### Firefox
+
+WebGPU ships enabled on Windows and macOS. On Linux, and on any build that
+reports `navigator.gpu` as undefined:
+
+1. Open `about:config`.
+2. Set `dom.webgpu.enabled` to `true`.
+3. Restart the browser and run the snippet again.
+
+Firefox runs WebGPU on its own wgpu stack, so an adapter can appear even with a
+software driver. Check the renderer in `about:support` when replies feel slow.
+
+### Chrome, Edge and Brave
+
+WebGPU ships enabled on Windows, macOS and ChromeOS since version 113, so there
+is nothing to configure.
+
+On Linux the GPU process only exposes an adapter when ANGLE runs on Vulkan,
+which is not the default. Start the browser with both flags:
+
+```bash
+google-chrome --enable-features=Vulkan --use-angle=vulkan
+microsoft-edge --enable-features=Vulkan --use-angle=vulkan
+brave-browser --enable-features=Vulkan --use-angle=vulkan
+```
+
+Either flag alone leaves `requestAdapter()` returning `null`. To keep them, add
+them to the `Exec` line of the browser entry under
+`~/.local/share/applications`, or to the target of a desktop shortcut.
+
+`--enable-unsafe-webgpu` is a different switch: it only unlocks software
+adapters, so an adapter whose `info.vendor` reads `google` is SwiftShader on the
+CPU, not the GPU. Remove it when measuring speed. Headless Chromium hides
+`navigator.gpu` entirely, so check the adapter in a normal window.
+
 ## Public API
 
 ```ts
 createChat(input: ChatInput): CancelChat
-preloadModel(input: ChatPreloadInput): Promise<boolean>
+preloadModel(input?: ChatPreloadInput): Promise<boolean>
 ```
 
 Call it once per response. A new call aborts the previous stream. When the
@@ -138,14 +190,20 @@ requested model is already loaded, no download or load happens.
 
 | Field | Description |
 | ----- | ----------- |
-| `model` | `ChatModelId` to use for this request. A different model replaces the loaded one. |
+| `model?` | `ChatModelId` to use; a different model replaces the loaded one. |
 | `messages` | The complete prompt, including system messages and the new user turn. |
-| `limits?` | Partial `LlmLimits`; `maxImages` caps images and `maxThreads` caps CPU threads (default 2). |
+| `limits?` | Partial `LlmLimits`; see the budget defaults below. |
 | `reasoning?` | Whether the model may think first. Defaults to `false`. |
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
 | `onThinking?` | Receives the accumulated reasoning text as it streams. |
 | `onResponse` | Receives the accumulated reply text as it streams. Required. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every state change. |
+
+Without `model` the package picks the GPU build when the browser provides a
+WebGPU adapter and the CPU build when it does not. The budget defaults are 250
+reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning tokens (320 on the
+CPU), 2 images, 1000 characters per message, 10000 prompt characters and 6 CPU
+threads.
 
 `CancelChat` is `() => void`. Its meaning depends on the current state:
 
@@ -162,7 +220,7 @@ and never starts a second download.
 ### Preload
 
 ```ts
-preloadModel(input: ChatPreloadInput): Promise<boolean>
+preloadModel(input?: ChatPreloadInput): Promise<boolean>
 ```
 
 Call it before the first `createChat` to download and load the model early. It
@@ -176,7 +234,7 @@ running.
 
 | Field | Description |
 | ----- | ----------- |
-| `model` | `ChatModelId` to download and load. |
+| `model?` | `ChatModelId` to download and load. Defaults like `ChatInput.model`. |
 | `limits?` | Partial `LlmLimits`; `maxThreads` applies when the model loads. |
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every progress and state change. |
@@ -205,6 +263,10 @@ on failure. A preload owns no cancel function; a new load replaces it.
 The first snapshot fires synchronously inside `createChat`. A final snapshot
 with `requesting: false` marks the end of the call.
 
+A stream that never produces its first chunk ends with an error after 180
+seconds instead of waiting forever. Once a chunk has arrived, 30 seconds of
+silence ends the stream and keeps the text already delivered.
+
 ## Logging
 
 Console output stays off by default. Pass `logging: true` in a call to receive
@@ -231,6 +293,11 @@ total download is about 1.5 GB. It runs on the CPU engine.
 Gemma 4 E2B downloads one `gemma-4-E2B-it.litertlm` file of about 2.6 GB. It
 runs on the WebGPU engine with its vision encoder in the same file, so an
 image prompt does not download a projector.
+
+The WebGPU engine keeps one LiteRT conversation for consecutive turns. When the
+next prompt continues that history, only the new user turn is sent. A changed
+history opens a fresh conversation, and older images become `[image]` notes in
+its preface.
 
 ## Prompt assembly
 
@@ -276,7 +343,7 @@ onProgress })` contract and return the runtime object with `model`, `backend`,
 matches the requested model.
 
 The CPU engine derives a raw thread count from the device, then caps it at
-`limits.maxThreads`, default 2. The cap is applied after the raw maximum, so the
+`limits.maxThreads`, default 6. The cap is applied after the raw maximum, so the
 engine never exceeds the device or the caller budget.
 
 The CPU engine needs cross-origin isolation for its threads. Serve the page with

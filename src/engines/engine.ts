@@ -11,16 +11,19 @@ import type {
     StreamReplyParams,
 } from '../types';
 
-/** Default token, prompt and thread budgets */
+/** Default token, prompt and thread budgets of the CPU engine */
 const defaultLlmLimits: LlmLimits = {
-    maxReplyTokens: 200,
-    maxThinkingTokens: 64,
-    maxReasoningTokens: 150,
+    maxReplyTokens: 250,
+    maxThinkingTokens: 128,
+    maxReasoningTokens: 320,
     maxImages: 2,
     maxContentLength: 1000,
     promptCharBudget: 10000,
-    maxThreads: 2,
+    maxThreads: 6,
 };
+
+/** Reasoning budget of the GPU engine, thought plus answer */
+const gpuReasoningTokens = 1200;
 
 /** Clamp a budget at or above a floor, falling back on an unusable value */
 const budgetLimit = (
@@ -32,8 +35,11 @@ const budgetLimit = (
         ? Math.floor(value)
         : fallback;
 
-/** Merge developer budgets over the defaults */
-const resolveLlmLimits = (overrides: Partial<LlmLimits> = {}): LlmLimits => {
+/** Merge developer budgets over the backend defaults */
+const resolveLlmLimits = (
+    overrides: Partial<LlmLimits> = {},
+    gpu = false,
+): LlmLimits => {
     const defaults = defaultLlmLimits;
     return {
         maxReplyTokens: budgetLimit(
@@ -48,7 +54,7 @@ const resolveLlmLimits = (overrides: Partial<LlmLimits> = {}): LlmLimits => {
         ),
         maxReasoningTokens: budgetLimit(
             overrides.maxReasoningTokens,
-            defaults.maxReasoningTokens,
+            gpu ? gpuReasoningTokens : defaults.maxReasoningTokens,
             1,
         ),
         maxImages: budgetLimit(
@@ -277,6 +283,40 @@ const
     };
 
 const
+    /** Longest wait for the first streamed chunk, milliseconds */
+    firstReplyTimeout = 180000,
+    /** Longest silence between two streamed chunks, milliseconds */
+    idleReplyTimeout = 30000;
+
+/** A stream that stopped producing chunks */
+class StallError extends Error { }
+
+/** Resolve a promise or fail once its budget runs out */
+const withTimeout = async <T>(
+    work: Promise<T>,
+    ms: number,
+    message: string,
+): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            work,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(() => reject(new StallError(message)), ms);
+            }),
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    };
+};
+
+/** Close one stream without waiting for a stalled engine */
+const closeStream = (iterator: AsyncIterator<unknown>) => {
+    try { void Promise.resolve(iterator.return?.()).catch(() => { }); }
+    catch { };
+};
+
+const
     /** Log an engine chat call with all message text censored */
     logChatCall = (model: ChatModel, messages: EngineMessage[]) =>
         console.log(
@@ -298,21 +338,53 @@ const
         onText,
         start,
         stopped,
+        firstTimeoutMs = firstReplyTimeout,
+        idleTimeoutMs = idleReplyTimeout,
+        onStall,
     }: StreamReplyParams): Promise<string | undefined> => {
         let
             reply = ``,
             thought = ``,
-            finish = ``;
+            finish = ``,
+            seen = false;
         const splitter = createThinkSplitter(
             text => { thought += text; onReason(text); },
             text => { reply += text; onText(text); },
         );
         try {
-            const chunks = await start();
-            for await (const chunk of chunks) {
-                if (stopped()) break;
+            const
+                chunks = await withTimeout(
+                    start(),
+                    firstTimeoutMs,
+                    `Model did not start`,
+                ),
+                iterator = chunks[Symbol.asyncIterator]();
+            while (true) {
+                if (stopped()) {
+                    closeStream(iterator);
+                    break;
+                };
+                let step: IteratorResult<unknown>;
+                try {
+                    step = await withTimeout(
+                        iterator.next(),
+                        seen ? idleTimeoutMs : firstTimeoutMs,
+                        seen ? `Model stopped responding` : `Model did not reply`,
+                    );
+                } catch (error) {
+                    // keep the text already delivered by a slow stream
+                    if (error instanceof StallError && (reply || thought)) {
+                        onStall?.();
+                        closeStream(iterator);
+                        if (logging) console.log(`Local chat stalled`, error);
+                        break;
+                    };
+                    throw error;
+                };
+                if (step.done) break;
+                seen = true;
                 const
-                    choice = (chunk as EngineChunk | undefined)?.choices?.[0],
+                    choice = (step.value as EngineChunk | undefined)?.choices?.[0],
                     delta = choice?.delta,
                     reasoned = typeof delta?.reasoning_content == `string`
                         ? delta.reasoning_content
@@ -329,6 +401,8 @@ const
             splitter.flush();
         } catch (error) {
             if (logging) console.log(`Local chat failed`, error);
+            // a stalled engine must reach the host
+            if (error instanceof StallError && !stopped()) throw error;
         };
         const result = stopped() ? undefined : reply || undefined;
         if (logging) {
@@ -351,6 +425,7 @@ const
         params,
         start,
         stopped,
+        onStall,
     }: EngineRunParams): Promise<string | undefined> => {
         const messages = await resizeImages(
             buildMessages(params.messages, params.limits));
@@ -362,6 +437,7 @@ const
             onText: params.onText,
             start: () => start(messages),
             stopped,
+            onStall,
         });
     };
 

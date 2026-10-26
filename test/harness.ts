@@ -16,9 +16,11 @@ import {
 } from "../src/engines/engine";
 import {
     cpuContextWindow,
+    defaultLlmModel,
     findLlmModel,
     litertContextWindow,
     llmModels,
+    resolveLlmModel,
     supportsImages,
 } from "../src/models";
 import {
@@ -27,7 +29,12 @@ import {
     storedBlobs,
     toWllamaMessages,
 } from "../src/engines/wllama";
-import { cacheModel, toLitertMessages } from "../src/engines/litert";
+import {
+    cacheModel,
+    continuesHistory,
+    streamLitert,
+    toLitertMessages,
+} from "../src/engines/litert";
 import {
     chainParts,
     createModelStore,
@@ -52,7 +59,11 @@ import type {
     ChatMessage,
     ChatModel,
     ChatStatusSnapshot,
+    EngineChatParams,
     EngineMessage,
+    LitertEngine,
+    LitertModule,
+    LitertSession,
 } from "../src/types";
 import type { FakeEngineOptions } from "./fixtures.js";
 import { createFakeEngine } from "./fixtures.js";
@@ -250,16 +261,53 @@ const definitions: Array<{
             },
         },
         {
+            name: `models/default`,
+            run: async () => {
+                const picked = await defaultLlmModel();
+                assertEqual(
+                    llmModels.some(model => model.id == picked),
+                    true,
+                    `default pick`,
+                );
+                assertEqual((await resolveLlmModel())?.id, picked, `resolved default`);
+                assertEqual(
+                    (await resolveLlmModel(ChatModelId.qwen3_vl_2b))?.id,
+                    ChatModelId.qwen3_vl_2b,
+                    `asked model`,
+                );
+                assertEqual(
+                    await resolveLlmModel(`missing` as ChatModelId),
+                    undefined,
+                    `unknown model`,
+                );
+            },
+        },
+        {
             name: `limits/defaults`,
             run: () => {
                 const defaults = resolveLlmLimits();
                 assertEqual(defaults.maxReplyTokens, defaultLlmLimits.maxReplyTokens, `reply`);
                 assertEqual(defaults.promptCharBudget, 10000, `budget`);
                 assertEqual(defaults.maxImages, 2, `images`);
-                assertEqual(defaults.maxThreads, 2, `threads`);
+                assertEqual(defaults.maxThreads, 6, `threads`);
+                assertEqual(
+                    defaults.maxReasoningTokens,
+                    defaultLlmLimits.maxReasoningTokens,
+                    `cpu reasoning`,
+                );
+                assertEqual(
+                    resolveLlmLimits(undefined, true).maxReasoningTokens,
+                    1200,
+                    `gpu reasoning`,
+                );
+                assertEqual(
+                    resolveLlmLimits({ maxReasoningTokens: 500 }, true).maxReasoningTokens,
+                    500,
+                    `gpu override`,
+                );
                 assertEqual(resolveLlmLimits({ maxThreads: 1 }).maxThreads, 1, `one thread`);
                 assertEqual(resolveLlmLimits({ maxThreads: 8 }).maxThreads, 8, `eight threads`);
-                assertEqual(resolveLlmLimits({ maxThreads: 0 }).maxThreads, 2, `bad threads`);
+                assertEqual(resolveLlmLimits({ maxThreads: 0 }).maxThreads, 6, `bad threads`);
                 const custom = resolveLlmLimits({
                     maxReplyTokens: 40,
                     promptCharBudget: 12.9,
@@ -429,6 +477,14 @@ const definitions: Array<{
                 assertEqual(litertParts[0].text, `look`, `litert text`);
                 assertEqual(litertParts[1].type, `image`, `litert image`);
                 assertEqual(litertParts[1].data?.byteLength, 1, `litert bytes`);
+                const
+                    preface = await toLitertMessages([mixed[0]], false),
+                    prefaceParts = preface[0].content as Array<{
+                        type: string,
+                        text?: string,
+                    }>;
+                assertEqual(prefaceParts[1].type, `text`, `preface text`);
+                assertEqual(prefaceParts[1].text, `[image]`, `preface note`);
                 assertEqual(
                     modelUrl(`repo`, `file.gguf`),
                     `https://huggingface.co/repo/resolve/main/file.gguf`,
@@ -440,6 +496,203 @@ const definitions: Array<{
                     false,
                     `no images`,
                 );
+            },
+        },
+        {
+            name: `prompt/history`,
+            run: () => {
+                const
+                    system: EngineMessage = { role: LlmRole.system, content: `sys` },
+                    user = (text: string): EngineMessage => ({
+                        role: LlmRole.user,
+                        content: text,
+                    }),
+                    assistant = (text: string): EngineMessage => ({
+                        role: LlmRole.assistant,
+                        content: text,
+                    }),
+                    first = [system, user(`one`), assistant(`first`)],
+                    full = [...first, user(`two`), assistant(`second`)];
+                assertEqual(continuesHistory(first, first), true, `same history`);
+                assertEqual(continuesHistory(full, first), false, `old prefix`);
+                assertEqual(
+                    continuesHistory(full, [system, user(`two`), assistant(`second`)]),
+                    true,
+                    `trimmed history`,
+                );
+                assertEqual(
+                    continuesHistory(full, [system, user(`edited`), assistant(`second`)]),
+                    false,
+                    `edited turn`,
+                );
+                assertEqual(
+                    continuesHistory(full, [{ role: LlmRole.system, content: `new` }]),
+                    false,
+                    `changed system`,
+                );
+                assertEqual(continuesHistory(full, [system]), false, `empty turns`);
+                assertEqual(continuesHistory([], []), false, `empty history`);
+                const
+                    left = [user(`look`)],
+                    right = [{
+                        role: LlmRole.user,
+                        content: [
+                            { type: `text`, text: `look` },
+                            { type: `image`, url: `one` },
+                        ],
+                    }] as EngineMessage[];
+                assertEqual(continuesHistory(left, right), false, `image added`);
+            },
+        },
+        {
+            name: `litert/reuse`,
+            run: async () => {
+                interface FakeConversation {
+                    config?: unknown,
+                    prompts: unknown[],
+                    deleted: number,
+                }
+                const
+                    conversations: FakeConversation[] = [],
+                    streamOf = (text: string) => new ReadableStream({
+                        start(controller) {
+                            controller.enqueue({
+                                role: `assistant`,
+                                content: [{ type: `text`, text }],
+                            });
+                            controller.close();
+                        },
+                    }),
+                    engine = {
+                        createConversation: async (config?: unknown) => {
+                            const record: FakeConversation = {
+                                config,
+                                prompts: [],
+                                deleted: 0,
+                            };
+                            conversations.push(record);
+                            return {
+                                sendMessageStreaming: (prompt: unknown) => {
+                                    record.prompts.push(prompt);
+                                    return streamOf(`reply ${conversations.length}`);
+                                },
+                                cancel: () => { },
+                                delete: async () => { record.deleted += 1; },
+                            };
+                        },
+                    } as unknown as LitertEngine,
+                    mod = {
+                        SamplerType: { TOP_K: 0 },
+                    } as unknown as LitertModule,
+                    session: LitertSession = {
+                        sent: [],
+                        reasoning: false,
+                        maxTokens: 0,
+                    },
+                    params: EngineChatParams = {
+                        messages: [],
+                        limits: defaultLlmLimits,
+                        reasoning: false,
+                        onReason: () => { },
+                        onText: () => { },
+                    },
+                    run = async (messages: EngineMessage[]) => {
+                        let text = ``;
+                        for await (const chunk of streamLitert({
+                            engine,
+                            mod,
+                            params,
+                            messages,
+                            session,
+                        }))
+                            text += chunk.choices?.[0]?.delta?.content || ``;
+                        return text;
+                    },
+                    system: EngineMessage = {
+                        role: LlmRole.system,
+                        content: `sys`,
+                    },
+                    user = (text: string): EngineMessage => ({
+                        role: LlmRole.user,
+                        content: text,
+                    }),
+                    assistant = (text: string): EngineMessage => ({
+                        role: LlmRole.assistant,
+                        content: text,
+                    });
+                assertEqual(await run([system, user(`one`)]), `reply 1`, `first reply`);
+                assertEqual(conversations.length, 1, `first conversation`);
+                assertEqual(session.sent.length, 3, `first history`);
+                assertEqual(
+                    (session.sent[2] as { content: string }).content,
+                    `reply 1`,
+                    `assistant turn`,
+                );
+                assertEqual(
+                    await run([system, user(`one`), assistant(`reply 1`), user(`two`)]),
+                    `reply 1`,
+                    `second reply`,
+                );
+                assertEqual(conversations.length, 1, `reused conversation`);
+                assertEqual(conversations[0].prompts.length, 2, `two prompts`);
+                assertEqual(
+                    (conversations[0].prompts[1] as { content: string }).content,
+                    `two`,
+                    `second prompt`,
+                );
+                assertEqual(
+                    await run([
+                        system,
+                        user(`edited`),
+                        assistant(`reply 1`),
+                        user(`two`),
+                    ]),
+                    `reply 2`,
+                    `third reply`,
+                );
+                assertEqual(conversations.length, 2, `changed history`);
+                assertEqual(conversations[0].deleted, 0, `no delete`);
+                assertEqual(conversations[1].deleted, 0, `no new delete`);
+            },
+        },
+        {
+            name: `stream/stall`,
+            run: async () => {
+                const
+                    model = modelOf(ChatModelId.gemma4_e2b),
+                    silent = async function* () {
+                        await new Promise(() => { });
+                    },
+                    first = await streamReply({
+                        model,
+                        onReason: () => { },
+                        onText: () => { },
+                        start: async () => silent(),
+                        stopped: () => false,
+                        firstTimeoutMs: 20,
+                        idleTimeoutMs: 20,
+                    }).then(
+                        () => ``,
+                        (error: Error) => error.message,
+                    ),
+                    partial = async function* () {
+                        yield { choices: [{ delta: { content: `hi` } }] };
+                        await new Promise(() => { });
+                    };
+                let stalled = 0;
+                const text = await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    start: async () => partial(),
+                    stopped: () => false,
+                    firstTimeoutMs: 20,
+                    idleTimeoutMs: 20,
+                    onStall: () => { stalled += 1; },
+                });
+                assertEqual(first, `Model did not reply`, `first stall`);
+                assertEqual(text, `hi`, `partial reply`);
+                assertEqual(stalled, 1, `stall kept text`);
             },
         },
         {
@@ -1324,6 +1577,29 @@ const definitions: Array<{
                 await sleep(20);
                 assertEqual(calls.chat, 1, `chat ran with required callbacks`);
                 assertEqual(typeof cancel, `function`, `cancel handle`);
+            },
+        },
+        {
+            name: `chat/default model`,
+            run: async () => {
+                const
+                    expected = await resolveLlmModel(),
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                    }),
+                    replies: string[] = [];
+                createChatOn(runtime)({
+                    messages: [userMessage(`hi`)],
+                    onResponse: value => replies.push(value),
+                });
+                await waitFor(
+                    () => replies[replies.length - 1] == `reply`,
+                    `default reply`,
+                );
+                assertEqual(runtime.model()?.id, expected?.id, `default model`);
+                assertEqual(cpu.calls.start + gpu.calls.start, 1, `one load`);
             },
         },
         {

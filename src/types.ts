@@ -45,7 +45,7 @@ interface LlmLimits {
     maxReplyTokens: number,
     /** Max chain-of-thought tokens, used by the CPU engine when it loads */
     maxThinkingTokens: number,
-    /** Total output budget when reasoning is on, thinking plus answer */
+    /** Total output budget when reasoning is on, thought plus answer */
     maxReasoningTokens: number,
     /** Max images sent in one prompt */
     maxImages: number,
@@ -78,8 +78,8 @@ interface ChatStatusSnapshot {
 
 /** One chat request, invoked for every response */
 interface ChatInput {
-    /** On-device model that answers this request */
-    model: ChatModelId,
+    /** Model that answers, the GPU model when WebGPU is available, else the CPU one */
+    model?: ChatModelId,
     /** Complete prompt, including the system and user turns */
     messages: ChatMessage[],
     /** Override any token, prompt or thread budget */
@@ -122,7 +122,12 @@ interface LitertAssets {
 
 /** Navigator with the WebGPU entry point, absent in Node */
 interface GpuNavigator extends Navigator {
-    gpu?: object,
+    gpu?: {
+        /** Ask the browser for a WebGPU adapter */
+        requestAdapter: (options?: {
+            powerPreference?: `low-power` | `high-performance`,
+        }) => Promise<unknown>,
+    },
 }
 
 /** Request state that builds one status snapshot */
@@ -142,6 +147,8 @@ interface ActiveCall extends ChatState {
     input: ChatInput,
     controller: AbortController,
     cancelled: boolean,
+    /** Model resolved for this call */
+    model?: ChatModelId,
 }
 
 /** Engine and backend overrides used by tests */
@@ -351,12 +358,25 @@ type LitertEngine = import('@litert-lm/core').Engine;
 /** The LiteRT-LM module namespace */
 type LitertModule = typeof import('@litert-lm/core');
 
+/** One reused LiteRT-LM conversation and the turns it already holds */
+interface LitertSession {
+    /** Live conversation, dropped when a turn cannot be continued */
+    conversation?: import('@litert-lm/core').Conversation,
+    /** Built turns already sent to the conversation */
+    sent: EngineMessage[],
+    /** Reasoning flag the conversation was created with */
+    reasoning: boolean,
+    /** Output token budget the conversation was created with */
+    maxTokens: number,
+}
+
 /** Params of one LiteRT-LM chat call */
 interface LitertChatParams {
     engine: LitertEngine,
     model: ChatModel,
     mod: LitertModule,
     params: EngineChatParams,
+    session: LitertSession,
 }
 
 /** Params of one LiteRT-LM stream */
@@ -365,6 +385,7 @@ interface StreamLitertParams {
     mod: LitertModule,
     params: EngineChatParams,
     messages: EngineMessage[],
+    session: LitertSession,
 }
 
 /** Streamed delta, reasoning may be inline or structured */
@@ -392,6 +413,12 @@ interface StreamReplyParams {
     stopped: () => boolean,
     /** Whether engine logs reach the console */
     logging?: boolean,
+    /** Budget before the first chunk arrives, milliseconds */
+    firstTimeoutMs?: number,
+    /** Budget between two chunks, milliseconds */
+    idleTimeoutMs?: number,
+    /** Called when a slow stream keeps the text already delivered */
+    onStall?: () => void,
 }
 
 /** Params of one engine chat call */
@@ -402,6 +429,8 @@ interface EngineRunParams {
     start: (messages: EngineMessage[]) => Promise<AsyncIterable<unknown>>,
     /** Whether the caller stopped the generation */
     stopped: () => boolean,
+    /** Called when a slow stream keeps the text already delivered */
+    onStall?: () => void,
 }
 
 export type {
@@ -441,6 +470,7 @@ export type {
     LitertMessage,
     LitertEngine,
     LitertModule,
+    LitertSession,
     LitertChatParams,
     StreamLitertParams,
     EngineDelta,

@@ -1,5 +1,5 @@
 import { ChatModelId } from './enums';
-import type { ChatModel } from './types';
+import type { ChatModel, GpuNavigator } from './types';
 
 const
     llmModels: ChatModel[] = [
@@ -31,6 +31,26 @@ const
     /** Look up a catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
         id ? llmModels.find(model => model.id == id) : undefined,
+    /** Whether this browser provides a WebGPU adapter */
+    gpuAdapter = async (): Promise<boolean> => {
+        const gpu = typeof navigator == `undefined`
+            ? undefined
+            : (navigator as GpuNavigator).gpu;
+        if (!gpu) return false;
+        try {
+            return !!(await gpu.requestAdapter({
+                powerPreference: `high-performance`,
+            }));
+        } catch { return false; };
+    },
+    /** Default model, the GPU one when a WebGPU adapter exists */
+    defaultLlmModel = async (): Promise<ChatModelId | undefined> =>
+        (await gpuAdapter()
+            ? llmModels.find(model => !!model.litert)
+            : llmModels.find(model => !!model.cpu))?.id,
+    /** Resolve the requested model or the default of this device */
+    resolveLlmModel = async (id?: ChatModelId): Promise<ChatModel | undefined> =>
+        id ? findLlmModel(id) : findLlmModel(await defaultLlmModel()),
     /** Whether a model accepts images */
     supportsImages = (model: ChatModel): boolean =>
         !!model.cpu?.mmproj || !!model.litert?.vision;
@@ -40,5 +60,8 @@ export {
     cpuContextWindow,
     litertContextWindow,
     findLlmModel,
+    gpuAdapter,
+    defaultLlmModel,
+    resolveLlmModel,
     supportsImages,
 };
