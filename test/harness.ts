@@ -19,6 +19,7 @@ import {
     cpuContextWindow,
     defaultLlmModel,
     findLlmModel,
+    gpuAdapter,
     litertArtifact,
     litertContextWindow,
     llmModels,
@@ -328,6 +329,33 @@ const definitions: Array<{
                     undefined,
                     `unknown model`,
                 );
+            },
+        },
+        {
+            name: `models/gpu timeout`,
+            run: async () => {
+                const
+                    nav = navigator as Navigator & {
+                        gpu?: { requestAdapter: () => Promise<unknown> },
+                    },
+                    hadGpu = Object.prototype.hasOwnProperty.call(nav, `gpu`),
+                    original = nav.gpu;
+                Object.defineProperty(nav, `gpu`, {
+                    configurable: true,
+                    value: { requestAdapter: () => new Promise(() => { }) },
+                });
+                try {
+                    const started = Date.now();
+                    assertEqual(await gpuAdapter(), false, `hanging adapter`);
+                    assert(Date.now() - started < 3000, `bounded probe`);
+                } finally {
+                    if (hadGpu)
+                        Object.defineProperty(nav, `gpu`, {
+                            configurable: true,
+                            value: original,
+                        });
+                    else delete nav.gpu;
+                };
             },
         },
         {
@@ -1897,6 +1925,7 @@ const definitions: Array<{
                 assertEqual(calls.start, 0, `no start`);
                 assertEqual(statuses.length >= 1, true, `status emitted`);
                 assertEqual(statuses[statuses.length - 1].requesting, false, `not requesting`);
+                assertEqual(statuses[statuses.length - 1].error, `No prompt`, `no prompt error`);
             },
         },
         {

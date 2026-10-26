@@ -334,9 +334,9 @@ next attempt, including after a reload.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
-context on a phone and 8192 on a desktop. Its projector is the slow path: if a
-Qwen image turn never produces a first token, use the Gemma 4 WebGPU model for
-images instead.
+context on a phone and 8192 on a desktop. Its projector runs on two CPU threads
+because more threads stall the encoder, so its image turns are slower than the
+Gemma 4 WebGPU path. Use the GPU model when images need to be fast.
 
 Gemma 4 E2B downloads `gemma-4-E2B-it.litertlm`, about 2.6 GB, on a desktop. It
 runs on the WebGPU engine with its vision and audio encoders in the same file,

@@ -87,6 +87,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 return;
             };
             if (!prompt) {
+                call.error = `No prompt`;
                 emitStatus(call);
                 return;
             };

@@ -485,11 +485,11 @@ f(`host`, `host`, `host app`, `host app`, 0);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 18);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 50);
 f(`types`, `entry`, `types.ts`, `src/types.ts`, 534);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 271);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 272);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 283);
-f(`models`, `runtime`, `models.ts`, `src/models.ts`, 116);
+f(`models`, `runtime`, `models.ts`, `src/models.ts`, 132);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 389);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 393);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 516);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
@@ -501,8 +501,8 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 2897);
-f(`live`, `test`, `live.cjs`, `test/live.cjs`, 466);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 2926);
+f(`live`, `test`, `live.cjs`, `test/live.cjs`, 457);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 149);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 206);
@@ -527,7 +527,7 @@ n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
 // entry, enums and types
 n(`entry`, `exports`, 1, `public exports`, `createChat · preloadModel + 6 enums`,
     `Only createChat, preloadModel and the public types leave the package`);
-n(`chat`, `createChat`, 267, `createChat`, `(input: ChatInput) => CancelChat`,
+n(`chat`, `createChat`, 268, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
 n(`chat`, `createChatOn`, 51, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
@@ -539,14 +539,14 @@ n(`chat`, `statusSnapshot`, 22, `statusSnapshot`,
 n(`chat`, `emitStatus`, 58, `emitStatus`, `(call: ActiveCall) => void`,
     `Publish the snapshot for one live call`);
 n(`chat`, `run`, 62, `run`, `(call: ActiveCall) => Promise<void>`,
-    `Resolve the model, load it, strip unsupported media, stream and forward`
-    + ` the speed callback`);
-n(`chat`, `cancel`, 187, `cancel`, `(call: ActiveCall) => void`,
+    `Resolve the model, load it, strip unsupported media, report an empty`
+    + ` prompt as an error, stream and forward the speed callback`);
+n(`chat`, `cancel`, 188, `cancel`, `(call: ActiveCall) => void`,
     `Stale no-op, leave the load wait, abort the stream, or unload`);
-n(`chat`, `createPreloadOn`, 218, `createPreloadOn`,
+n(`chat`, `createPreloadOn`, 219, `createPreloadOn`,
     `(service: Runtime) => (input?: ChatPreloadInput) => Promise<boolean>`,
     `Testable preload factory over one runtime`);
-n(`chat`, `preloadModel`, 269, `preloadModel`,
+n(`chat`, `preloadModel`, 270, `preloadModel`,
     `(input?: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`enums`, `enums`, 2, `enums`, `6 exported enums`,
@@ -656,40 +656,46 @@ n(`llm`, `runtime`, 281, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
-n(`models`, `llmModels`, 10, `llmModels`, `ChatModel[2]`,
+n(`models`, `llmModels`, 15, `llmModels`, `ChatModel[2]`,
     `qwen3_vl_2b on the CPU with its mmproj, gemma4_e2b on desktop WebGPU`
     + ` with vision and audio and a text-only phone build`);
-n(`models`, `snapshots`, 40, `size`,
+n(`models`, `defaultModel`, 10, `defaultModel`,
+    `Promise<ChatModelId | undefined> | undefined`,
+    `The device default probed once per session, shared by every caller`);
+n(`models`, `gpuProbeTimeout`, 14, `gpuProbeTimeout`, `1500`,
+    `Milliseconds a WebGPU adapter probe may hang before the CPU wins`);
+n(`models`, `snapshots`, 44, `size`,
     `cpuContextWindow`,
     `8k context on the CPU engine, the desktop default`);
-n(`models`, `mobileWindow`, 42, `size`,
+n(`models`, `mobileWindow`, 46, `size`,
     `mobileCpuContextWindow`,
     `4k context on a phone, the smaller cache keeps the tab alive`);
-n(`models`, `litertWindow`, 44, `size`,
+n(`models`, `litertWindow`, 48, `size`,
     `litertContextWindow`,
     `4k context on the GPU engine, the wasm heap holds the model`);
-n(`models`, `mobileDevice`, 46, `mobileDevice`,
+n(`models`, `mobileDevice`, 51, `mobileDevice`,
     `(nav?) => boolean`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
-n(`models`, `litertArtifact`, 58, `litertArtifact`,
+n(`models`, `litertArtifact`, 63, `litertArtifact`,
     `(model, mobile?) => LitertArtifact | undefined`,
     `The desktop multimodal file or the 2 GB GPU_ARTISAN phone build`);
-n(`models`, `findLlmModel`, 68, `findLlmModel`,
+n(`models`, `findLlmModel`, 73, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
-n(`models`, `gpuAdapter`, 71, `gpuAdapter`,
+n(`models`, `gpuAdapter`, 76, `gpuAdapter`,
     `() => Promise<boolean>`,
-    `True when the browser hands out a WebGPU adapter, false in Node`);
-n(`models`, `defaultLlmModel`, 83, `defaultLlmModel`,
+    `True when the browser hands out a WebGPU adapter within the timeout,`
+    + ` false in Node`);
+n(`models`, `defaultLlmModel`, 96, `defaultLlmModel`,
     `() => Promise<ChatModelId | undefined>`,
-    `The GPU model when an adapter exists, else the CPU model`);
-n(`models`, `resolveLlmModel`, 88, `resolveLlmModel`,
+    `The GPU model when an adapter exists, else the CPU model, memoized`);
+n(`models`, `resolveLlmModel`, 104, `resolveLlmModel`,
     `(id?) => Promise<ChatModel | undefined>`,
     `The requested model, or the default of this device`);
-n(`models`, `supportsImages`, 91, `supportsImages`,
+n(`models`, `supportsImages`, 107, `supportsImages`,
     `(model, mobile?) => boolean`,
     `The CPU projector or the selected LiteRT artifact decides vision`);
-n(`models`, `supportsAudio`, 97, `supportsAudio`,
+n(`models`, `supportsAudio`, 113, `supportsAudio`,
     `(model, mobile?) => boolean`,
     `The projector audio flag or the selected artifact decides audio`);
 
@@ -756,51 +762,54 @@ n(`engine`, `runEngineChat`, 461, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
-n(`wllama`, `wllamaEngine`, 344, `wllamaEngine`, `LlmEngine`,
+n(`wllama`, `wllamaEngine`, 348, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, hasCache, remove, purge`);
-n(`wllama`, `resolveAssets`, 52, `resolveAssets`, `(overrides?) => WllamaAssets`,
+n(`wllama`, `resolveAssets`, 54, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
-n(`wllama`, `cpuLogger`, 61, `cpuLogger`, `(base) => WllamaLogger`,
+n(`wllama`, `cpuLogger`, 63, `cpuLogger`, `(base) => WllamaLogger`,
     `Follows the per-call logging flag and hides the GPU probe`);
-n(`wllama`, `getWllama`, 78, `getWllama`, `() => Promise<Wllama>`,
+n(`wllama`, `getWllama`, 80, `getWllama`, `() => Promise<Wllama>`,
     `Lazy singleton, default assets resolved and cached on first use`);
-n(`wllama`, `entryOf`, 105, `entryOf`, `(entry, file) => boolean`,
+n(`wllama`, `entryOf`, 107, `entryOf`, `(entry, file) => boolean`,
     `Cache entry matches by file name or original URL`);
-n(`wllama`, `cpuFiles`, 109, `cpuFiles`, `(model) => { name, url }[]`,
+n(`wllama`, `cpuFiles`, 111, `cpuFiles`, `(model) => { name, url }[]`,
     `The model file plus its vision projector, with remote URLs`);
-n(`wllama`, `filesStored`, 123, `filesStored`, `(model) => Promise<boolean>`,
+n(`wllama`, `filesStored`, 125, `filesStored`, `(model) => Promise<boolean>`,
     `Every CPU file including the projector is complete in the store`);
-n(`wllama`, `filesCached`, 133, `filesCached`,
+n(`wllama`, `filesCached`, 135, `filesCached`,
     `(instance, model) => Promise<boolean>`,
     `Every CPU file is complete in the wllama cache manager`);
-n(`wllama`, `storedBlobs`, 142, `storedBlobs`,
+n(`wllama`, `storedBlobs`, 144, `storedBlobs`,
     `({ model, signal, onProgress }) => Promise<Blob[]?>`,
     `Read every CPU file from the store, resuming the parts already stored`);
-n(`wllama`, `toWllamaMessages`, 169, `toWllamaMessages`,
+n(`wllama`, `toWllamaMessages`, 171, `toWllamaMessages`,
     `(messages) => Promise<WllamaMessage[]>`,
     `Map text, image and audio parts to wllama content segments`);
-n(`wllama`, `dropWllama`, 99, `dropWllama`, `() => Promise<void>`,
+n(`wllama`, `dropWllama`, 101, `dropWllama`, `() => Promise<void>`,
     `Drop the worker, a crashed or exited one cannot be reused`);
 n(`wllama`, `runtime`, 27, `runtime`,
-    `store · cpuThreads · gpuProbeLog · loggingOn`,
-    `The resumable store, hardware threads capped by limits.maxThreads,`
-    + ` 0 GPU layers`);
-n(`wllama`, `cpuThreads`, 34, `cpuThreads`, `(cores, maxThreads) => number`,
+    `store · visionThreads · cpuThreads · gpuProbeLog · loggingOn`,
+    `The resumable store, hardware threads capped by limits.maxThreads and two`
+    + ` for a vision projector, 0 GPU layers`);
+n(`wllama`, `visionThreads`, 31, `visionThreads`, `2`,
+    `CPU threads for the projector, more threads stall the Qwen-VL encoder`);
+n(`wllama`, `cpuThreads`, 36, `cpuThreads`, `(cores, maxThreads) => number`,
     `Raw hardware maximum first, then the caller cap, minimum 1`);
-n(`wllama`, `startLLM`, 224, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`wllama`, `startLLM`, 226, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Pick 4k or 8k context, load the model and projector from stored blobs,`
-    + ` fall back to the cache or network, cap CPU threads, abortable`);
-n(`wllama`, `cached`, 347, `cached`, `(model) => Promise<boolean>`,
+    + ` fall back to the cache or network, cap CPU threads to two with a`
+    + ` vision projector, abortable`);
+n(`wllama`, `cached`, 351, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `hasCache`, 354, `hasCache`, `() => Promise<boolean>`,
+n(`wllama`, `hasCache`, 358, `hasCache`, `() => Promise<boolean>`,
     `Any stored CPU file or any entry in the wllama cache manager`);
-n(`wllama`, `chat`, 196, `chatOn`, `(instance, model, params)`,
+n(`wllama`, `chat`, 198, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 338, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 342, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `remove`, 362, `remove`, `(model) => Promise<void>`,
+n(`wllama`, `remove`, 366, `remove`, `(model) => Promise<void>`,
     `Delete the stored files and the cache entries, including the projector`);
-n(`wllama`, `purge`, 373, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 377, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
@@ -959,25 +968,25 @@ n(`assetsNodeEsm`, `defaultLitertAssets`, 12, `defaultLitertAssets`, `() => Lite
     `Node ESM build: paths resolved from import.meta.url`);
 
 // verification
-n(`harness`, `test`, 88, `test`, `(name, run) => Promise<void>`,
+n(`harness`, `test`, 92, `test`, `(name, run) => Promise<void>`,
     `Runs one case, records the error, the suite keeps going`);
-n(`harness`, `assertions`, 97, `assertions`,
+n(`harness`, `assertions`, 101, `assertions`,
     `assert · assertEqual · deferred · waitFor`,
     `Small synchronous checks and short timing gates`);
-n(`harness`, `modelOf`, 119, `modelOf`, `(id) => ChatModel`,
+n(`harness`, `modelOf`, 123, `modelOf`, `(id) => ChatModel`,
     `Catalog lookup or a failed test`);
-n(`harness`, `runtimeWith`, 125, `runtimeWith`, `(options?) => fake runtime`,
+n(`harness`, `runtimeWith`, 129, `runtimeWith`, `(options?) => fake runtime`,
     `Fake CPU or GPU engine plus createRuntime`);
-n(`harness`, `chatWith`, 138, `chatWith`, `(options?) => fake chat`,
+n(`harness`, `chatWith`, 142, `chatWith`, `(options?) => fake chat`,
     `runtimeWith plus createChatOn`);
-n(`harness`, `streamOf`, 147, `streamOf`, `(...chunks) => AsyncIterable`,
+n(`harness`, `streamOf`, 151, `streamOf`, `(...chunks) => AsyncIterable`,
     `One scripted engine stream`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 173, `definitions`, `65 deferred cases`,
+n(`harness`, `definitions`, 174, `definitions`, `66 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, chat, speed,`
     + ` threads, square`);
-n(`harness`, `main`, 2884, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 2913, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 26, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat and preloadModel run without a DOM`);
@@ -987,7 +996,7 @@ n(`drive`, `serve`, 71, `serve`, `() => Promise<Server>`,
     `Static file server for the built harness on port 17544`);
 n(`drive`, `run`, 95, `run`, `() => Promise<void>`,
     `Spawn chromium headless, attach over WebSocket, collect the report`);
-n(`live`, `main`, 354, `main`, `() => Promise<void>`,
+n(`live`, `main`, 345, `main`, `() => Promise<void>`,
     `Serve the built browser bundle and build/models, then drive one real`
     + ` chat for text, image and audio over CDP`);
 n(`vwebpack`, `vwebpack`, 6, `bundle harness`, `module.exports`,
@@ -1018,7 +1027,7 @@ n(`webpack`, `nodeEsmConfig`, 133, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.5.1`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.5.2`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1875,8 +1884,9 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
                 step([`resolveLlmModel`, `chat.run`],
                     ` Pick the requested model or the device default, resolve`
                     + ` the LiteRT file for this device, reject an unknown model,`
-                    + ` a prompt with no usable turn, or a media turn the selected`
-                    + ` artifact cannot take, then resolve the budgets.`),
+                    + ` an empty prompt with a reported error, or a media turn`
+                    + ` the selected artifact cannot take, then resolve the`
+                    + ` budgets.`),
                 step([`llm.load`],
                     ` Reuse a ready model, join the same load, or abandon a`
                     + ` different one before starting.`),

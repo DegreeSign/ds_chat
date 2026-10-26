@@ -3,8 +3,7 @@
 // Usage: CHROME_BIN=chromium node test/live.cjs [port] [debugPort] [model]
 // Optional: LIVE_ONLY=text,image,audio LIVE_TIMEOUT_MS=...
 // The Gemma 4 GPU model covers text, image and audio. The Qwen CPU model
-// covers text; its image turn is skipped because wllama 3.8.1 deadlocks on the
-// Qwen3-VL projector. Pass qwenImage=1 in LIVE_QUERY to reproduce that hang.
+// covers text and images; its projector is slower and runs on two threads.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -203,14 +202,6 @@ const run = async () => {
     });
 
     await timed("image", async () => {
-        // wllama 3.8.1 deadlocks on the Qwen3-VL projector, opt in to reproduce
-        const qwenImage = new URLSearchParams(location.search).get("qwenImage") == "1";
-        if (model == "qwen3_vl_2b" && !qwenImage) {
-            record("image", true, {
-                skipped: "wllama 3.8.1 Qwen3-VL projector deadlocks",
-            });
-            return;
-        }
         const image = await ask({
             model: chosen,
             logging: true,

@@ -6,7 +6,12 @@ import type {
     MobileNavigator,
 } from './types';
 
+/** Resolved default model, probed once per session */
+let defaultModel: Promise<ChatModelId | undefined> | undefined;
+
 const
+    /** Milliseconds allowed for the WebGPU adapter probe */
+    gpuProbeTimeout = 1500,
     llmModels: ChatModel[] = [
         {
             id: ChatModelId.qwen3_vl_2b,
@@ -73,17 +78,28 @@ const
             ? undefined
             : (navigator as GpuNavigator).gpu;
         if (!gpu) return false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
         try {
-            return !!(await gpu.requestAdapter({
-                powerPreference: `high-performance`,
-            }));
-        } catch { return false; };
+            const adapter = await Promise.race([
+                gpu.requestAdapter({
+                    powerPreference: `high-performance`,
+                }),
+                new Promise<undefined>(resolve => {
+                    timer = setTimeout(() => resolve(undefined), gpuProbeTimeout);
+                }),
+            ]);
+            return !!adapter;
+        } catch { return false; }
+        finally { if (timer) clearTimeout(timer); };
     },
     /** Default model, the GPU one when a WebGPU adapter exists */
-    defaultLlmModel = async (): Promise<ChatModelId | undefined> =>
-        (await gpuAdapter()
-            ? llmModels.find(model => !!model.litert)
-            : llmModels.find(model => !!model.cpu))?.id,
+    defaultLlmModel = async (): Promise<ChatModelId | undefined> => {
+        if (!defaultModel)
+            defaultModel = (async () => (await gpuAdapter()
+                ? llmModels.find(model => !!model.litert)
+                : llmModels.find(model => !!model.cpu))?.id)();
+        return await defaultModel;
+    },
     /** Resolve the requested model or the default of this device */
     resolveLlmModel = async (id?: ChatModelId): Promise<ChatModel | undefined> =>
         id ? findLlmModel(id) : findLlmModel(await defaultLlmModel()),
