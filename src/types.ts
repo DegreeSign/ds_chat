@@ -1,10 +1,12 @@
 import type {
+    BuiltinTool,
     ChatModelId,
     ChatStatus,
     LlmBackend,
     LlmPhase,
     LlmRole,
     LlmStatus,
+    WebSearchProvider,
 } from './enums';
 
 /** One chat message, owned by the host */
@@ -17,6 +19,203 @@ interface ChatMessage {
     audio?: string[],
 }
 
+/** One JSON-safe value passed to or returned from a tool */
+type ChatToolValue =
+    | string
+    | number
+    | boolean
+    | null
+    | ChatToolValue[]
+    | { [key: string]: ChatToolValue };
+
+/** The JSON-schema subset the model reads for a tool parameter */
+interface ChatToolSchema {
+    type?: `object` | `array` | `string` | `number` | `integer`
+        | `boolean` | `null`,
+    description?: string,
+    properties?: Record<string, ChatToolSchema>,
+    required?: string[],
+    items?: ChatToolSchema,
+    enum?: string[],
+}
+
+/** One tool the model may call, run by the package or by the host */
+interface ChatTool {
+    /** Unique tool name, the model calls it by this */
+    name: string,
+    /** What the tool does, read by the model before a call */
+    description?: string,
+    parameters?: ChatToolSchema,
+    execute: (
+        args: Record<string, ChatToolValue>,
+    ) => ChatToolValue | Promise<ChatToolValue>,
+}
+
+/** One call the model made, with its parsed arguments */
+interface ChatToolCall {
+    id: number,
+    name: string,
+    arguments: Record<string, ChatToolValue>,
+}
+
+/** One finished tool call, carrying its value or its error */
+interface ChatToolResult extends ChatToolCall {
+    result?: ChatToolValue,
+    error?: string,
+}
+
+/** Search provider settings of the built-in websearch tool */
+interface WebSearchConfig {
+    provider?: WebSearchProvider,
+    /** Wikipedia language edition, two or three letters plus an optional region */
+    language?: string,
+    /** Results asked of the provider, 1 to 20 */
+    limit?: number,
+    /** Characters kept per snippet */
+    snippetLength?: number,
+    /** Request budget in milliseconds */
+    timeout?: number,
+}
+
+/** One search hit returned to the model */
+interface WebSearchResult {
+    title: string,
+    url: string,
+    snippet: string,
+}
+
+/** Websearch settings with every default and clamp resolved */
+interface WebSearchSettings {
+    provider: WebSearchProvider,
+    language: string,
+    limit: number,
+    snippetLength: number,
+    timeout: number,
+}
+
+/** Fiat and metal rates of one feed fetch, quoted per EUR */
+interface FiatSnapshot {
+    /** Local fetch time, milliseconds */
+    fetchedAt: number,
+    /** Feed timestamp, milliseconds */
+    sourceAt: number,
+    rates: Record<string, number>,
+    yesterday: Record<string, number>,
+}
+
+/** Crypto prices of one feed fetch, quoted in EUR per unit */
+interface CryptoSnapshot {
+    fetchedAt: number,
+    sourceAt: number,
+    prices: Record<string, number>,
+    yesterday: Record<string, number>,
+}
+
+/** The price sections held in memory and in localStorage */
+interface PriceSnapshot {
+    fiat?: FiatSnapshot,
+    crypto?: CryptoSnapshot,
+}
+
+/** Price sections one request has to read */
+interface PriceSections {
+    fiat: boolean,
+    crypto: boolean,
+}
+
+/** One conversion returned to the model */
+interface CurrencyResult {
+    from: string,
+    to: string,
+    amount: number,
+    rate: number,
+    previousRate?: number,
+    change?: number,
+    changePercent?: number,
+    result: number,
+    updatedAt: string,
+    stale: boolean,
+}
+
+/** Tool fields shared by the host input and one generation */
+interface ChatToolParams {
+    /** Extra host tools, appended after the built-ins */
+    tools?: ChatTool[],
+    /** Called before a host or built-in tool runs */
+    onToolCall?: (call: ChatToolCall) => void,
+    /** Called when a tool returns or throws */
+    onToolResult?: (result: ChatToolResult) => void,
+    /** Max tool rounds in one reply, defaults to 4 */
+    maxToolRounds?: number,
+}
+
+/** Host tools resolved against the built-ins for one request */
+interface ResolvedTools {
+    /** Tools offered to the model, host tools replacing a built-in */
+    tools: ChatTool[],
+    /** Whether the host passed tools of its own */
+    explicit: boolean,
+}
+
+/** One evaluated arithmetic expression */
+interface CalculationResult {
+    /** Normalized expression that was evaluated */
+    expression: string,
+    result: number,
+}
+
+/** One page of a Wikipedia search response */
+interface WikipediaPage {
+    key?: string,
+    title?: string,
+    description?: string,
+    excerpt?: string,
+}
+
+/** One Wikipedia search response */
+interface WikipediaResponse {
+    pages?: WikipediaPage[],
+}
+
+/** One DuckDuckGo topic, a group carries nested topics */
+interface DuckDuckGoTopic {
+    FirstURL?: string,
+    Text?: string,
+    Topics?: DuckDuckGoTopic[],
+}
+
+/** One DuckDuckGo instant answer response */
+interface DuckDuckGoResponse {
+    Heading?: string,
+    AbstractText?: string,
+    AbstractURL?: string,
+    Results?: DuckDuckGoTopic[],
+    RelatedTopics?: DuckDuckGoTopic[],
+}
+
+/** One crypto row of the price feed */
+interface PriceCoin {
+    /** Price in EUR per unit */
+    pr?: number,
+    /** Price in EUR per unit, 24 hours earlier */
+    yst?: number,
+}
+
+/** The CoinExams price feed, validated before use */
+interface PriceFeed {
+    rates?: {
+        /** Feed timestamp of the fiat and metal rates, milliseconds */
+        date?: number,
+        /** Units of each symbol per EUR */
+        current?: Record<string, number>,
+        /** The same rates, 24 hours earlier */
+        yesterday?: Record<string, number>,
+    },
+    coins?: Record<string, PriceCoin>,
+    /** Feed timestamp of the crypto prices, milliseconds */
+    date?: number,
+}
+
 /** One LiteRT-LM model file and its capabilities */
 interface LitertArtifact {
     /** File name inside the model repository */
@@ -25,6 +224,8 @@ interface LitertArtifact {
     vision: boolean,
     /** Whether the build accepts audio */
     audio: boolean,
+    /** Whether the build accepts tool declarations */
+    tools: boolean,
 }
 
 /** One on-device model */
@@ -82,6 +283,8 @@ interface ChatStatusSnapshot {
     supportsImages: boolean,
     /** Whether the requested model accepts audio on this backend */
     supportsAudio: boolean,
+    /** Whether the requested model accepts tool declarations on this backend */
+    supportsTools: boolean,
     ready: boolean,
     loading: boolean,
     /** Whether a reply is streaming right now */
@@ -94,7 +297,7 @@ interface ChatStatusSnapshot {
 }
 
 /** One chat request, invoked for every response */
-interface ChatInput {
+interface ChatInput extends ChatToolParams {
     /** Model that answers, the GPU model when WebGPU is available, else the CPU one */
     model?: ChatModelId,
     /** Complete prompt, including the system and user turns */
@@ -105,6 +308,10 @@ interface ChatInput {
     reasoning?: boolean,
     /** Whether package and engine logs reach the console, defaults to off */
     logging?: boolean,
+    /** Built-in tools to attach, all three by default */
+    builtins?: BuiltinTool[] | false,
+    /** Search provider settings */
+    websearch?: WebSearchConfig,
     /** Accumulated reasoning text, streamed while the model thinks */
     onThinking?: (text: string) => void,
     /** Accumulated reply text, streamed while the model answers */
@@ -265,7 +472,7 @@ interface ModelStore {
 }
 
 /** One generation request */
-interface RuntimeChatParams {
+interface RuntimeChatParams extends ChatToolParams {
     messages: ChatMessage[],
     limits: LlmLimits,
     reasoning: boolean,
@@ -295,7 +502,7 @@ interface Runtime {
 }
 
 /** Params for a single on-device chat generation */
-interface EngineChatParams {
+interface EngineChatParams extends ChatToolParams {
     messages: ChatMessage[],
     limits: LlmLimits,
     /** User preference, off unless explicitly turned on */
@@ -408,14 +615,16 @@ interface LitertSettingsParams {
 
 /** One reused LiteRT-LM conversation and the turns it already holds */
 interface LitertSession {
-    /** Live conversation, dropped when a turn cannot be continued */
-    conversation?: import('@litert-lm/core').Conversation,
+    /** Live conversation or tool chat, dropped when a turn cannot be continued */
+    conversation?: import('@litert-lm/core').ChatInterface,
     /** Built turns already sent to the conversation */
     sent: EngineMessage[],
     /** Reasoning flag the conversation was created with */
     reasoning: boolean,
     /** Output token budget the conversation was created with */
     maxTokens: number,
+    /** Tools the conversation was created with */
+    tools?: ChatTool[],
 }
 
 /** Params of one LiteRT-LM chat call */
@@ -487,6 +696,28 @@ export type {
     ChatMessage,
     ChatModel,
     LitertArtifact,
+    ChatTool,
+    ChatToolCall,
+    ChatToolResult,
+    ChatToolSchema,
+    ChatToolValue,
+    ChatToolParams,
+    ResolvedTools,
+    CalculationResult,
+    WebSearchConfig,
+    WebSearchResult,
+    WebSearchSettings,
+    FiatSnapshot,
+    CryptoSnapshot,
+    PriceSnapshot,
+    PriceSections,
+    CurrencyResult,
+    WikipediaPage,
+    WikipediaResponse,
+    DuckDuckGoTopic,
+    DuckDuckGoResponse,
+    PriceCoin,
+    PriceFeed,
     LlmLimits,
     ChatStatusSnapshot,
     ChatInput,

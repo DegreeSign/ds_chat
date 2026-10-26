@@ -6,6 +6,8 @@ export {
     LlmBackend,
     LlmPhase,
     ChatModelId,
+    BuiltinTool,
+    WebSearchProvider,
 } from './enums';
 export type {
     ChatMessage,
@@ -15,4 +17,11 @@ export type {
     ChatPreloadInput,
     CancelChat,
     WllamaAssets,
+    ChatTool,
+    ChatToolCall,
+    ChatToolResult,
+    ChatToolSchema,
+    ChatToolValue,
+    WebSearchConfig,
+    WebSearchResult,
 } from './types';

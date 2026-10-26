@@ -1,1 +1,3 @@
+/*! For license information please see degreesign.min.js.LICENSE.txt */
+
 /*! MIT License. DegreeSign Chat SDK */

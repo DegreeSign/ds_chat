@@ -39,6 +39,16 @@ The weights download at runtime and are not part of this package.
 - Source: https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm
 - Contents: the Gemma 4 E2B multimodal checkpoint in `.litertlm` form.
 
+## Data feeds
+
+### CoinExams price feed
+
+- Source: https://srv.coinexams.com/data.json
+- Contents: EUR exchange rates for fiat currencies and metals, plus crypto
+  prices with their 24-hour values.
+- Purpose: the built-in `currency` tool. The package fetches the whole file on
+  demand, caches it on the device and sends no key.
+
 ## Attribution
 
 Each engine and weight set remains the property of its authors and is governed

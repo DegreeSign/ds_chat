@@ -22,5 +22,7 @@ resolveLlmModel: (id?: ChatModelId) => Promise<ChatModel | undefined>,
 /** Whether a model accepts images */
 supportsImages: (model: ChatModel, mobile?: boolean) => boolean, 
 /** Whether a model accepts audio */
-supportsAudio: (model: ChatModel, mobile?: boolean) => boolean;
-export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileDevice, litertArtifact, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };
+supportsAudio: (model: ChatModel, mobile?: boolean) => boolean, 
+/** Whether a model accepts tool declarations */
+supportsTools: (model: ChatModel, mobile?: boolean) => boolean;
+export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileDevice, litertArtifact, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, supportsTools, };

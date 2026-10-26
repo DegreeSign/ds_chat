@@ -28,6 +28,7 @@ import {
     resolveLlmModel,
     supportsAudio,
     supportsImages,
+    supportsTools,
 } from "../src/models";
 import {
     cpuFiles,
@@ -38,9 +39,12 @@ import {
 import {
     cacheModel,
     continuesHistory,
+    engineTool,
     litertSettings,
+    sameTools,
     streamLitert,
     toLitertMessages,
+    toolRounds,
     visionTokens,
 } from "../src/engines/litert";
 import {
@@ -58,20 +62,52 @@ import {
 import {
     ChatModelId,
     ChatStatus,
+    BuiltinTool,
     LlmBackend,
     LlmPhase,
     LlmRole,
     LlmStatus,
+    WebSearchProvider,
 } from "../src/enums";
+import {
+    builtinTools,
+    resolveChatTools,
+} from "../src/tools";
+import {
+    calculate,
+    calculateTool,
+    evaluateExpression,
+    normalizeExpression,
+} from "../src/tools/calculator";
+import {
+    duckDuckGoResults,
+    searchSettings,
+    webSearchTool,
+    wikipediaResults,
+} from "../src/tools/search";
+import {
+    convert,
+    resetPrices,
+    sectionsFor,
+} from "../src/tools/currency";
+import {
+    clampNumber,
+    decodeEntity,
+    plainText,
+} from "../src/tools/text";
 import type {
     ChatMessage,
     ChatModel,
     ChatStatusSnapshot,
+    ChatTool,
+    ChatToolCall,
+    ChatToolResult,
     EngineChatParams,
     EngineMessage,
     LitertEngine,
     LitertModule,
     LitertSession,
+    PriceSnapshot,
 } from "../src/types";
 import type { FakeEngineOptions } from "./fixtures.js";
 import { createFakeEngine } from "./fixtures.js";
@@ -169,7 +205,60 @@ const
             side,
         );
         return canvas.toDataURL(`image/jpeg`, 0.95);
-    };
+    },
+    /** Run one test with a stubbed fetch, restoring the original. */
+    withFetch = async (
+        impl: typeof fetch,
+        run: () => Promise<void>,
+    ): Promise<void> => {
+        const original = globalThis.fetch;
+        globalThis.fetch = impl;
+        try { await run(); } finally { globalThis.fetch = original; };
+    },
+    /** One JSON response for a stubbed fetch. */
+    jsonResponse = (body: unknown, status = 200): Response =>
+        new Response(JSON.stringify(body), {
+            status,
+            headers: { 'content-type': `application/json` },
+        }),
+    /** The message of one failure, empty when it resolved. */
+    errorOf = async (run: () => Promise<unknown>): Promise<string> => {
+        try {
+            await run();
+            return ``;
+        } catch (error) {
+            return (error as Error).message;
+        };
+    },
+    /** Stub the clock and restore it when the test ends. */
+    withClock = (start: number): {
+        now: () => number,
+        at: (value: number) => void,
+        done: () => void,
+    } => {
+        const
+            original = Date.now,
+            state = { value: start };
+        Date.now = () => state.value;
+        return {
+            now: () => state.value,
+            at: value => { state.value = value; },
+            done: () => { Date.now = original; },
+        };
+    },
+    /** The storage key of the currency cache. */
+    priceStorageKey = `degreesign-chat-prices-v1`,
+    /** Drop the stored price cache. */
+    clearPriceStorage = () => {
+        try { localStorage.removeItem(priceStorageKey); } catch { };
+    },
+    /** One tool for the resolution tests. */
+    toolNamed = (name: string, execute?: ChatTool[`execute`]): ChatTool => ({
+        name,
+        description: `${name} tool`,
+        parameters: { type: `object`, properties: {} },
+        execute: execute ?? (() => `ok`),
+    });
 
 const definitions: Array<{
     name: string;
@@ -187,12 +276,14 @@ const definitions: Array<{
                 assertEqual(
                     names.join(`,`),
                     [
+                        `BuiltinTool`,
                         `ChatModelId`,
                         `ChatStatus`,
                         `LlmBackend`,
                         `LlmPhase`,
                         `LlmRole`,
                         `LlmStatus`,
+                        `WebSearchProvider`,
                         `createChat`,
                         `preloadModel`,
                     ].join(`,`),
@@ -209,6 +300,19 @@ const definitions: Array<{
                 assertEqual(LlmRole.assistant, `assistant`, `assistant role`);
                 assertEqual(ChatModelId.qwen3_vl_2b, `qwen3-vl-2b`, `qwen id`);
                 assertEqual(ChatModelId.gemma4_e2b, `gemma4-e2b`, `gemma id`);
+                assertEqual(BuiltinTool.websearch, `websearch`, `websearch tool`);
+                assertEqual(BuiltinTool.calculate, `calculate`, `calculate tool`);
+                assertEqual(BuiltinTool.currency, `currency`, `currency tool`);
+                assertEqual(
+                    WebSearchProvider.wikipedia,
+                    `wikipedia`,
+                    `wikipedia provider`,
+                );
+                assertEqual(
+                    WebSearchProvider.duckduckgo,
+                    `duckduckgo`,
+                    `duckduckgo provider`,
+                );
             },
         },
         {
@@ -246,6 +350,14 @@ const definitions: Array<{
                 );
                 assertEqual(gemma.litert?.vision, true, `gemma vision`);
                 assertEqual(gemma.litert?.audio, true, `gemma audio`);
+                assertEqual(gemma.litert?.tools, true, `gemma tools`);
+                assertEqual(supportsTools(modelOf(ChatModelId.gemma4_e2b)), true, `gpu tools`);
+                assertEqual(supportsTools(modelOf(ChatModelId.qwen3_vl_2b)), false, `cpu tools`);
+                assertEqual(
+                    supportsTools(modelOf(ChatModelId.gemma4_e2b), true),
+                    true,
+                    `mobile tools`,
+                );
                 assertEqual(
                     gemma.litert?.web?.file,
                     `gemma-4-E2B-it-gpu.litertlm`,
@@ -286,6 +398,7 @@ const definitions: Array<{
                         file: `text-only.litertlm`,
                         vision: false,
                         audio: false,
+                        tools: false,
                     },
                 };
                 assertEqual(
@@ -302,6 +415,7 @@ const definitions: Array<{
                         file: `audio.litertlm`,
                         vision: false,
                         audio: true,
+                        tools: false,
                     },
                 };
                 assertEqual(supportsImages(audioGpu), false, `gpu audio images`);
@@ -935,6 +1049,7 @@ const definitions: Array<{
                                 file: `text-only.litertlm`,
                                 vision: false,
                                 audio: false,
+                                tools: false,
                             },
                         },
                         limits: defaultLlmLimits,
@@ -950,6 +1065,7 @@ const definitions: Array<{
                                 file: `audio-only.litertlm`,
                                 vision: false,
                                 audio: true,
+                                tools: false,
                             },
                         },
                         limits: defaultLlmLimits,
@@ -2905,6 +3021,1087 @@ const definitions: Array<{
                 assertEqual(textOnly[0].content, `plain`, `text kept`);
                 const bad = await resizeImageUrl(`not-an-image`);
                 assertEqual(bad, `not-an-image`, `bad url kept`);
+            },
+        },
+        {
+            name: `tools/calculator`,
+            run: () => {
+                const
+                    fails = (input: string): string => {
+                        try {
+                            calculate(input);
+                            return ``;
+                        } catch (error) {
+                            return (error as Error).message;
+                        };
+                    },
+                    cases: Array<[string, number]> = [
+                        [`2+3*4`, 14],
+                        [`(2+3)*4`, 20],
+                        [`-2^2`, -4],
+                        [`2^3^2`, 512],
+                        [`2^-2`, 0.25],
+                        [`200*15%`, 30],
+                        [`200+10%`, 200.1],
+                        [`1,234+1`, 1235],
+                        [`3×4÷2−1`, 5],
+                        [`+7`, 7],
+                        [`0.5^0.5`, 0.707106781187],
+                        [`1/3`, 0.333333333333],
+                        [`0.1+0.2`, 0.3],
+                        [`123456789*2`, 246913578],
+                        [`0.0000001*0.0000001`, 1e-14],
+                        [`100000*2`, 200000],
+                    ];
+                for (const [expression, expected] of cases)
+                    assertEqual(calculate(expression).result, expected, expression);
+                assertEqual(calculate(` 2 × 3 `).expression, `2*3`, `normalized`);
+                assertEqual(normalizeExpression(`1,000 ÷ 4`), `1000/4`, `normalize`);
+                assertEqual(evaluateExpression(`2*(3+4)`), 14, `evaluate`);
+                assertEqual(fails(``), `Expression is empty`, `empty`);
+                assertEqual(fails(`   `), `Expression is empty`, `blank`);
+                assertEqual(fails(`2+`), `Expected a number`, `missing operand`);
+                assertEqual(fails(`(2+3`), `Unbalanced parentheses`, `unbalanced`);
+                assertEqual(fails(`2(3+4)`), `Unexpected character`, `implicit product`);
+                assertEqual(fails(`1/0`), `Division by zero`, `divide by zero`);
+                assertEqual(fails(`9^9^9`), `Result is not a finite number`, `overflow`);
+                assertEqual(fails(`2 & 3`), `Unsupported character`, `character`);
+                assertEqual(fails(`1`.repeat(201)), `Expression is too long`, `length`);
+                assertEqual(calculateTool.name, `calculate`, `tool name`);
+                assertEqual(
+                    calculateTool.parameters?.required?.[0],
+                    `expression`,
+                    `required`,
+                );
+                const output = calculateTool.execute({ expression: `6*7` });
+                assertEqual((output as { result: number }).result, 42, `tool answer`);
+                let missing = ``;
+                try { calculateTool.execute({}); }
+                catch (error) { missing = (error as Error).message; };
+                assertEqual(missing, `Missing expression`, `missing argument`);
+            },
+        },
+        {
+            name: `tools/text`,
+            run: () => {
+                assertEqual(
+                    plainText(`<b>a</b>&nbsp;&amp;&#65;&#x42;&unknown;`, 40),
+                    `a &AB&unknown;`,
+                    `markup and entities`,
+                );
+                assertEqual(plainText(`one   two\nthree`, 100), `one two three`, `spaces`);
+                assertEqual(plainText(`abcdef`, 4), `abcd`, `clamp`);
+                assertEqual(plainText(`  abcdef  `, 3), `abc`, `clamp after trim`);
+                assertEqual(decodeEntity(`#39`), `'`, `numeric entity`);
+                assertEqual(decodeEntity(`#x41`), `A`, `hex entity`);
+                assertEqual(decodeEntity(`#0`), `#0`, `zero code`);
+                assertEqual(decodeEntity(`#x110000`), `#x110000`, `out of range`);
+                assertEqual(decodeEntity(`unknown`), `unknown`, `unknown entity`);
+                assertEqual(clampNumber(undefined, 1, 20, 3), 3, `fallback`);
+                assertEqual(clampNumber(50, 1, 20, 3), 20, `max`);
+                assertEqual(clampNumber(-5, 1, 20, 3), 1, `min`);
+                assertEqual(clampNumber(NaN, 1, 20, 3), 3, `nan`);
+                assertEqual(clampNumber(Infinity, 1, 20, 3), 3, `infinity`);
+            },
+        },
+        {
+            name: `tools/search wikipedia`,
+            run: async () => {
+                const
+                    body = {
+                        pages: [
+                            {
+                                key: `Earth`,
+                                title: `Earth`,
+                                description: `Third planet`,
+                                excerpt: `Earth is <span class="searchmatch">the</span>`
+                                    + ` third &amp; only`,
+                            },
+                            {
+                                key: `Mars`,
+                                title: `Mars`,
+                                excerpt: `&#39;Red&#39; planet`,
+                            },
+                            { title: `No key` },
+                        ],
+                    },
+                    calls: string[] = [];
+                await withFetch(async input => {
+                    calls.push(`${input}`);
+                    return jsonResponse(body);
+                }, async () => {
+                    const results = await wikipediaResults(
+                        searchSettings({ limit: 2 }),
+                        `earth & mars`,
+                    );
+                    assertEqual(results.length, 2, `two pages`);
+                    assertEqual(
+                        calls[0],
+                        `https://en.wikipedia.org/w/rest.php/v1/search/page`
+                            + `?q=earth%20%26%20mars&limit=2`,
+                        `wikipedia url`,
+                    );
+                    assertEqual(results[0].title, `Earth`, `title`);
+                    assertEqual(
+                        results[0].url,
+                        `https://en.wikipedia.org/wiki/Earth`,
+                        `url`,
+                    );
+                    assertEqual(
+                        results[0].snippet,
+                        `Third planet Earth is the third & only`,
+                        `snippet`,
+                    );
+                    assertEqual(results[1].snippet, `'Red' planet`, `entity snippet`);
+                });
+                assertEqual(searchSettings({ language: `de` }).language, `de`, `language`);
+                assertEqual(searchSettings({ language: `pt-BR` }).language, `pt-BR`, `region`);
+                assertEqual(
+                    searchSettings({ language: `not a language` }).language,
+                    `en`,
+                    `language fallback`,
+                );
+                assertEqual(searchSettings().limit, 3, `default limit`);
+                assertEqual(searchSettings({ limit: 100 }).limit, 20, `max limit`);
+                assertEqual(searchSettings({ limit: 0 }).limit, 1, `min limit`);
+                assertEqual(searchSettings().snippetLength, 400, `default snippet`);
+                assertEqual(
+                    searchSettings({ snippetLength: 9000 }).snippetLength,
+                    4000,
+                    `max snippet`,
+                );
+                assertEqual(searchSettings().timeout, 8000, `default timeout`);
+                assertEqual(searchSettings({ timeout: 10 }).timeout, 1000, `min timeout`);
+                assertEqual(
+                    searchSettings({ provider: WebSearchProvider.duckduckgo }).provider,
+                    WebSearchProvider.duckduckgo,
+                    `provider`,
+                );
+                await withFetch(async () => jsonResponse(body), async () => {
+                    const results = await wikipediaResults(
+                        searchSettings({ snippetLength: 10 }),
+                        `x`,
+                    );
+                    assertEqual(results[0].snippet, `Third plan`, `snippet cap`);
+                });
+                const tool = webSearchTool();
+                assertEqual(tool.name, `websearch`, `tool name`);
+                assertEqual(
+                    tool.description,
+                    `Search Wikipedia and return a few matching articles.`,
+                    `wikipedia description`,
+                );
+                assertEqual(tool.parameters?.required?.[0], `query`, `required`);
+            },
+        },
+        {
+            name: `tools/search duckduckgo`,
+            run: async () => {
+                const
+                    calls: string[] = [],
+                    body = {
+                        Heading: `Earth`,
+                        AbstractText: `Third planet <b>from</b> the Sun`,
+                        AbstractURL: `https://example.com/earth`,
+                        Results: [
+                            { FirstURL: `https://example.com/earth`, Text: `duplicate` },
+                            { FirstURL: `https://example.com/moon`, Text: `The Moon` },
+                        ],
+                        RelatedTopics: [
+                            { FirstURL: `https://example.com/mars`, Text: `Mars` },
+                            {
+                                Topics: [
+                                    { FirstURL: `https://example.com/sun`, Text: `The Sun` },
+                                ],
+                            },
+                        ],
+                    },
+                    settings = searchSettings({
+                        provider: WebSearchProvider.duckduckgo,
+                        limit: 10,
+                    });
+                await withFetch(async input => {
+                    calls.push(`${input}`);
+                    return jsonResponse(body);
+                }, async () => {
+                    const results = await duckDuckGoResults(settings, `planet`);
+                    assertEqual(
+                        calls[0],
+                        `https://api.duckduckgo.com/?format=json&no_html=1`
+                            + `&skip_disambig=1&q=planet`,
+                        `duckduckgo url`,
+                    );
+                    assertEqual(results.length, 4, `deduplicated hits`);
+                    assertEqual(results[0].title, `Earth`, `abstract heading`);
+                    assertEqual(
+                        results[0].snippet,
+                        `Third planet from the Sun`,
+                        `abstract text`,
+                    );
+                    assertEqual(results[1].url, `https://example.com/moon`, `result url`);
+                    assertEqual(results[2].url, `https://example.com/mars`, `topic url`);
+                    assertEqual(results[3].url, `https://example.com/sun`, `nested topic`);
+                    const capped = await duckDuckGoResults(
+                        searchSettings({
+                            provider: WebSearchProvider.duckduckgo,
+                            limit: 1,
+                        }),
+                        `planet`,
+                    );
+                    assertEqual(capped.length, 1, `limit cap`);
+                });
+                await withFetch(async () => jsonResponse({}), async () => {
+                    const results = await duckDuckGoResults(settings, `nothing`);
+                    assertEqual(results.length, 0, `empty answer`);
+                });
+                assertEqual(
+                    webSearchTool({ provider: WebSearchProvider.duckduckgo }).description,
+                    `Search DuckDuckGo for an instant answer and related topics.`,
+                    `duckduckgo description`,
+                );
+            },
+        },
+        {
+            name: `tools/search errors`,
+            run: async () => {
+                const fail = () => errorOf(
+                    () => wikipediaResults(
+                        searchSettings({ timeout: 1000 }),
+                        `x`,
+                    ),
+                );
+                let message = ``;
+                await withFetch(
+                    async () => new Response(`no`, { status: 500 }),
+                    async () => { message = await fail(); },
+                );
+                assertEqual(message, `Search failed with 500`, `status error`);
+                await withFetch(
+                    (_input, init) => new Promise<Response>((_resolve, reject) => {
+                        init?.signal?.addEventListener(
+                            `abort`,
+                            () => reject(new DOMException(`Aborted`, `AbortError`)),
+                            { once: true },
+                        );
+                    }),
+                    async () => { message = await fail(); },
+                );
+                assertEqual(message, `Search timed out after 1000 ms`, `timeout error`);
+            },
+        },
+        {
+            name: `tools/currency rates`,
+            run: async () => {
+                const
+                    fetchedAt = 1760000000000,
+                    feed = {
+                        rates: {
+                            date: fetchedAt,
+                            current: {
+                                USD: 1.1,
+                                GBP: 0.85,
+                                CHF: 0.95,
+                                XAU: 0.00003,
+                                XPT: 0,
+                            },
+                            yesterday: {
+                                USD: 1.05,
+                                GBP: 0.86,
+                                XAU: 0.000031,
+                                XPT: 0,
+                            },
+                        },
+                        coins: {
+                            BTC: { pr: 60000, yst: 58000 },
+                            ETH: { pr: 2500, yst: 2600 },
+                            USD: { pr: 0.9, yst: 0.91 },
+                            SOL: { pr: 100 },
+                        },
+                        date: fetchedAt + 3600000,
+                    };
+                resetPrices();
+                clearPriceStorage();
+                await withFetch(async () => jsonResponse(feed), async () => {
+                    const fiat = await convert({ from: `gbp`, amount: 100 });
+                    assertEqual(fiat.from, `GBP`, `upper case`);
+                    assertEqual(fiat.to, `EUR`, `default target`);
+                    assertEqual(fiat.amount, 100, `amount`);
+                    assertEqual(fiat.rate, 1.1764706, `fiat rate`);
+                    assertEqual(fiat.previousRate, 1.1627907, `fiat previous`);
+                    assertEqual(fiat.change, 0.013679891, `fiat change`);
+                    assertEqual(fiat.changePercent, 1.176, `fiat percent`);
+                    assertEqual(fiat.result, 117.64706, `fiat result`);
+                    assertEqual(fiat.stale, false, `not stale`);
+                    assertEqual(
+                        fiat.updatedAt,
+                        new Date(fetchedAt).toISOString(),
+                        `fiat source time`,
+                    );
+                    const coin = await convert({ from: `USD` });
+                    assertEqual(coin.rate, 0.9, `crypto wins over fiat`);
+                    assertEqual(coin.changePercent, -1.099, `coin percent`);
+                    const btc = await convert({ from: `BTC` });
+                    assertEqual(btc.rate, 60000, `crypto price`);
+                    assertEqual(btc.previousRate, 58000, `crypto previous`);
+                    assertEqual(btc.change, 2000, `crypto change`);
+                    assertEqual(btc.changePercent, 3.448, `crypto percent`);
+                    assertEqual(
+                        btc.updatedAt,
+                        new Date(feed.date).toISOString(),
+                        `crypto source time`,
+                    );
+                    const cross = await convert({ from: `BTC`, to: `USD`, amount: 0.5 });
+                    assertEqual(cross.rate, 66666.667, `cross rate`);
+                    assertEqual(cross.result, 33333.333, `cross result`);
+                    assertEqual(
+                        cross.updatedAt,
+                        new Date(feed.date).toISOString(),
+                        `crypto only source time`,
+                    );
+                    const mixed = await convert({ from: `BTC`, to: `GBP` });
+                    assertEqual(
+                        mixed.updatedAt,
+                        new Date(fetchedAt).toISOString(),
+                        `oldest source time`,
+                    );
+                    const metal = await convert({ from: `XAU`, amount: 2 });
+                    assertEqual(metal.rate, 33333.333, `metal rate`);
+                    assertEqual(metal.result, 66666.667, `metal result`);
+                    const sol = await convert({ from: `SOL` });
+                    assertEqual(sol.previousRate, undefined, `no coin previous`);
+                    const chf = await convert({ from: `CHF` });
+                    assertEqual(chf.previousRate, undefined, `no fiat previous`);
+                    const same = await convert({ from: `eur`, to: `eur`, amount: 5 });
+                    assertEqual(same.rate, 1, `same currency rate`);
+                    assertEqual(same.change, 0, `same currency change`);
+                    assertEqual(same.changePercent, 0, `same currency percent`);
+                    assertEqual(same.result, 5, `same currency result`);
+                });
+                await withFetch(async () => jsonResponse(feed), async () => {
+                    assertEqual(
+                        await errorOf(() => convert({ from: `XPT` })),
+                        `Unavailable quote for XPT`,
+                        `unavailable metal`,
+                    );
+                    assertEqual(
+                        await errorOf(() => convert({ from: `ZZZ` })),
+                        `Unknown symbol ZZZ`,
+                        `unknown symbol`,
+                    );
+                    assertEqual(
+                        await errorOf(() => convert({ from: `GBP`, amount: `x` as never })),
+                        `Invalid amount`,
+                        `bad amount`,
+                    );
+                    assertEqual(
+                        await errorOf(() => convert({})),
+                        `Missing from`,
+                        `missing from`,
+                    );
+                    assertEqual(
+                        await errorOf(() => convert({ from: `GBP`, to: `` })),
+                        `Missing to`,
+                        `missing to`,
+                    );
+                });
+            },
+        },
+        {
+            name: `tools/currency cache`,
+            run: async () => {
+                const
+                    feed = (price: number, chf: number) => ({
+                        rates: {
+                            date: 1760000000000,
+                            current: { GBP: 0.85, CHF: chf },
+                            yesterday: { GBP: 0.86, CHF: chf },
+                        },
+                        coins: { BTC: { pr: price, yst: price } },
+                        date: 1760003600000,
+                    }),
+                    clock = withClock(1760000000000);
+                let fetches = 0;
+                const response = async () => {
+                    fetches += 1;
+                    return jsonResponse(fetchCount(fetches));
+                };
+                const fetchCount = (count: number) => count == 1
+                    ? feed(60000, 0.95)
+                    : feed(70000, 2);
+                try {
+                    resetPrices();
+                    clearPriceStorage();
+                    await withFetch(response, async () => {
+                        const first = await convert({ from: `BTC` });
+                        assertEqual(first.rate, 60000, `first price`);
+                        await convert({ from: `BTC` });
+                        assertEqual(fetches, 1, `one fetch inside the ttl`);
+                        clock.at(clock.now() + 4 * 60_000);
+                        await convert({ from: `BTC` });
+                        assertEqual(fetches, 1, `crypto fresh at four minutes`);
+                        clock.at(clock.now() + 2 * 60_000);
+                        const next = await convert({ from: `BTC` });
+                        assertEqual(fetches, 2, `crypto refetched after five minutes`);
+                        assertEqual(next.rate, 70000, `new coin price`);
+                        const fiat = await convert({ from: `CHF` });
+                        assertEqual(fetches, 2, `fiat still fresh`);
+                        assertEqual(fiat.rate, 1.0526316, `crypto refresh kept fiat`);
+                        clock.at(clock.now() + 55 * 60_000);
+                        const hourly = await convert({ from: `CHF` });
+                        assertEqual(fetches, 3, `fiat refetched after an hour`);
+                        assertEqual(hourly.rate, 0.5, `new fiat price`);
+                    });
+                    resetPrices();
+                    clearPriceStorage();
+                    fetches = 0;
+                    await withFetch(response, async () => {
+                        const values = await Promise.all([
+                            convert({ from: `BTC` }),
+                            convert({ from: `GBP` }),
+                        ]);
+                        assertEqual(fetches, 1, `one shared fetch`);
+                        assertEqual(values[0].rate, 60000, `shared coin`);
+                        assertEqual(values[1].rate, 1.1764706, `shared fiat`);
+                        assertEqual(
+                            JSON.stringify(sectionsFor([`USD`])),
+                            `{"fiat":true,"crypto":true}`,
+                            `unknown symbol needs both`,
+                        );
+                        assertEqual(
+                            JSON.stringify(sectionsFor([`GBP`])),
+                            `{"fiat":true,"crypto":false}`,
+                            `fiat symbol`,
+                        );
+                        assertEqual(
+                            JSON.stringify(sectionsFor([`BTC`])),
+                            `{"fiat":false,"crypto":true}`,
+                            `crypto symbol`,
+                        );
+                        assertEqual(
+                            JSON.stringify(sectionsFor([`EUR`])),
+                            `{"fiat":false,"crypto":false}`,
+                            `base symbol`,
+                        );
+                    });
+                } finally {
+                    clock.done();
+                };
+            },
+        },
+        {
+            name: `tools/currency failure`,
+            run: async () => {
+                const
+                    feed = {
+                        rates: {
+                            date: 1760000000000,
+                            current: { GBP: 0.85 },
+                            yesterday: { GBP: 0.86 },
+                        },
+                        coins: { BTC: { pr: 60000, yst: 58000 } },
+                        date: 1760003600000,
+                    },
+                    clock = withClock(1760000000000);
+                let failed = 0;
+                const failing = async () => {
+                    failed += 1;
+                    throw new Error(`offline`);
+                };
+                try {
+                    resetPrices();
+                    clearPriceStorage();
+                    await withFetch(async () => jsonResponse(feed), async () => {
+                        await convert({ from: `BTC` });
+                    });
+                    clock.at(clock.now() + 10 * 60_000);
+                    await withFetch(failing, async () => {
+                        const cached = await convert({ from: `BTC` });
+                        assertEqual(cached.rate, 60000, `cached price kept`);
+                        assertEqual(cached.stale, true, `stale flag`);
+                        assertEqual(failed, 1, `one attempt`);
+                        await convert({ from: `BTC` });
+                        assertEqual(failed, 1, `backoff holds`);
+                        clock.at(clock.now() + 31_000);
+                        await convert({ from: `BTC` });
+                        assertEqual(failed, 2, `retried after the backoff`);
+                    });
+                    resetPrices();
+                    clearPriceStorage();
+                    await withFetch(failing, async () => {
+                        assertEqual(
+                            await errorOf(() => convert({ from: `BTC` })),
+                            `Prices unavailable offline`,
+                            `no cache and no network`,
+                        );
+                    });
+                } finally {
+                    clock.done();
+                };
+            },
+        },
+        {
+            name: `tools/currency offline`,
+            run: async () => {
+                const
+                    feed = {
+                        rates: {
+                            date: 1760000000000,
+                            current: { GBP: 0.85 },
+                            yesterday: {},
+                        },
+                        coins: { BTC: { pr: 60000, yst: 58000 } },
+                        date: 1760003600000,
+                    },
+                    clock = withClock(1760000000000),
+                    nav = navigator as Navigator & { onLine: boolean };
+                let fetches = 0;
+                try {
+                    resetPrices();
+                    clearPriceStorage();
+                    await withFetch(async () => {
+                        fetches += 1;
+                        return jsonResponse(feed);
+                    }, async () => {
+                        await convert({ from: `BTC` });
+                        Object.defineProperty(nav, `onLine`, {
+                            configurable: true,
+                            value: false,
+                        });
+                        clock.at(clock.now() + 10 * 60_000);
+                        const offline = await convert({ from: `BTC` });
+                        assertEqual(fetches, 1, `offline skips the fetch`);
+                        assertEqual(offline.rate, 60000, `offline price`);
+                        assertEqual(offline.stale, false, `offline is not stale`);
+                    });
+                } finally {
+                    delete (nav as { onLine?: boolean }).onLine;
+                    clock.done();
+                };
+            },
+        },
+        {
+            name: `tools/currency storage`,
+            run: async () => {
+                const
+                    feed = {
+                        rates: {
+                            date: 1760000000000,
+                            current: { GBP: 0.85 },
+                            yesterday: { GBP: 0.86 },
+                        },
+                        coins: { BTC: { pr: 60000, yst: 58000 } },
+                        date: 1760003600000,
+                    },
+                    clock = withClock(1760000000000);
+                try {
+                    resetPrices();
+                    clearPriceStorage();
+                    await withFetch(async () => jsonResponse(feed), async () => {
+                        await convert({ from: `BTC` });
+                    });
+                    const saved = JSON.parse(
+                        localStorage.getItem(priceStorageKey) ?? `{}`,
+                    ) as PriceSnapshot;
+                    assertEqual(saved.crypto?.prices?.BTC, 60000, `saved crypto`);
+                    assertEqual(saved.fiat?.rates?.GBP, 0.85, `saved fiat`);
+                    resetPrices();
+                    let fetches = 0;
+                    await withFetch(async () => {
+                        fetches += 1;
+                        throw new Error(`offline`);
+                    }, async () => {
+                        const hydrated = await convert({ from: `BTC` });
+                        assertEqual(hydrated.rate, 60000, `hydrated price`);
+                        assertEqual(hydrated.stale, false, `hydrated freshness`);
+                        assertEqual(fetches, 0, `no fetch inside the ttl`);
+                    });
+                    resetPrices();
+                    await withFetch(async () => jsonResponse(feed), async () => {
+                        await convert({ from: `BTC` });
+                    });
+                    clock.at(clock.now() + 6 * 60_000);
+                    await withFetch(
+                        async () => jsonResponse({
+                            ...feed,
+                            date: feed.date - 60_000,
+                            coins: { BTC: { pr: 1, yst: 1 } },
+                        }),
+                        async () => {
+                            const newer = await convert({ from: `BTC` });
+                            assertEqual(newer.rate, 60000, `newer source kept`);
+                        },
+                    );
+                } finally {
+                    clock.done();
+                    clearPriceStorage();
+                };
+            },
+        },
+        {
+            name: `tools/resolution`,
+            run: () => {
+                const
+                    quiet = {
+                        messages: [userMessage(`hi`)],
+                        onResponse: () => { },
+                    },
+                    names = (tools: ChatTool[]) => tools.map(tool => tool.name).join(`,`),
+                    defaults = resolveChatTools(quiet);
+                assertEqual(defaults.explicit, false, `no host tools`);
+                assertEqual(
+                    names(defaults.tools),
+                    `websearch,calculate,currency`,
+                    `default built-ins`,
+                );
+                assertEqual(
+                    names(builtinTools([BuiltinTool.currency, BuiltinTool.websearch])),
+                    `currency,websearch`,
+                    `builtin order`,
+                );
+                const none = resolveChatTools({ ...quiet, builtins: false });
+                assertEqual(none.tools.length, 0, `builtins off`);
+                const picked = resolveChatTools({
+                    ...quiet,
+                    builtins: [BuiltinTool.calculate],
+                });
+                assertEqual(names(picked.tools), `calculate`, `picked builtins`);
+                const mine = toolNamed(`websearch`);
+                const override = resolveChatTools({ ...quiet, tools: [mine] });
+                assertEqual(override.explicit, true, `host tools present`);
+                assertEqual(
+                    names(override.tools),
+                    `calculate,currency,websearch`,
+                    `host override`,
+                );
+                assertEqual(
+                    override.tools[override.tools.length - 1],
+                    mine,
+                    `host tool kept`,
+                );
+                const extra = toolNamed(`lookup`);
+                const host = resolveChatTools({ ...quiet, tools: [extra] });
+                assertEqual(
+                    names(host.tools),
+                    `websearch,calculate,currency,lookup`,
+                    `host tools appended`,
+                );
+                let duplicate = ``;
+                try {
+                    resolveChatTools({
+                        ...quiet,
+                        tools: [toolNamed(`lookup`), toolNamed(`lookup`)],
+                    });
+                } catch (error) { duplicate = (error as Error).message; };
+                assertEqual(duplicate, `Duplicate tool name lookup`, `duplicate`);
+                const configured = resolveChatTools({
+                    ...quiet,
+                    websearch: { provider: WebSearchProvider.duckduckgo },
+                });
+                assertEqual(
+                    configured.tools[0].description,
+                    `Search DuckDuckGo for an instant answer and related topics.`,
+                    `search config`,
+                );
+            },
+        },
+        {
+            name: `chat/tools on the gpu model`,
+            run: async () => {
+                const
+                    calls: ChatToolCall[] = [],
+                    results: ChatToolResult[] = [],
+                    statuses: ChatStatusSnapshot[] = [],
+                    { chat, requests } = chatWith({
+                        backend: LlmBackend.gpu,
+                        chatImpl: async params => {
+                            const args = { expression: `2+2` };
+                            params.onToolCall?.({
+                                id: 1,
+                                name: `calculate`,
+                                arguments: args,
+                            });
+                            params.onToolResult?.({
+                                id: 1,
+                                name: `calculate`,
+                                arguments: args,
+                                result: { expression: `2+2`, result: 4 },
+                            });
+                            params.onText(`ok`);
+                            return `ok`;
+                        },
+                    }),
+                    cancel = chat({
+                        model: ChatModelId.gemma4_e2b,
+                        messages: [userMessage(`hi`)],
+                        maxToolRounds: 9,
+                        onToolCall: value => calls.push(value),
+                        onToolResult: value => results.push(value),
+                        onResponse: () => { },
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(typeof cancel, `function`, `cancel handle`);
+                await waitFor(() => results.length == 1, `tool result`);
+                const request = requests[0];
+                assertEqual(request.tools?.length, 3, `default built-ins`);
+                assertEqual(
+                    request.tools?.map(tool => tool.name).join(`,`),
+                    `websearch,calculate,currency`,
+                    `tool order`,
+                );
+                assertEqual(request.maxToolRounds, 9, `round budget`);
+                assertEqual(calls[0].name, `calculate`, `call name`);
+                assertEqual(calls[0].arguments.expression, `2+2`, `call arguments`);
+                assertEqual(results[0].id, 1, `result id`);
+                assertEqual(
+                    (results[0].result as { result: number }).result,
+                    4,
+                    `result value`,
+                );
+                const last = statuses[statuses.length - 1];
+                assertEqual(last.supportsTools, true, `gpu supports tools`);
+                assertEqual(last.error, undefined, `gpu tool error`);
+            },
+        },
+        {
+            name: `chat/tools on the cpu model`,
+            run: async () => {
+                const
+                    host = chatWith(),
+                    hostStatuses: ChatStatusSnapshot[] = [];
+                host.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    tools: [toolNamed(`lookup`)],
+                    onResponse: () => { },
+                    onStatus: value => hostStatuses.push(value),
+                });
+                await waitFor(
+                    () => hostStatuses.some(value => !!value.error),
+                    `host tools rejected`,
+                );
+                assertEqual(
+                    hostStatuses[hostStatuses.length - 1].error,
+                    `Model does not accept tools`,
+                    `host tool error`,
+                );
+                assertEqual(host.calls.start, 0, `host tools never load`);
+                const
+                    builtin = chatWith({ chatText: `answer` }),
+                    builtinStatuses: ChatStatusSnapshot[] = [],
+                    replies: string[] = [];
+                builtin.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: value => replies.push(value),
+                    onStatus: value => builtinStatuses.push(value),
+                });
+                await waitFor(
+                    () => replies[replies.length - 1] == `answer`,
+                    `builtin dropped reply`,
+                );
+                assertEqual(replies[replies.length - 1], `answer`, `chat still works`);
+                assertEqual(
+                    builtin.requests[0].tools,
+                    undefined,
+                    `built-ins dropped`,
+                );
+                assertEqual(
+                    builtinStatuses[builtinStatuses.length - 1].supportsTools,
+                    false,
+                    `cpu supports tools`,
+                );
+                const
+                    off = chatWith({ chatText: `answer` }),
+                    offReplies: string[] = [];
+                off.chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    builtins: false,
+                    onResponse: value => offReplies.push(value),
+                });
+                await waitFor(
+                    () => offReplies[offReplies.length - 1] == `answer`,
+                    `builtins off reply`,
+                );
+                assertEqual(off.requests[0].tools, undefined, `builtins off`);
+            },
+        },
+        {
+            name: `chat/tool errors and cancel`,
+            run: async () => {
+                const
+                    duplicate = chatWith(),
+                    duplicateStatuses: ChatStatusSnapshot[] = [];
+                duplicate.chat({
+                    model: ChatModelId.gemma4_e2b,
+                    messages: [userMessage(`hi`)],
+                    tools: [toolNamed(`lookup`), toolNamed(`lookup`)],
+                    onResponse: () => { },
+                    onStatus: value => duplicateStatuses.push(value),
+                });
+                await waitFor(
+                    () => duplicateStatuses.some(value => !!value.error),
+                    `duplicate reported`,
+                );
+                assertEqual(
+                    duplicateStatuses[duplicateStatuses.length - 1].error,
+                    `Duplicate tool name lookup`,
+                    `duplicate error`,
+                );
+                assertEqual(duplicate.calls.start, 0, `duplicate never loads`);
+                const
+                    calls: ChatToolCall[] = [],
+                    results: ChatToolResult[] = [],
+                    { chat, requests } = chatWith({
+                        backend: LlmBackend.gpu,
+                        chatImpl: async params => {
+                            params.onToolCall?.({
+                                id: 2,
+                                name: `calculate`,
+                                arguments: {},
+                            });
+                            await new Promise<void>(resolve =>
+                                params.signal?.addEventListener(
+                                    `abort`,
+                                    () => resolve(),
+                                    { once: true },
+                                ));
+                            // a late tool result never reaches a cancelled call
+                            params.onToolResult?.({
+                                id: 2,
+                                name: `calculate`,
+                                arguments: {},
+                                result: `late`,
+                            });
+                            return undefined;
+                        },
+                    }),
+                    cancel = chat({
+                        model: ChatModelId.gemma4_e2b,
+                        messages: [userMessage(`hi`)],
+                        builtins: [BuiltinTool.calculate],
+                        onToolCall: value => calls.push(value),
+                        onToolResult: value => results.push(value),
+                        onResponse: () => { },
+                    });
+                await waitFor(() => calls.length == 1, `tool started`);
+                cancel();
+                await sleep(10);
+                assertEqual(results.length, 0, `late result dropped`);
+                assertEqual(requests.length, 1, `one generation`);
+            },
+        },
+        {
+            name: `litert/tools`,
+            run: async () => {
+                interface FakeConversation {
+                    config?: unknown,
+                    prompts: unknown[],
+                }
+                interface FakeToolEvent {
+                    id: number,
+                    name: string,
+                    arguments: Record<string, unknown>,
+                    status: `started` | `completed` | `error`,
+                    result?: unknown,
+                    error?: string,
+                }
+                interface FakeToolOptions {
+                    engine: {
+                        createConversation: (
+                            config?: unknown,
+                        ) => Promise<FakeConversation>,
+                    },
+                    config?: unknown,
+                    tools?: Array<{
+                        function: { name: string, description?: string },
+                        execute: (args: Record<string, unknown>) => unknown,
+                    }>,
+                    recurringToolCallLimit?: number,
+                    onToolProgress?: (event: FakeToolEvent) => void,
+                }
+                const
+                    conversations: FakeConversation[] = [],
+                    chats: FakeToolOptions[] = [],
+                    engine = {
+                        createConversation: async (config?: unknown) => {
+                            const record: FakeConversation = { config, prompts: [] };
+                            conversations.push(record);
+                            return record;
+                        },
+                    } as unknown as LitertEngine,
+                    FakeAutoToolChat = class {
+                        options: FakeToolOptions;
+                        conversation: Promise<FakeConversation>;
+                        constructor(options: FakeToolOptions) {
+                            this.options = options;
+                            chats.push(options);
+                            this.conversation = options.engine.createConversation(
+                                options.config);
+                        }
+                        sendMessageStreaming(message: unknown) {
+                            const options = this.options;
+                            return new ReadableStream({
+                                start: async controller => {
+                                    const conversation = await this.conversation;
+                                    conversation.prompts.push(message);
+                                    const tool = options.tools?.[0];
+                                    if (tool) {
+                                        const
+                                            args = { expression: `2+2` },
+                                            event = {
+                                                id: 7,
+                                                name: tool.function.name,
+                                                arguments: args,
+                                            };
+                                        options.onToolProgress?.({
+                                            ...event,
+                                            status: `started`,
+                                        });
+                                        try {
+                                            const result = await tool.execute(args);
+                                            options.onToolProgress?.({
+                                                ...event,
+                                                status: `completed`,
+                                                result,
+                                            });
+                                        } catch (error) {
+                                            options.onToolProgress?.({
+                                                ...event,
+                                                status: `error`,
+                                                error: `${(error as Error).message}`,
+                                            });
+                                        };
+                                    };
+                                    controller.enqueue({
+                                        role: `assistant`,
+                                        content: [{ type: `text`, text: `answer` }],
+                                    });
+                                    controller.close();
+                                },
+                            });
+                        }
+                        cancel() { }
+                    },
+                    mod = {
+                        SamplerType: { TOP_K: 0 },
+                        AutoToolChat: FakeAutoToolChat,
+                    } as unknown as LitertModule,
+                    session: LitertSession = {
+                        sent: [],
+                        reasoning: false,
+                        maxTokens: 0,
+                    },
+                    calls: ChatToolCall[] = [],
+                    results: ChatToolResult[] = [],
+                    execute = (args: Record<string, unknown>) => ({
+                        expression: args.expression,
+                        result: 4,
+                    }),
+                    math: ChatTool = {
+                        name: `calculate`,
+                        description: `math`,
+                        parameters: { type: `object` },
+                        execute: execute as ChatTool[`execute`],
+                    },
+                    params = (tools: ChatTool[], extra: Partial<EngineChatParams> = {}) => ({
+                        messages: [] as ChatMessage[],
+                        limits: defaultLlmLimits,
+                        reasoning: false,
+                        tools,
+                        maxToolRounds: 9,
+                        onToolCall: (value: ChatToolCall) => calls.push(value),
+                        onToolResult: (value: ChatToolResult) => results.push(value),
+                        onReason: () => { },
+                        onText: () => { },
+                        ...extra,
+                    } as EngineChatParams),
+                    run = async (
+                        messages: EngineMessage[],
+                        options: EngineChatParams,
+                    ) => {
+                        let text = ``;
+                        for await (const chunk of streamLitert({
+                            engine,
+                            mod,
+                            params: options,
+                            messages,
+                            session,
+                        }))
+                            text += chunk.choices?.[0]?.delta?.content || ``;
+                        return text;
+                    },
+                    user = (text: string): EngineMessage => ({
+                        role: LlmRole.user,
+                        content: text,
+                    }),
+                    assistant = (text: string): EngineMessage => ({
+                        role: LlmRole.assistant,
+                        content: text,
+                    });
+                assertEqual(await run([user(`one`)], params([math])), `answer`, `reply`);
+                assertEqual(conversations.length, 1, `tool conversation`);
+                assertEqual(chats.length, 1, `auto tool chat`);
+                assertEqual(chats[0].recurringToolCallLimit, 9, `round budget`);
+                assertEqual(chats[0].tools?.[0].function.name, `calculate`, `tool name`);
+                assertEqual(chats[0].tools?.[0].function.description, `math`, `tool text`);
+                assertEqual(calls[0].id, 7, `call id`);
+                assertEqual(calls[0].name, `calculate`, `call name`);
+                assertEqual(calls[0].arguments.expression, `2+2`, `call arguments`);
+                assertEqual(
+                    (results[0].result as { result: number }).result,
+                    4,
+                    `tool result`,
+                );
+                // the same tools keep the conversation
+                await run(
+                    [user(`one`), assistant(`answer`), user(`two`)],
+                    params([{ ...math }]),
+                );
+                assertEqual(conversations.length, 1, `reused tool chat`);
+                // a changed declaration opens a new conversation
+                await run(
+                    [user(`one`), assistant(`answer`), user(`two`), assistant(`answer`),
+                        user(`three`)],
+                    params([{ ...math, description: `changed` }]),
+                );
+                assertEqual(conversations.length, 2, `changed declaration`);
+                // a changed function opens a new conversation
+                await run(
+                    [user(`one`), assistant(`answer`), user(`two`), assistant(`answer`),
+                        user(`three`), assistant(`answer`), user(`four`)],
+                    params([{ ...math, execute: (() => 5) as ChatTool[`execute`] }]),
+                );
+                assertEqual(conversations.length, 3, `changed function`);
+                // a tool error reaches the result callback
+                results.length = 0;
+                await run([user(`five`)], params([{
+                    ...math,
+                    execute: (() => {
+                        throw new Error(`boom`);
+                    }) as ChatTool[`execute`],
+                }]));
+                assertEqual(results[0].error, `boom`, `tool error`);
+                assertEqual(
+                    (engineTool(math) as { function: { name: string } }).function.name,
+                    `calculate`,
+                    `engine tool`,
+                );
+                assertEqual(toolRounds(undefined), 4, `default rounds`);
+                assertEqual(toolRounds(0), 1, `minimum rounds`);
+                assertEqual(toolRounds(99), 25, `maximum rounds`);
+                assertEqual(sameTools([], []), true, `empty tools`);
+                assertEqual(sameTools([math], [math]), true, `same tools`);
+                assertEqual(
+                    sameTools([math], [{ ...math, description: `other` }]),
+                    false,
+                    `changed text`,
+                );
+                assertEqual(
+                    sameTools([math], [{ ...math, execute: () => `no` }]),
+                    false,
+                    `changed function`,
+                );
             },
         },
     ];

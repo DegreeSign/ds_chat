@@ -32,11 +32,13 @@ const
                 file: `gemma-4-E2B-it.litertlm`,
                 vision: true,
                 audio: true,
+                tools: true,
                 // a phone tab cannot load the multimodal build
                 web: {
                     file: `gemma-4-E2B-it-gpu.litertlm`,
                     vision: false,
                     audio: false,
+                    tools: true,
                 },
             },
         },
@@ -67,7 +69,12 @@ const
         const litert = model.litert;
         if (!litert) return undefined;
         if (mobile && litert.web) return litert.web;
-        return { file: litert.file, vision: litert.vision, audio: litert.audio };
+        return {
+            file: litert.file,
+            vision: litert.vision,
+            audio: litert.audio,
+            tools: litert.tools,
+        };
     },
     /** Look up a catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
@@ -114,7 +121,13 @@ const
         model: ChatModel,
         mobile: boolean = mobileDevice(),
     ): boolean =>
-        !!model.cpu?.mmproj?.audio || litertArtifact(model, mobile)?.audio === true;
+        !!model.cpu?.mmproj?.audio || litertArtifact(model, mobile)?.audio === true,
+    /** Whether a model accepts tool declarations */
+    supportsTools = (
+        model: ChatModel,
+        mobile: boolean = mobileDevice(),
+    ): boolean =>
+        litertArtifact(model, mobile)?.tools === true;
 
 export {
     llmModels,
@@ -129,4 +142,5 @@ export {
     resolveLlmModel,
     supportsImages,
     supportsAudio,
+    supportsTools,
 };

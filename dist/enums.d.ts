@@ -34,4 +34,15 @@ declare enum ChatModelId {
     qwen3_vl_2b = "qwen3-vl-2b",
     gemma4_e2b = "gemma4-e2b"
 }
-export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, ChatModelId, };
+/** Built-in tools the package ships */
+declare enum BuiltinTool {
+    websearch = "websearch",
+    calculate = "calculate",
+    currency = "currency"
+}
+/** Search provider behind the websearch tool */
+declare enum WebSearchProvider {
+    wikipedia = "wikipedia",
+    duckduckgo = "duckduckgo"
+}
+export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, ChatModelId, BuiltinTool, WebSearchProvider, };

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0
+
+- Add `ChatTool`, `ChatToolCall`, `ChatToolResult`, `ChatToolSchema` and
+  `ChatToolValue`, the shape of one tool the model may call.
+- Add `ChatInput.tools`, `onToolCall`, `onToolResult` and `maxToolRounds` so a
+  host can offer its own tools in the same reply.
+- Add `ChatInput.builtins`, `ChatInput.websearch`, the `BuiltinTool` and
+  `WebSearchProvider` enums, `WebSearchConfig` and `WebSearchResult`, for the
+  built-in `websearch`, `calculate` and `currency` tools.
+- Add `ChatStatusSnapshot.supportsTools`, whether the requested model accepts
+  tool declarations.
+- Gemma 4 E2B calls tools on the WebGPU engine; Qwen3-VL 2B and the CPU engine
+  report `supportsTools: false`.
+
 ## 0.4.0
 
 - Add `ChatMessage.audio`, a list of audio data URLs or URLs attached to a user

@@ -40,6 +40,19 @@ enum ChatModelId {
     gemma4_e2b = `gemma4-e2b`,
 }
 
+/** Built-in tools the package ships */
+enum BuiltinTool {
+    websearch = `websearch`,
+    calculate = `calculate`,
+    currency = `currency`,
+}
+
+/** Search provider behind the websearch tool */
+enum WebSearchProvider {
+    wikipedia = `wikipedia`,
+    duckduckgo = `duckduckgo`,
+}
+
 export {
     LlmRole,
     ChatStatus,
@@ -47,4 +60,6 @@ export {
     LlmBackend,
     LlmPhase,
     ChatModelId,
+    BuiltinTool,
+    WebSearchProvider,
 };

@@ -1,6 +1,6 @@
 {
     "name": "@degreesign/chat",
-    "version": "0.5.2",
+    "version": "0.6.0",
     "description": "Headless on-device AI chat for browsers and Node with wllama CPU and LiteRT WebGPU engines",
     "main": "dist/node/chat.node.min.js",
     "module": "dist/browser/chat.min.mjs",
@@ -61,6 +61,7 @@
         "dist/"
     ],
     "dependencies": {
+        "@degreesign/utils": "^1.0.5",
         "@litert-lm/core": "0.19.0-nightly.20261024",
         "@wllama/wllama": "^3.8.1",
         "@wllama/wllama-compat": "^3.8.1"

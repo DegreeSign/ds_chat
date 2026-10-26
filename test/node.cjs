@@ -3,11 +3,13 @@
 const {
     createChat,
     preloadModel,
+    BuiltinTool,
     ChatModelId,
     ChatStatus,
     LlmBackend,
     LlmRole,
     LlmStatus,
+    WebSearchProvider,
 } = require(`../dist/node/chat.node.min.js`);
 
 const assert = (condition, message) => {
@@ -140,6 +142,15 @@ const main = async () => {
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);
     assertEqual(esm.ChatModelId.qwen3_vl_2b, ChatModelId.qwen3_vl_2b, `esm model id`);
     assertEqual(esm.ChatModelId.gemma4_e2b, ChatModelId.gemma4_e2b, `esm gemma id`);
+    assertEqual(esm.BuiltinTool.websearch, `websearch`, `esm tool`);
+    assertEqual(esm.BuiltinTool.currency, `currency`, `esm currency tool`);
+    assertEqual(
+        esm.WebSearchProvider.duckduckgo,
+        `duckduckgo`,
+        `esm search provider`,
+    );
+    assertEqual(BuiltinTool.calculate, `calculate`, `cjs tool`);
+    assertEqual(WebSearchProvider.wikipedia, `wikipedia`, `cjs provider`);
     console.log(`NODE_TESTS_OK`, statuses[statuses.length - 1].status);
 };
 

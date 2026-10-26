@@ -1,4 +1,9 @@
-import type { GpuArtisanConfig } from '@litert-lm/core';
+import type {
+    ChatInterface,
+    GpuArtisanConfig,
+    ToolProgressEvent,
+    ToolWithImplementation,
+} from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
 import { litertArtifact, litertContextWindow, llmModels } from '../models';
@@ -15,6 +20,10 @@ import { contentBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
+    ChatTool,
+    ChatToolCall,
+    ChatToolValue,
+    EngineChatParams,
     EngineChunk,
     EngineDelta,
     EngineMessage,
@@ -221,6 +230,69 @@ const continuesHistory = (
     return true;
 };
 
+/** Clamp the tool round budget of one reply */
+const toolRounds = (value?: number): number =>
+    typeof value == `number` && Number.isFinite(value)
+        ? Math.min(25, Math.max(1, Math.floor(value)))
+        : 4;
+
+/** Map one host or built-in tool to the engine tool shape */
+const engineTool = (tool: ChatTool): ToolWithImplementation => ({
+    type: `function`,
+    function: {
+        name: tool.name,
+        ...(tool.description === undefined ? {} : { description: tool.description }),
+        ...(tool.parameters === undefined ? {} : { parameters: tool.parameters }),
+    },
+    // a tool value is JSON-safe by contract
+    execute: tool.execute as unknown as ToolWithImplementation[`execute`],
+});
+
+/** Whether two lists declare the same tools and the same functions */
+const sameTools = (
+    first: ChatTool[] = [],
+    next: ChatTool[] = [],
+): boolean => {
+    if (first.length != next.length) return false;
+    for (let i = 0; i < first.length; i++) {
+        const
+            left = first[i],
+            right = next[i];
+        if (left.name != right.name) return false;
+        if (left.description != right.description) return false;
+        if (left.execute !== right.execute) return false;
+        if (JSON.stringify(left.parameters) != JSON.stringify(right.parameters))
+            return false;
+    };
+    return true;
+};
+
+/** Map one tool progress event to the host callbacks */
+const reportTool = (
+    params: EngineChatParams,
+    event: ToolProgressEvent,
+) => {
+    const call: ChatToolCall = {
+        id: event.id,
+        name: event.name,
+        arguments: event.arguments as Record<string, ChatToolValue>,
+    };
+    if (event.status == `started`) {
+        params.onToolCall?.(call);
+        return;
+    };
+    if (event.status == `completed`)
+        params.onToolResult?.({
+            ...call,
+            result: event.result as ChatToolValue,
+        });
+    else
+        params.onToolResult?.({
+            ...call,
+            error: event.error || `Tool failed`,
+        });
+};
+
 /** Stream one LiteRT reply as engine chunks */
 const streamLitert = async function* ({
     engine,
@@ -231,7 +303,8 @@ const streamLitert = async function* ({
 }: StreamLitertParams): AsyncGenerator<EngineChunk> {
     const
         last = messages[messages.length - 1],
-        options = replyOptions(params.limits, params.reasoning);
+        options = replyOptions(params.limits, params.reasoning),
+        tools = params.tools ?? [];
     if (last?.role != `user`) throw new Error(`No user turn`);
     const
         history = messages.slice(0, -1),
@@ -240,8 +313,9 @@ const streamLitert = async function* ({
     const reuse = !!session.conversation
         && session.reasoning == params.reasoning
         && session.maxTokens == options.max_tokens
+        && sameTools(session.tools, tools)
         && continuesHistory(session.sent, history);
-    let conversation: import('@litert-lm/core').Conversation;
+    let conversation: ChatInterface;
     if (reuse && session.conversation)
         conversation = session.conversation;
     else {
@@ -249,7 +323,7 @@ const streamLitert = async function* ({
         const previous = await toLitertMessages(history, false);
         session.conversation = undefined;
         session.sent = [];
-        conversation = await engine.createConversation({
+        const config = {
             sessionConfig: {
                 maxOutputTokens: options.max_tokens,
                 samplerParams: {
@@ -264,10 +338,20 @@ const streamLitert = async function* ({
                 extra_context: { enable_thinking: params.reasoning },
             },
             prefillPrefaceOnInit: previous.length > 0,
-        });
+        };
+        conversation = tools.length
+            ? new mod.AutoToolChat({
+                engine,
+                config,
+                tools: tools.map(engineTool),
+                recurringToolCallLimit: toolRounds(params.maxToolRounds),
+                onToolProgress: event => reportTool(params, event),
+            })
+            : await engine.createConversation(config);
         session.conversation = conversation;
         session.reasoning = params.reasoning;
         session.maxTokens = options.max_tokens;
+        session.tools = [...tools];
         session.sent = [...history];
     };
     session.sent.push(last);
@@ -327,6 +411,7 @@ const chatOn = async ({
         try { session.conversation?.cancel(); } catch { };
         session.conversation = undefined;
         session.sent = [];
+        session.tools = undefined;
     };
     try {
         return await runEngineChat({
@@ -341,6 +426,8 @@ const chatOn = async ({
                     throw new Error(`Model does not accept images`);
                 if (hasAudio(messages) && !artifact?.audio)
                     throw new Error(`Model does not accept audio`);
+                if (params.tools?.length && !artifact?.tools)
+                    throw new Error(`Model does not accept tools`);
                 return streamLitert({ engine, mod, params, messages, session });
             },
         });
@@ -460,6 +547,7 @@ const startLLM = async ({
         unload: async () => {
             session.conversation = undefined;
             session.sent = [];
+            session.tools = undefined;
             await engine.delete();
         },
     };
@@ -508,9 +596,12 @@ const litertEngine: LlmEngine = {
 export {
     cacheModel,
     continuesHistory,
+    engineTool,
     litertEngine,
     litertSettings,
+    sameTools,
     streamLitert,
     toLitertMessages,
+    toolRounds,
     visionTokens,
 };
