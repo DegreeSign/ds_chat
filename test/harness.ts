@@ -19,8 +19,11 @@ import {
     cpuContextWindow,
     defaultLlmModel,
     findLlmModel,
+    litertArtifact,
     litertContextWindow,
     llmModels,
+    mobileCpuContextWindow,
+    mobileDevice,
     resolveLlmModel,
     supportsAudio,
     supportsImages,
@@ -242,8 +245,17 @@ const definitions: Array<{
                 );
                 assertEqual(gemma.litert?.vision, true, `gemma vision`);
                 assertEqual(gemma.litert?.audio, true, `gemma audio`);
+                assertEqual(
+                    gemma.litert?.web?.file,
+                    `gemma-4-E2B-it-gpu.litertlm`,
+                    `gemma mobile file`,
+                );
+                assertEqual(gemma.litert?.web?.vision, false, `mobile vision`);
+                assertEqual(gemma.litert?.web?.audio, false, `mobile audio`);
                 assertEqual(supportsImages(gemma), true, `gpu images`);
                 assertEqual(supportsAudio(gemma), true, `gpu audio`);
+                assertEqual(supportsImages(gemma, true), false, `mobile images`);
+                assertEqual(supportsAudio(gemma, true), false, `mobile audio`);
                 const textOnly: ChatModel = {
                     id: ChatModelId.qwen3_vl_2b,
                     reasoning: false,
@@ -316,6 +328,67 @@ const definitions: Array<{
                     undefined,
                     `unknown model`,
                 );
+            },
+        },
+        {
+            name: `models/mobile`,
+            run: () => {
+                assertEqual(
+                    mobileDevice({
+                        userAgent: `Mozilla/5.0 (Linux; Android 14)`,
+                        maxTouchPoints: 5,
+                    }),
+                    true,
+                    `android mobile`,
+                );
+                assertEqual(
+                    mobileDevice({
+                        userAgent: `Mozilla/5.0 (X11; Linux x86_64)`,
+                        maxTouchPoints: 0,
+                    }),
+                    false,
+                    `desktop`,
+                );
+                assertEqual(
+                    mobileDevice({
+                        userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)`,
+                        maxTouchPoints: 5,
+                    }),
+                    true,
+                    `ipad desktop agent`,
+                );
+                assertEqual(
+                    mobileDevice({
+                        userAgent: `Mozilla/5.0 (X11; Linux x86_64)`,
+                        maxTouchPoints: 0,
+                        userAgentData: { mobile: true },
+                    }),
+                    true,
+                    `client hint wins`,
+                );
+                assertEqual(mobileCpuContextWindow, 4096, `mobile window`);
+                const gemma = modelOf(ChatModelId.gemma4_e2b);
+                assertEqual(
+                    litertArtifact(gemma)?.file,
+                    `gemma-4-E2B-it.litertlm`,
+                    `desktop artifact`,
+                );
+                assertEqual(
+                    litertArtifact(gemma, true)?.file,
+                    `gemma-4-E2B-it-gpu.litertlm`,
+                    `mobile artifact`,
+                );
+                assertEqual(
+                    litertArtifact(gemma, true)?.vision,
+                    false,
+                    `mobile artifact vision`,
+                );
+                assertEqual(
+                    supportsImages(gemma, false),
+                    true,
+                    `desktop images`,
+                );
+                assertEqual(supportsAudio(gemma, false), true, `desktop audio`);
             },
         },
         {

@@ -1,7 +1,7 @@
 import type { CacheEntry, Wllama, WllamaLogger } from '@wllama/wllama/esm/index.js';
 import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
-import { cpuContextWindow, llmModels } from '../models';
+import { cpuContextWindow, llmModels, mobileCpuContextWindow, mobileDevice } from '../models';
 import {
     hasAudio,
     hasImages,
@@ -25,8 +25,6 @@ import type {
 } from '../types';
 
 const
-    /** Context window requested from the CPU engine, the wasm heap holds weights and cache */
-    contextSize = cpuContextWindow,
     /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
     /** Resumable file store of the CPU engine */
@@ -232,7 +230,10 @@ const
         assets: overrides,
     }: StartLlmParams): Promise<LlmRuntime> => {
         loggingOn = logging === true;
-        const cpu = model.cpu;
+        const
+            /** Context window for this device, a phone keeps a smaller cache */
+            contextSize = mobileDevice() ? mobileCpuContextWindow : cpuContextWindow,
+            cpu = model.cpu;
         if (!cpu) throw new Error(`Model has no CPU artifact`);
         const
             next = resolveAssets(overrides),

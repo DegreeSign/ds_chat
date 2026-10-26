@@ -17,6 +17,16 @@ interface ChatMessage {
     audio?: string[],
 }
 
+/** One LiteRT-LM model file and its capabilities */
+interface LitertArtifact {
+    /** File name inside the model repository */
+    file: string,
+    /** Whether the build accepts images */
+    vision: boolean,
+    /** Whether the build accepts audio */
+    audio: boolean,
+}
+
 /** One on-device model */
 interface ChatModel {
     /** Stable catalog id, passed by the host */
@@ -35,13 +45,10 @@ interface ChatModel {
         },
     },
     /** LiteRT-LM (WebGPU) artifact */
-    litert?: {
+    litert?: LitertArtifact & {
         repo: string,
-        file: string,
-        /** Whether the build accepts images */
-        vision: boolean,
-        /** Whether the build accepts audio */
-        audio: boolean,
+        /** Browser build used on phones, smaller and text only */
+        web?: LitertArtifact,
     },
 }
 
@@ -141,6 +148,12 @@ interface GpuNavigator extends Navigator {
         }) => Promise<unknown>,
     },
 }
+
+/** Navigator fields that tell a phone or tablet from a desktop */
+type MobileNavigator = Pick<Navigator, `userAgent` | `maxTouchPoints`> & {
+    /** Chromium client hints, the reliable mobile flag */
+    userAgentData?: { mobile?: boolean },
+};
 
 /** Request state that builds one status snapshot */
 interface ChatState {
@@ -471,6 +484,7 @@ interface EngineRunParams {
 export type {
     ChatMessage,
     ChatModel,
+    LitertArtifact,
     LlmLimits,
     ChatStatusSnapshot,
     ChatInput,
@@ -480,6 +494,7 @@ export type {
     WllamaAssets,
     LitertAssets,
     GpuNavigator,
+    MobileNavigator,
     ActiveCall,
     RuntimeDeps,
     RuntimeLoadParams,

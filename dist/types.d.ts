@@ -8,6 +8,15 @@ interface ChatMessage {
     /** Audio data URLs or URLs attached to the turn */
     audio?: string[];
 }
+/** One LiteRT-LM model file and its capabilities */
+interface LitertArtifact {
+    /** File name inside the model repository */
+    file: string;
+    /** Whether the build accepts images */
+    vision: boolean;
+    /** Whether the build accepts audio */
+    audio: boolean;
+}
 /** One on-device model */
 interface ChatModel {
     /** Stable catalog id, passed by the host */
@@ -26,13 +35,10 @@ interface ChatModel {
         };
     };
     /** LiteRT-LM (WebGPU) artifact */
-    litert?: {
+    litert?: LitertArtifact & {
         repo: string;
-        file: string;
-        /** Whether the build accepts images */
-        vision: boolean;
-        /** Whether the build accepts audio */
-        audio: boolean;
+        /** Browser build used on phones, smaller and text only */
+        web?: LitertArtifact;
     };
 }
 /** Token, prompt and thread budgets of an on-device generation */
@@ -124,6 +130,13 @@ interface GpuNavigator extends Navigator {
         }) => Promise<unknown>;
     };
 }
+/** Navigator fields that tell a phone or tablet from a desktop */
+type MobileNavigator = Pick<Navigator, `userAgent` | `maxTouchPoints`> & {
+    /** Chromium client hints, the reliable mobile flag */
+    userAgentData?: {
+        mobile?: boolean;
+    };
+};
 /** Request state that builds one status snapshot */
 interface ChatState {
     /** Whether a reply is streaming right now */
@@ -445,4 +458,4 @@ interface EngineRunParams {
     /** Called when a slow stream keeps the text already delivered */
     onStall?: () => void;
 }
-export type { ChatMessage, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatModel, LitertArtifact, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
