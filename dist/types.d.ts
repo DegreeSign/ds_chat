@@ -260,6 +260,8 @@ interface Runtime {
     loading: () => boolean;
     status: () => LlmStatus;
     backend: () => LlmBackend;
+    /** Last model load error, cleared when a load starts */
+    error: () => string | undefined;
     /** Model currently loaded on this runtime */
     model: () => ChatModel | undefined;
 }

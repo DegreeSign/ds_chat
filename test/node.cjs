@@ -46,7 +46,8 @@ const main = async () => {
     assertEqual(statuses[statuses.length - 1].availability, ChatStatus.offline, `offline`);
     assertEqual(statuses[statuses.length - 1].ready, false, `not ready`);
     assertEqual(statuses[statuses.length - 1].requesting, false, `not requesting`);
-    assertEqual(statuses[statuses.length - 1].error, `Model not ready`, `error`);
+    assertEqual(statuses[statuses.length - 1].error,
+        `Model is not supported on this device`, `error`);
     assertEqual(cancel(), undefined, `cancel stays silent`);
 
     const gpuStatuses = [];
@@ -71,7 +72,7 @@ const main = async () => {
     );
     assertEqual(
         gpuStatuses[gpuStatuses.length - 1].error,
-        `Model not ready`,
+        `Model is not supported on this device`,
         `gpu error`,
     );
 

@@ -890,7 +890,7 @@ const definitions: Array<{
             run: () => {
                 const
                     model = modelOf(ChatModelId.gemma4_e2b),
-                    mod = { Backend: { GPU: 3 } } as unknown as LitertModule,
+                    mod = { Backend: { GPU: 3, CPU: 1 } } as unknown as LitertModule,
                     source = new ReadableStream<Uint8Array>(),
                     vision = litertSettings({
                         model,
@@ -932,7 +932,7 @@ const definitions: Array<{
                 assertEqual(vision.maxVisionTokensPerImage, 70, `max tokens`);
                 assertEqual(vision.minVisionTokensPerImage, 70, `min tokens`);
                 assertEqual(vision.visionBackend, 3, `vision backend`);
-                assertEqual(vision.audioBackend, 3, `audio backend`);
+                assertEqual(vision.audioBackend, 1, `audio backend`);
                 assertEqual(
                     vision.mainExecutorSettings?.maxNumImages,
                     defaultLlmLimits.maxImages,
@@ -943,7 +943,7 @@ const definitions: Array<{
                 assertEqual(text.minVisionTokensPerImage, undefined, `no text min`);
                 assertEqual(text.audioBackend, undefined, `no text audio`);
                 assertEqual(audio.visionBackend, undefined, `no audio vision`);
-                assertEqual(audio.audioBackend, 3, `audio only backend`);
+                assertEqual(audio.audioBackend, 1, `audio only backend`);
             },
         },
         {
@@ -1156,6 +1156,7 @@ const definitions: Array<{
                 assertEqual(runtime.loading(), false, `not loading`);
                 assertEqual(runtime.status(), LlmStatus.ready, `ready status`);
                 assertEqual(runtime.backend(), LlmBackend.cpu, `backend`);
+                assertEqual(runtime.error(), undefined, `no load error`);
                 assertEqual(calls.start, 1, `started once`);
                 assertEqual(models[0].id, ChatModelId.qwen3_vl_2b, `loaded model`);
                 assert(progress.length >= 2, `progress events`);
@@ -1403,6 +1404,8 @@ const definitions: Array<{
                     });
                 assertEqual(loaded, false, `unsupported load`);
                 assertEqual(runtime.status(), LlmStatus.unsupported, `unsupported status`);
+                assertEqual(runtime.error(), `Model is not supported on this device`,
+                    `unsupported error`);
                 assertEqual(runtime.ready(), false, `not ready`);
                 assertEqual(fake.calls.start, 0, `no engine start`);
             },
@@ -1418,6 +1421,7 @@ const definitions: Array<{
                 });
                 assertEqual(loaded, false, `failed load`);
                 assertEqual(runtime.status(), LlmStatus.error, `error status`);
+                assertEqual(runtime.error(), `start failed`, `load error`);
                 assertEqual(calls.purge, 0, `failure keeps the stored parts`);
             },
         },
@@ -1559,7 +1563,7 @@ const definitions: Array<{
                 assertEqual(calls.start, 1, `one start`);
                 const last = statuses[statuses.length - 1];
                 assertEqual(last.status, LlmStatus.error, `error status`);
-                assertEqual(last.error, `Model not ready`, `error`);
+                assertEqual(last.error, `start failed`, `error`);
             },
         },
         {

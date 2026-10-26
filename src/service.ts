@@ -31,6 +31,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         waiters: RuntimeLoadWaiter[] = [],
         startAbort: AbortController | undefined,
         loadToken = 0,
+        lastError: string | undefined,
         progress = { percent: 0, phase: LlmPhase.download },
         streaming: Promise<string | undefined> | undefined;
 
@@ -171,6 +172,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 const engine = engineFor(model);
                 if (token != loadToken) return false;
                 if (!engine) {
+                    lastError = `Model is not supported on this device`;
                     setStatus(LlmStatus.unsupported);
                     return false;
                 };
@@ -178,6 +180,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 if (token != loadToken) return false;
                 const cached = await engine.cached(model);
                 if (token != loadToken) return false;
+                lastError = undefined;
                 setStatus(LlmStatus.downloading);
                 reportProgress(0, LlmPhase.download);
                 // nothing to download, the model loads straight from the cache
@@ -204,6 +207,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     activeModel = model;
                     activeEngine = engine;
                     backend = engine.backend;
+                    lastError = undefined;
                     setStatus(LlmStatus.ready);
                     reportProgress(1, LlmPhase.load);
                     return true;
@@ -213,6 +217,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     runtime = undefined;
                     activeModel = undefined;
                     activeEngine = undefined;
+                    lastError = `${(error as Error)?.message || `${error}`}`;
                     if (logging) console.log(`Local model failed`, error);
                     setStatus(LlmStatus.error);
                     return false;
@@ -267,6 +272,8 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         loading: isLoading,
         status: () => status,
         backend: () => backend,
+        /** Last model load error, cleared when a load starts */
+        error: () => lastError,
         model: () => activeModel,
     };
 };

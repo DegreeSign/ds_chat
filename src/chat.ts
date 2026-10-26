@@ -126,7 +126,8 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
             // a cancel reports the outcome itself
             if (call.cancelled) return;
             if (!loaded) {
-                if (!call.error) call.error = `Model not ready`;
+                if (!call.error)
+                    call.error = service.error() || `Model not ready`;
                 emitStatus(call);
                 return;
             };
@@ -254,7 +255,12 @@ const createPreloadOn = (service: Runtime) => async (
             report({ requesting: false, phase: LlmPhase.load, percent: 100 });
         return true;
     };
-    report({ requesting: false, phase, percent, error: error || `Model not ready` });
+    report({
+        requesting: false,
+        phase,
+        percent,
+        error: error || service.error() || `Model not ready`,
+    });
     return false;
 };
 

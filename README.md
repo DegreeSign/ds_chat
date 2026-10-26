@@ -203,16 +203,17 @@ there too, because a missing adapter silently selects the CPU model.
 
 ### GPU memory, images and audio
 
-The WebGPU engine keeps the model, its KV cache, the vision encoder and the
-audio encoder in GPU memory. The vision encoder loads on the first image turn
-and the audio encoder loads on the first audio turn. A card that is already busy
-can lose the device (`VK_ERROR_DEVICE_LOST`) on the first image turn. The
-package requests the smallest Gemma 4 vision budget, 70 tokens and 630 patches,
-so the encoder runs one small signature and the crop is resized to 384 x 384
-rather than the full 768 x 768. If the error still appears, close other GPU
-tabs, unload the model, or switch to the CPU model. A lost device needs a page
-or model reload; later calls cannot reuse it. A phone or tablet uses the
-text-only browser build, so it never starts the vision or audio encoder.
+The WebGPU engine keeps the model, its KV cache and the vision encoder in GPU
+memory. The vision encoder loads on the first image turn. The audio encoder
+runs on the CPU backend the Gemma 4 build requires and loads on the first audio
+turn. A card that is already busy can lose the device (`VK_ERROR_DEVICE_LOST`)
+on the first image turn. The package requests the smallest Gemma 4 vision
+budget, 70 tokens and 630 patches, so the encoder runs one small signature and
+the crop is resized to 384 x 384 rather than the full 768 x 768. If the error
+still appears, close other GPU tabs, unload the model, or switch to the CPU
+model. A lost device needs a page or model reload; later calls cannot reuse it.
+A phone or tablet uses the text-only browser build, so it never starts the
+vision or audio encoder.
 
 ## Public API
 
@@ -333,7 +334,9 @@ next attempt, including after a reload.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
-context on a phone and 8192 on a desktop.
+context on a phone and 8192 on a desktop. Its projector is the slow path: if a
+Qwen image turn never produces a first token, use the Gemma 4 WebGPU model for
+images instead.
 
 Gemma 4 E2B downloads `gemma-4-E2B-it.litertlm`, about 2.6 GB, on a desktop. It
 runs on the WebGPU engine with its vision and audio encoders in the same file,

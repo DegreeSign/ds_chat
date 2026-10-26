@@ -375,8 +375,8 @@ const litertSettings = ({
                 minVisionTokensPerImage: visionTokens,
             }
             : {}),
-        // audio encoder on demand
-        ...(artifact?.audio ? { audioBackend: mod.Backend.GPU } : {}),
+        // audio encoder on demand, the Gemma 4 build requires the CPU backend
+        ...(artifact?.audio ? { audioBackend: mod.Backend.CPU } : {}),
     };
 };
 
