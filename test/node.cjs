@@ -146,7 +146,11 @@ const main = async () => {
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);
     assertEqual(esm.ChatModelId.qwen3_vl_2b, ChatModelId.qwen3_vl_2b, `esm model id`);
     assertEqual(esm.ChatModelId.gemma4_e2b, ChatModelId.gemma4_e2b, `esm gemma id`);
-    assertEqual(esm.ChatModelId.gemma4_e2b_web, undefined, `no web model`);
+    assertEqual(
+        esm.ChatModelId.gemma4_e2b_limited,
+        ChatModelId.gemma4_e2b_limited,
+        `esm limited gemma id`,
+    );
 
     assertEqual(typeof builtinTools, `function`, `builtin tools`);
     assertEqual(BuiltinTool.websearch, `websearch`, `cjs websearch tool`);

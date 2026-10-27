@@ -2,7 +2,6 @@ import { ChatModelId } from './enums';
 import type {
     ChatModel,
     GpuNavigator,
-    LitertArtifact,
     MobileNavigator,
 } from './types';
 
@@ -32,12 +31,17 @@ const
                 file: `gemma-4-E2B-it.litertlm`,
                 vision: true,
                 audio: true,
-                // a phone tab cannot load the multimodal build
-                web: {
-                    file: `gemma-4-E2B-it-gpu.litertlm`,
-                    vision: false,
-                    audio: false,
-                },
+            },
+        },
+        {
+            // a phone tab cannot load the multimodal build
+            id: ChatModelId.gemma4_e2b_limited,
+            reasoning: true,
+            litert: {
+                repo: `litert-community/gemma-4-E2B-it-litert-lm`,
+                file: `gemma-4-E2B-it-gpu.litertlm`,
+                vision: false,
+                audio: false,
             },
         },
     ],
@@ -59,15 +63,16 @@ const
         return /Android|iPhone|iPad|iPod|Mobile/i.test(agent)
             || (/Macintosh/.test(agent) && client.maxTouchPoints > 1);
     },
-    /** LiteRT file and capabilities of this device */
-    litertArtifact = (
-        model: ChatModel,
+    /** Build of a Gemma request that this device loads */
+    deviceModelId = (
+        id?: ChatModelId,
         mobile: boolean = mobileDevice(),
-    ): LitertArtifact | undefined => {
-        const litert = model.litert;
-        if (!litert) return undefined;
-        if (mobile && litert.web) return litert.web;
-        return { file: litert.file, vision: litert.vision, audio: litert.audio };
+    ): ChatModelId | undefined => {
+        if (id == ChatModelId.gemma4_e2b)
+            return mobile ? ChatModelId.gemma4_e2b_limited : id;
+        if (id == ChatModelId.gemma4_e2b_limited)
+            return mobile ? id : ChatModelId.gemma4_e2b;
+        return id;
     },
     /** Look up a catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
@@ -96,25 +101,19 @@ const
     defaultLlmModel = async (): Promise<ChatModelId | undefined> => {
         if (!defaultModel)
             defaultModel = (async () => (await gpuAdapter()
-                ? llmModels.find(model => !!model.litert)
-                : llmModels.find(model => !!model.cpu))?.id)();
+                ? deviceModelId(ChatModelId.gemma4_e2b)
+                : ChatModelId.qwen3_vl_2b))();
         return await defaultModel;
     },
     /** Resolve the requested model or the default of this device */
     resolveLlmModel = async (id?: ChatModelId): Promise<ChatModel | undefined> =>
-        id ? findLlmModel(id) : findLlmModel(await defaultLlmModel()),
+        findLlmModel(deviceModelId(id ?? await defaultLlmModel())),
     /** Whether a model accepts images */
-    supportsImages = (
-        model: ChatModel,
-        mobile: boolean = mobileDevice(),
-    ): boolean =>
-        !!model.cpu?.mmproj || litertArtifact(model, mobile)?.vision === true,
+    supportsImages = (model: ChatModel): boolean =>
+        !!model.cpu?.mmproj || model.litert?.vision === true,
     /** Whether a model accepts audio */
-    supportsAudio = (
-        model: ChatModel,
-        mobile: boolean = mobileDevice(),
-    ): boolean =>
-        !!model.cpu?.mmproj?.audio || litertArtifact(model, mobile)?.audio === true;
+    supportsAudio = (model: ChatModel): boolean =>
+        !!model.cpu?.mmproj?.audio || model.litert?.audio === true;
 
 export {
     llmModels,
@@ -122,7 +121,7 @@ export {
     mobileCpuContextWindow,
     litertContextWindow,
     mobileDevice,
-    litertArtifact,
+    deviceModelId,
     findLlmModel,
     gpuAdapter,
     defaultLlmModel,

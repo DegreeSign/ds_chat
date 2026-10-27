@@ -4,6 +4,7 @@
 // Optional: LIVE_ONLY=text,image,audio LIVE_TIMEOUT_MS=...
 // The Gemma 4 GPU model covers text, image and audio. The Qwen CPU model
 // covers text and images; its projector is slower and runs on two threads.
+// The limited Gemma build covers text only.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -154,7 +155,11 @@ const run = async () => {
     write("adapter=" + (adapter ? adapter.info.vendor + " " + adapter.info.architecture : "none"));
 
     const model = new URLSearchParams(location.search).get("model") || "gemma4_e2b";
-    const chosen = model == "qwen3_vl_2b" ? ChatModelId.qwen3_vl_2b : ChatModelId.gemma4_e2b;
+    const chosen = model == "qwen3_vl_2b"
+        ? ChatModelId.qwen3_vl_2b
+        : model == "gemma4_e2b_limited"
+            ? ChatModelId.gemma4_e2b_limited
+            : ChatModelId.gemma4_e2b;
     const state = {};
     write("model=" + model);
     const loaded = await preloadModel({
@@ -202,6 +207,22 @@ const run = async () => {
     });
 
     await timed("image", async () => {
+        if (model == "gemma4_e2b_limited") {
+            // the limited build has no vision encoder, an image-only turn is rejected
+            const rejected = await ask({
+                model: chosen,
+                logging: true,
+                limits: replyBudget,
+                messages: [{
+                    role: LlmRole.user,
+                    content: "",
+                    images: [imageDataUrl("#cc0000")],
+                }],
+            }, "image");
+            record("image", rejected.last?.error == "Model does not accept images",
+                { error: rejected.last?.error });
+            return;
+        }
         const image = await ask({
             model: chosen,
             logging: true,
@@ -230,8 +251,8 @@ const run = async () => {
                 audio: [wavDataUrl(1, 440)],
             }],
         };
-        if (model == "qwen3_vl_2b") {
-            // the CPU model has no audio encoder, an audio-only turn is rejected
+        if (model == "qwen3_vl_2b" || model == "gemma4_e2b_limited") {
+            // the CPU and limited builds have no audio encoder
             const rejected = await ask({
                 ...audioInput,
                 messages: [{

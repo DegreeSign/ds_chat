@@ -1,4 +1,10 @@
-import { findLlmModel, resolveLlmModel, supportsAudio, supportsImages } from './models';
+import {
+    deviceModelId,
+    findLlmModel,
+    resolveLlmModel,
+    supportsAudio,
+    supportsImages,
+} from './models';
 import { runtime } from './service';
 import { resolveLlmLimits } from './engines/engine';
 import {
@@ -26,13 +32,15 @@ const statusSnapshot = (
 ): ChatStatusSnapshot => {
     const
         status = service.status(),
-        catalog = findLlmModel(model),
+        effective = deviceModelId(model),
+        catalog = findLlmModel(effective),
         availability = status == LlmStatus.ready
             ? ChatStatus.online
             : status == LlmStatus.error || status == LlmStatus.unsupported
                 ? ChatStatus.offline
                 : ChatStatus.away;
     return {
+        ...(effective ? { model: effective } : {}),
         availability,
         status,
         backend: service.backend(),

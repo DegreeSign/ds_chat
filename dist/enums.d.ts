@@ -32,7 +32,8 @@ declare enum LlmPhase {
 /** Catalog ids of the on-device models */
 declare enum ChatModelId {
     qwen3_vl_2b = "qwen3-vl-2b",
-    gemma4_e2b = "gemma4-e2b"
+    gemma4_e2b = "gemma4-e2b",
+    gemma4_e2b_limited = "gemma4-e2b-limited"
 }
 /** Built-in tools the package ships */
 declare enum BuiltinTool {

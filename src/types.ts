@@ -195,16 +195,6 @@ interface PriceFeed {
     date?: number,
 }
 
-/** One LiteRT-LM model file and its capabilities */
-interface LitertArtifact {
-    /** File name inside the model repository */
-    file: string,
-    /** Whether the build accepts images */
-    vision: boolean,
-    /** Whether the build accepts audio */
-    audio: boolean,
-}
-
 /** One on-device model */
 interface ChatModel {
     /** Stable catalog id, passed by the host */
@@ -223,10 +213,14 @@ interface ChatModel {
         },
     },
     /** LiteRT-LM (WebGPU) artifact */
-    litert?: LitertArtifact & {
+    litert?: {
         repo: string,
-        /** Browser build used on phones, smaller and text only */
-        web?: LitertArtifact,
+        /** File name inside the model repository */
+        file: string,
+        /** Whether the build accepts images */
+        vision: boolean,
+        /** Whether the build accepts audio */
+        audio: boolean,
     },
 }
 
@@ -252,6 +246,8 @@ interface LlmLimits {
 
 /** Current model and request state reported to the host */
 interface ChatStatusSnapshot {
+    /** Build that runs on this device after the mobile swap */
+    model?: ChatModelId,
     /** Availability derived from the engine status */
     availability: ChatStatus,
     status: LlmStatus,
@@ -684,7 +680,6 @@ export type {
     DuckDuckGoTopic,
     DuckDuckGoResponse,
     ChatModel,
-    LitertArtifact,
     LlmLimits,
     ChatStatusSnapshot,
     ChatInput,

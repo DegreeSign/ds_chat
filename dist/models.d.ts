@@ -1,5 +1,5 @@
 import { ChatModelId } from './enums';
-import type { ChatModel, LitertArtifact, MobileNavigator } from './types';
+import type { ChatModel, MobileNavigator } from './types';
 declare const llmModels: ChatModel[], 
 /** Context window requested from the CPU engine, a 32k KV cache needs 3.5 GB */
 cpuContextWindow = 8192, 
@@ -9,8 +9,8 @@ mobileCpuContextWindow = 4096,
 litertContextWindow = 4096, 
 /** Whether this client is a phone or tablet */
 mobileDevice: (nav?: MobileNavigator) => boolean, 
-/** LiteRT file and capabilities of this device */
-litertArtifact: (model: ChatModel, mobile?: boolean) => LitertArtifact | undefined, 
+/** Build of a Gemma request that this device loads */
+deviceModelId: (id?: ChatModelId, mobile?: boolean) => ChatModelId | undefined, 
 /** Look up a catalog entry by id */
 findLlmModel: (id?: string) => ChatModel | undefined, 
 /** Whether this browser provides a WebGPU adapter */
@@ -20,7 +20,7 @@ defaultLlmModel: () => Promise<ChatModelId | undefined>,
 /** Resolve the requested model or the default of this device */
 resolveLlmModel: (id?: ChatModelId) => Promise<ChatModel | undefined>, 
 /** Whether a model accepts images */
-supportsImages: (model: ChatModel, mobile?: boolean) => boolean, 
+supportsImages: (model: ChatModel) => boolean, 
 /** Whether a model accepts audio */
-supportsAudio: (model: ChatModel, mobile?: boolean) => boolean;
-export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileDevice, litertArtifact, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };
+supportsAudio: (model: ChatModel) => boolean;
+export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileDevice, deviceModelId, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };

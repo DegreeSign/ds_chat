@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+- Add `ChatModelId.gemma4_e2b_limited`, the text-only build a phone or tablet
+  loads for a Gemma request.
+- Add `ChatStatusSnapshot.model`, the build that actually runs after the mobile
+  swap.
+
 ## 0.7.0
 
 - Add `builtinTools`, which builds the `websearch`, `calculate` and `currency`

@@ -158,15 +158,6 @@ interface PriceFeed {
     /** Feed timestamp of the crypto prices, milliseconds */
     date?: number;
 }
-/** One LiteRT-LM model file and its capabilities */
-interface LitertArtifact {
-    /** File name inside the model repository */
-    file: string;
-    /** Whether the build accepts images */
-    vision: boolean;
-    /** Whether the build accepts audio */
-    audio: boolean;
-}
 /** One on-device model */
 interface ChatModel {
     /** Stable catalog id, passed by the host */
@@ -185,10 +176,14 @@ interface ChatModel {
         };
     };
     /** LiteRT-LM (WebGPU) artifact */
-    litert?: LitertArtifact & {
+    litert?: {
         repo: string;
-        /** Browser build used on phones, smaller and text only */
-        web?: LitertArtifact;
+        /** File name inside the model repository */
+        file: string;
+        /** Whether the build accepts images */
+        vision: boolean;
+        /** Whether the build accepts audio */
+        audio: boolean;
     };
 }
 /** Token, prompt and thread budgets of an on-device generation */
@@ -212,6 +207,8 @@ interface LlmLimits {
 }
 /** Current model and request state reported to the host */
 interface ChatStatusSnapshot {
+    /** Build that runs on this device after the mobile swap */
+    model?: ChatModelId;
     /** Availability derived from the engine status */
     availability: ChatStatus;
     status: LlmStatus;
@@ -610,4 +607,4 @@ interface EngineRunParams {
     /** Called when a slow stream keeps the text already delivered */
     onStall?: () => void;
 }
-export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LitertArtifact, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };

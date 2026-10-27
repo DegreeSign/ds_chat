@@ -431,71 +431,95 @@
 </div>
 <script>
 // DATA BEGIN
+const MAP = {
+    name: `@degreesign/chat`,
+    subtitle: `one-shot on-device chat · preload · built-in tools`,
+    root: `entry.exports`,
+    flow: `send`,
+    intro: `Bands run top to bottom in dependency order: the host passes one`
+        + ` ChatInput or a smaller ChatPreloadInput, createChat binds the`
+        + ` callbacks to the shared runtime, the built-in tools run on the`
+        + ` host, the runtime lazily imports an engine, and the engine streams`
+        + ` the reply.`,
+    ignore: [],
+};
+
 const BANDS = [
     {
         id: `host`,
         title: `1 · host boundary`,
         hint: `one input owned by the app`,
+        color: `#8a7a5f`,
     },
     {
         id: `entry`,
         title: `2 · public entry, enums and types`,
         hint: `createChat and preloadModel are the runtime exports`,
+        color: `#274b6b`,
     },
     {
         id: `runtime`,
         title: `3 · model runtime`,
         hint: `service, catalog, engine choice`,
+        color: `#2f6b52`,
     },
     {
         id: `engines`,
         title: `4 · prompt and engines`,
         hint: `budgets, streaming, wllama, LiteRT`,
+        color: `#6b5a3f`,
     },
     {
         id: `tools`,
         title: `5 · tools`,
         hint: `standalone tool descriptors, never offered to a model`,
+        color: `#5b4b6b`,
     },
     {
         id: `assets`,
         title: `6 · assets and weights`,
         hint: `wasm URLs, weights, model cache`,
+        color: `#7a5b4b`,
     },
     {
         id: `test`,
         title: `7 · headless verification`,
         hint: `browser cdp suite and node bundle suite`,
+        color: `#4b5b6b`,
     },
     {
         id: `build`,
         title: `8 · build and package`,
         hint: `three bundles, assets, publish`,
+        color: `#5c574f`,
     },
 ];
 
 const FILES = [];
 const NODES = [];
 const EDGES = [];
+const STATES = [];
 
-const f = (id, band, label, path, loc) =>
-    FILES.push({ id, band, label, path, loc });
+const f = (id, band, label, path, loc, external = false) =>
+    FILES.push({ id, band, label, path, loc, external });
 
 const n = (file, id, line, label, sig, note = ``) =>
     NODES.push({ id: file + `.` + id, file, line, label, sig, note });
 
 const e = (from, to, kind) => EDGES.push({ from, to, kind });
 
-f(`host`, `host`, `host app`, `host app`, 0);
+const step = (ids, text) => ({ ids, text });
+
+f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 33);
-f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 65);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 732);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 272);
+f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 66);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 727);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 280);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 283);
-f(`models`, `runtime`, `models.ts`, `src/models.ts`, 132);
+f(`models`, `runtime`, `models.ts`, `src/models.ts`, 131);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 393);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 516);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 507);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
@@ -510,18 +534,18 @@ f(`assets`, `assets`, `browser.js`, `src/assets/browser.js`, 22);
 f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
-f(`external`, `assets`, `model weights`, `huggingface.co`, 0);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 3678);
-f(`live`, `test`, `live.cjs`, `test/live.cjs`, 457);
+f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 3816);
+f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
-f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 179);
+f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 183);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 206);
 f(`vwebpack`, `test`, `webpack.config.cjs`, `test/webpack.config.cjs`, 42);
 f(`vassets`, `test`, `assets.ts`, `test/assets.ts`, 16);
 f(`webpack`, `build`, `webpack.config.ts`, `webpack.config.ts`, 150);
 f(`scripts`, `build`, `banner-wllama.cjs`, `scripts/banner-wllama.cjs`, 19);
-f(`package`, `build`, `package.json`, `package.json`, 0);
-f(`tsconfig`, `build`, `tsconfig.json`, `tsconfig.json`, 0);
+f(`package`, `build`, `package.json`, `package.json`, 78);
+f(`tsconfig`, `build`, `tsconfig.json`, `tsconfig.json`, 18);
 
 // host boundary
 n(`host`, `input`, 0, `ChatInput`,
@@ -539,31 +563,32 @@ n(`entry`, `exports`, 1, `public exports`,
     `createChat · preloadModel · builtinTools · 3 tools + 8 enums`,
     `Only createChat, preloadModel, the tool descriptors and the public`
     + ` types leave the package; no tool reaches an engine`);
-n(`chat`, `createChat`, 268, `createChat`, `(input: ChatInput) => CancelChat`,
+n(`chat`, `createChat`, 276, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
-n(`chat`, `createChatOn`, 51, `createChatOn`,
+n(`chat`, `createChatOn`, 59, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
     `Testable factory over one runtime`);
-n(`chat`, `statusSnapshot`, 22, `statusSnapshot`,
+n(`chat`, `statusSnapshot`, 28, `statusSnapshot`,
     `(service, model, state) => ChatStatusSnapshot`,
-    `Derive availability and image or audio support, build one snapshot for`
-    + ` chat or preload`);
-n(`chat`, `emitStatus`, 58, `emitStatus`, `(call: ActiveCall) => void`,
+    `Swap the model to this device's build, derive availability and image or`
+    + ` audio support, build one snapshot for chat or preload`);
+n(`chat`, `emitStatus`, 66, `emitStatus`, `(call: ActiveCall) => void`,
     `Publish the snapshot for one live call`);
-n(`chat`, `run`, 62, `run`, `(call: ActiveCall) => Promise<void>`,
+n(`chat`, `run`, 70, `run`, `(call: ActiveCall) => Promise<void>`,
     `Resolve the model, load it, strip unsupported media, report an empty`
     + ` prompt as an error, stream and forward the speed callback`);
-n(`chat`, `cancel`, 188, `cancel`, `(call: ActiveCall) => void`,
+n(`chat`, `cancel`, 196, `cancel`, `(call: ActiveCall) => void`,
     `Stale no-op, leave the load wait, abort the stream, or unload`);
-n(`chat`, `createPreloadOn`, 219, `createPreloadOn`,
+n(`chat`, `createPreloadOn`, 227, `createPreloadOn`,
     `(service: Runtime) => (input?: ChatPreloadInput) => Promise<boolean>`,
     `Testable preload factory over one runtime`);
-n(`chat`, `preloadModel`, 270, `preloadModel`,
+n(`chat`, `preloadModel`, 278, `preloadModel`,
     `(input?: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
     `LlmRole, ChatStatus, LlmStatus, LlmBackend (cpu, gpu, none), LlmPhase,`
-    + ` ChatModelId (qwen, gemma), BuiltinTool and WebSearchProvider`);
+    + ` ChatModelId (qwen, gemma, gemma limited), BuiltinTool and`
+    + ` WebSearchProvider`);
 n(`types`, `tools`, 22, `tool records`,
     `ChatTool · ChatToolSchema · ChatToolValue · ChatToolCall`
     + ` · ChatToolResult · WebSearchConfig · WebSearchResult`,
@@ -577,61 +602,60 @@ n(`types`, `feed`, 96, `tool feeds`,
     `The validated feed rows, one conversion and one search response the`
     + ` tools map into a JSON-safe value`);
 n(`types`, `records`, 12, `records`,
-    `ChatMessage, ChatModel, LitertArtifact, LlmLimits, WllamaAssets`
+    `ChatMessage, ChatModel, LlmLimits, WllamaAssets`
     + `, LitertAssets`,
     `One turn with optional images and audio, one catalog entry with a CPU or`
     + ` GPU artifact, budgets, a CPU thread cap and asset URLs`);
-n(`types`, `artifact`, 199, `LitertArtifact`, `file · vision · audio`,
-    `One LiteRT model file and the modalities it accepts`);
-n(`types`, `litert`, 313, `LitertAssets`, `script · wasm`,
+n(`types`, `litert`, 309, `LitertAssets`, `script · wasm`,
     `The LiteRT wasm glue and binary URLs emitted beside the bundle`);
-n(`types`, `gpu`, 321, `GpuNavigator`, `gpu?.requestAdapter`,
+n(`types`, `gpu`, 317, `GpuNavigator`, `gpu?.requestAdapter`,
     `The optional WebGPU entry point, undefined in Node`);
-n(`types`, `mobile`, 331, `MobileNavigator`,
+n(`types`, `mobile`, 327, `MobileNavigator`,
     `userAgentData?.mobile · userAgent · maxTouchPoints`,
     `The narrow navigator view that tells a phone from a desktop`);
-n(`types`, `snapshots`, 254, `ChatStatusSnapshot`,
-    `availability · status · backend · supportsImages · supportsAudio`
-    + ` · ready · loading · requesting · phase · percent · error`,
-    `Every lifecycle value the host renders`);
-n(`types`, `input`, 275, `ChatInput · CancelChat`,
+n(`types`, `snapshots`, 248, `ChatStatusSnapshot`,
+    `model · availability · status · backend · supportsImages`
+    + ` · supportsAudio · ready · loading · requesting · phase · percent`
+    + ` · error`,
+    `Every lifecycle value the host renders, including the build that runs`);
+n(`types`, `input`, 271, `ChatInput · CancelChat`,
     `(input: ChatInput) => CancelChat`,
     `The whole public input and the only return value`);
-n(`types`, `preload`, 297, `ChatPreloadInput`,
+n(`types`, `preload`, 293, `ChatPreloadInput`,
     `Pick<ChatInput, model | limits | logging | onStatus>`,
     `The model preload subset a host may call before the first chat`);
-n(`types`, `call`, 337, `ChatState · ActiveCall · Runtime`,
+n(`types`, `call`, 333, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · cancelled · model · requesting · phase`
     + ` · percent · load · chat · unload · error() · model()`,
     `One request state, one live call and the runtime it drives`);
-n(`types`, `load`, 364, `RuntimeLoadParams · RuntimeLoadWaiter`,
+n(`types`, `load`, 360, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
     + ` · report · settle`,
     `One load request and one caller waiting on the load it joined`);
-n(`types`, `store`, 384, `StoredPart · StoredFilePart · StoredModel`
+n(`types`, `store`, 380, `StoredPart · StoredFilePart · StoredModel`
     + ` · StoredModelMeta · ResumePlan · StoreDownloadParams · ModelStore`,
     `size · total · etag · start · complete · file · signal`
     + ` · stored · download · remove · purge`,
     `What the model file store keeps in its parts and metadata, where one`
     + ` response resumes, one download request and one engine store`);
-n(`types`, `params`, 476, `EngineChatParams · StartLlmParams`
+n(`types`, `params`, 472, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · onSpeed`
     + ` · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
     `Per-call budgets, accumulated text and speed callbacks`);
-n(`types`, `runtimeContract`, 522, `LlmRuntime · LlmEngine`,
+n(`types`, `runtimeContract`, 518, `LlmRuntime · LlmEngine`,
     `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`,
     `The engine returns model, backend, contextSize, chat and unload`);
-n(`types`, `contentParts`, 537, `EngineContentPart`,
+n(`types`, `contentParts`, 533, `EngineContentPart`,
     `text | image | audio`,
     `One segment of a user turn before an engine maps it`);
-n(`types`, `messages`, 555, `EngineMessage`, `role + content`,
+n(`types`, `messages`, 551, `EngineMessage`, `role + content`,
     `One OpenAI-style turn, a user turn may carry media parts`);
-n(`types`, `litertRuntime`, 561, `LitertContentPart · LitertMessage`
+n(`types`, `litertRuntime`, 557, `LitertContentPart · LitertMessage`
     + ` · LitertEngine · LitertModule`,
     `text | image | audio · role + content + channels`,
     `The LiteRT content, turn, engine and module types, type only`);
-n(`types`, `litertParams`, 588, `LitertSession · LitertChatParams`
+n(`types`, `litertParams`, 584, `LitertSession · LitertChatParams`
     + ` · StreamLitertParams`,
     `conversation? · sent · reasoning · maxTokens · engine · model · mod`
     + ` · params · messages · session`,
@@ -680,48 +704,51 @@ n(`llm`, `runtime`, 281, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
-n(`models`, `llmModels`, 15, `llmModels`, `ChatModel[2]`,
+n(`models`, `llmModels`, 14, `llmModels`, `ChatModel[3]`,
     `qwen3_vl_2b on the CPU with its mmproj, gemma4_e2b on desktop WebGPU`
-    + ` with vision and audio and a text-only phone build`);
+    + ` with vision and audio, and the text-only gemma4_e2b_limited build`);
 n(`models`, `defaultModel`, 10, `defaultModel`,
     `Promise<ChatModelId | undefined> | undefined`,
     `The device default probed once per session, shared by every caller`);
-n(`models`, `gpuProbeTimeout`, 14, `gpuProbeTimeout`, `1500`,
+n(`models`, `gpuProbeTimeout`, 13, `gpuProbeTimeout`, `1500`,
     `Milliseconds a WebGPU adapter probe may hang before the CPU wins`);
-n(`models`, `snapshots`, 44, `size`,
+n(`models`, `snapshots`, 49, `size`,
     `cpuContextWindow`,
     `8k context on the CPU engine, the desktop default`);
-n(`models`, `mobileWindow`, 46, `size`,
+n(`models`, `mobileWindow`, 51, `size`,
     `mobileCpuContextWindow`,
     `4k context on a phone, the smaller cache keeps the tab alive`);
-n(`models`, `litertWindow`, 48, `size`,
+n(`models`, `litertWindow`, 53, `size`,
     `litertContextWindow`,
     `4k context on the GPU engine, the wasm heap holds the model`);
-n(`models`, `mobileDevice`, 51, `mobileDevice`,
+n(`models`, `mobileDevice`, 55, `mobileDevice`,
     `(nav?) => boolean`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
-n(`models`, `litertArtifact`, 63, `litertArtifact`,
-    `(model, mobile?) => LitertArtifact | undefined`,
-    `The desktop multimodal file or the 2 GB GPU_ARTISAN phone build`);
-n(`models`, `findLlmModel`, 73, `findLlmModel`,
+n(`models`, `deviceModelId`, 67, `deviceModelId`,
+    `(id?, mobile?) => ChatModelId | undefined`,
+    `Swap gemma4_e2b and gemma4_e2b_limited to the build this device loads`);
+n(`models`, `findLlmModel`, 78, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
-n(`models`, `gpuAdapter`, 76, `gpuAdapter`,
+n(`models`, `gpuAdapter`, 81, `gpuAdapter`,
     `() => Promise<boolean>`,
     `True when the browser hands out a WebGPU adapter within the timeout,`
     + ` false in Node`);
-n(`models`, `defaultLlmModel`, 96, `defaultLlmModel`,
+n(`models`, `defaultLlmModel`, 101, `defaultLlmModel`,
     `() => Promise<ChatModelId | undefined>`,
-    `The GPU model when an adapter exists, else the CPU model, memoized`);
-n(`models`, `resolveLlmModel`, 104, `resolveLlmModel`,
+    `The Gemma build of this device when an adapter exists, else the CPU`
+    + ` model, memoized`);
+n(`models`, `resolveLlmModel`, 109, `resolveLlmModel`,
     `(id?) => Promise<ChatModel | undefined>`,
-    `The requested model, or the default of this device`);
-n(`models`, `supportsImages`, 107, `supportsImages`,
-    `(model, mobile?) => boolean`,
-    `The CPU projector or the selected LiteRT artifact decides vision`);
-n(`models`, `supportsAudio`, 113, `supportsAudio`,
-    `(model, mobile?) => boolean`,
-    `The projector audio flag or the selected artifact decides audio`);
+    `The requested model swapped to this device, or the device default`);
+n(`models`, `supportsImages`, 112, `supportsImages`,
+    `(model) => boolean`,
+    `The CPU projector or the LiteRT file of that catalog entry decides`
+    + ` vision`);
+n(`models`, `supportsAudio`, 115, `supportsAudio`,
+    `(model) => boolean`,
+    `The projector audio flag or the LiteRT file of that catalog entry`
+    + ` decides audio`);
 
 // prompt and streaming
 n(`engine`, `limits`, 15, `defaultLlmLimits`, `LlmLimits`,
@@ -837,7 +864,7 @@ n(`wllama`, `purge`, 377, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 468, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 463, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, hasCache, remove, purge`);
 n(`litert`, `cache`, 35, `cacheName · store · backendConfig`,
     `litertlm-models · ModelStore · GPU executor settings`,
@@ -852,45 +879,45 @@ n(`litert`, `cacheOpen`, 64, `cacheOpen`, `() => Promise<Cache | undefined>`,
     `Open the model cache, absent in Node and on an insecure origin`);
 n(`litert`, `modelCached`, 72, `modelCached`, `(model) => Promise<boolean>`,
     `Whether the model file is complete in the store or in Cache Storage`);
-n(`litert`, `downloads`, 87, `downloads`, `Map<string, Promise<void>>`,
+n(`litert`, `downloads`, 85, `downloads`, `Map<string, Promise<void>>`,
     `Every model file download in flight, shared by every caller`);
-n(`litert`, `countStream`, 90, `countStream`, `(body, total, onProgress) => stream`,
+n(`litert`, `countStream`, 88, `countStream`, `(body, total, onProgress) => stream`,
     `Report download progress while the file streams to the cache`);
-n(`litert`, `cacheModel`, 106, `cacheModel`, `(url, cache, signal, onProgress)`,
+n(`litert`, `cacheModel`, 104, `cacheModel`, `(url, cache, signal, onProgress)`,
     `Fallback for a host without a file store, Cache Storage holds the file`);
-n(`litert`, `fetchModel`, 136, `fetchModel`, `(url, signal, onProgress) => stream`,
+n(`litert`, `fetchModel`, 134, `fetchModel`, `(url, signal, onProgress) => stream`,
     `Network stream for a host without a cache or a store`);
-n(`litert`, `toLitertMessages`, 148, `toLitertMessages`,
+n(`litert`, `toLitertMessages`, 146, `toLitertMessages`,
     `(messages, keepMedia?) => Promise<LitertMessage[]>`,
     `Map built turns to LiteRT turns, history media becomes text notes`);
-n(`litert`, `sameMessage`, 180, `sameMessage`, `(first, next) => boolean`,
+n(`litert`, `sameMessage`, 178, `sameMessage`, `(first, next) => boolean`,
     `Same role, text and media URLs`);
-n(`litert`, `history`, 204, `continuesHistory`, `(sent, history) => boolean`,
+n(`litert`, `history`, 202, `continuesHistory`, `(sent, history) => boolean`,
     `Whether the live conversation already holds the incoming turns`);
-n(`litert`, `streamLitert`, 225, `streamLitert`,
+n(`litert`, `streamLitert`, 223, `streamLitert`,
     `(engine, mod, params, messages, session) => AsyncGenerator<EngineChunk>`,
     `Reuse one conversation, stream content and thought channels, cancel`
     + ` through the abort signal, drop a turn that cannot continue`);
-n(`litert`, `chat`, 318, `chatOn`, `(engine, model, mod, params, session)`,
+n(`litert`, `chat`, 316, `chatOn`, `(engine, model, mod, params, session)`,
     `Follow the logging flag, reject unsupported images or audio, then stream`
     + ` through the shared reply loop`);
-n(`litert`, `settings`, 354, `litertSettings`,
+n(`litert`, `settings`, 351, `litertSettings`,
     `({ model, limits, source, mod }) => LitertSettings`,
-    `Build the engine settings from the device artifact, with the smallest`
-    + ` vision budget and the CPU audio backend only when that artifact has`
-    + ` audio`);
-n(`litert`, `startLLM`, 384, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    `Build the engine settings from the catalog file, with the smallest`
+    + ` vision budget and the CPU audio backend only when that file has`
+    + ` them`);
+n(`litert`, `startLLM`, 381, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Route the wasm output through the logging flag, load wasm and module,`
     + ` read the stored file or download it with resume, compile it with`
     + ` progress, size the vision and audio encoders and open one reused`
     + ` conversation`);
-n(`litert`, `unload`, 460, `runtime.unload`, `() => Promise<void>`,
+n(`litert`, `unload`, 455, `runtime.unload`, `() => Promise<void>`,
     `Clear the conversation and delete the wasm engine, keeping the cache`);
-n(`litert`, `hasCache`, 472, `hasCache`, `() => Promise<boolean>`,
+n(`litert`, `hasCache`, 467, `hasCache`, `() => Promise<boolean>`,
     `A stored file of any catalog model or any Cache Storage entry`);
-n(`litert`, `remove`, 487, `remove`, `(model) => Promise<void>`,
+n(`litert`, `remove`, 480, `remove`, `(model) => Promise<void>`,
     `Delete the model file from the store and from Cache Storage`);
-n(`litert`, `purge`, 500, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 491, `purge`, `() => Promise<void>`,
     `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
@@ -1036,27 +1063,27 @@ n(`assetsNodeEsm`, `defaultLitertAssets`, 12, `defaultLitertAssets`, `() => Lite
     `Node ESM build: paths resolved from import.meta.url`);
 
 // verification
-n(`harness`, `test`, 92, `test`, `(name, run) => Promise<void>`,
+n(`harness`, `test`, 113, `test`, `(name, run) => Promise<void>`,
     `Runs one case, records the error, the suite keeps going`);
-n(`harness`, `assertions`, 101, `assertions`,
+n(`harness`, `assertions`, 126, `assertions`,
     `assert · assertEqual · deferred · waitFor`,
     `Small synchronous checks and short timing gates`);
-n(`harness`, `modelOf`, 123, `modelOf`, `(id) => ChatModel`,
+n(`harness`, `modelOf`, 153, `modelOf`, `(id) => ChatModel`,
     `Catalog lookup or a failed test`);
-n(`harness`, `runtimeWith`, 129, `runtimeWith`, `(options?) => fake runtime`,
+n(`harness`, `runtimeWith`, 159, `runtimeWith`, `(options?) => fake runtime`,
     `Fake CPU or GPU engine plus createRuntime`);
-n(`harness`, `chatWith`, 142, `chatWith`, `(options?) => fake chat`,
+n(`harness`, `chatWith`, 172, `chatWith`, `(options?) => fake chat`,
     `runtimeWith plus createChatOn`);
-n(`harness`, `streamOf`, 151, `streamOf`, `(...chunks) => AsyncIterable`,
+n(`harness`, `streamOf`, 181, `streamOf`, `(...chunks) => AsyncIterable`,
     `One scripted engine stream`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 174, `definitions`, `66 deferred cases`,
+n(`harness`, `definitions`, 257, `definitions`, `79 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, chat, speed,`
     + ` threads, square`);
-n(`harness`, `main`, 2913, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 3803, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
-n(`vnode`, `main`, 26, `main`, `() => Promise<void>`,
+n(`vnode`, `main`, 32, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat and preloadModel run without a DOM`);
 n(`drive`, `getJson`, 54, `getJson`, `(url) => Promise<unknown>`,
     `Reads CDP targets from the debug port`);
@@ -1064,7 +1091,7 @@ n(`drive`, `serve`, 71, `serve`, `() => Promise<Server>`,
     `Static file server for the built harness on port 17544`);
 n(`drive`, `run`, 95, `run`, `() => Promise<void>`,
     `Spawn chromium headless, attach over WebSocket, collect the report`);
-n(`live`, `main`, 345, `main`, `() => Promise<void>`,
+n(`live`, `main`, 366, `main`, `() => Promise<void>`,
     `Serve the built browser bundle and build/models, then drive one real`
     + ` chat for text, image and audio over CDP`);
 n(`vwebpack`, `vwebpack`, 6, `bundle harness`, `module.exports`,
@@ -1095,7 +1122,7 @@ n(`webpack`, `nodeEsmConfig`, 133, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.7.0`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.7.1`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1137,6 +1164,7 @@ e(`chat.statusSnapshot`, `ready`, `call`);
 e(`chat.statusSnapshot`, `isLoading`, `call`);
 e(`chat.statusSnapshot`, `supportsImages`, `call`);
 e(`chat.statusSnapshot`, `supportsAudio`, `call`);
+e(`chat.statusSnapshot`, `deviceModelId`, `call`);
 e(`chat.statusSnapshot`, `types.snapshots`, `type`);
 e(`chat.run`, `supportsImages`, `call`);
 e(`chat.run`, `supportsAudio`, `call`);
@@ -1201,15 +1229,13 @@ e(`live.main`, `chat.createChat`, `call`);
 e(`findLlmModel`, `llmModels`, `call`);
 e(`resolveLlmModel`, `defaultLlmModel`, `call`);
 e(`resolveLlmModel`, `findLlmModel`, `call`);
+e(`resolveLlmModel`, `deviceModelId`, `call`);
 e(`defaultLlmModel`, `gpuAdapter`, `call`);
-e(`defaultLlmModel`, `llmModels`, `call`);
+e(`defaultLlmModel`, `deviceModelId`, `call`);
+e(`deviceModelId`, `mobileDevice`, `call`);
 e(`gpuAdapter`, `types.gpu`, `type`);
 e(`mobileDevice`, `types.mobile`, `type`);
-e(`litertArtifact`, `mobileDevice`, `call`);
-e(`litertArtifact`, `types.artifact`, `type`);
 e(`resolveLimits`, `gpuReasoning`, `call`);
-e(`supportsImages`, `litertArtifact`, `call`);
-e(`supportsAudio`, `litertArtifact`, `call`);
 e(`supportsImages`, `types.records`, `type`);
 e(`supportsAudio`, `types.records`, `type`);
 e(`llmModels`, `types.records`, `type`);
@@ -1244,10 +1270,10 @@ e(`runEngineChat`, `types.params`, `type`);
 e(`runEngineChat`, `images.resizeImages`, `call`);
 e(`createThinkSplitter`, `findTag`, `inner`);
 e(`createThinkSplitter`, `holdPartial`, `inner`);
-e(`createThinkSplitter`, `feed`, `inner`);
+e(`createThinkSplitter`, `engine.feed`, `inner`);
 e(`createThinkSplitter`, `flush`, `inner`);
-e(`feed`, `findTag`, `call`);
-e(`feed`, `holdPartial`, `call`);
+e(`engine.feed`, `findTag`, `call`);
+e(`engine.feed`, `holdPartial`, `call`);
 e(`types.params`, `types.records`, `type`);
 e(`types.params`, `enums.enums`, `type`);
 e(`types.runtimeContract`, `types.records`, `type`);
@@ -1323,9 +1349,7 @@ e(`litertEngine`, `litert.purge`, `inner`);
 e(`litert.startLLM`, `loadLitert`, `call`);
 e(`litert.startLLM`, `litert.wasmLog`, `call`);
 e(`litert.startLLM`, `litert.settings`, `call`);
-e(`litert.startLLM`, `models.litertArtifact`, `call`);
 e(`litert.settings`, `litert.visionTokens`, `inner`);
-e(`litert.settings`, `models.litertArtifact`, `call`);
 e(`litert.startLLM`, `assets.defaultLitertAssets`, `call`);
 e(`litert.startLLM`, `models.litertWindow`, `call`);
 e(`litert.startLLM`, `litert.cacheOpen`, `call`);
@@ -1347,7 +1371,6 @@ e(`litert.countStream`, `enums.enums`, `type`);
 e(`litert.chat`, `engine.hasImages`, `call`);
 e(`litert.chat`, `engine.hasAudio`, `call`);
 e(`litert.chat`, `engine.runEngineChat`, `call`);
-e(`litert.chat`, `models.litertArtifact`, `call`);
 e(`litert.chat`, `litert.streamLitert`, `call`);
 e(`litert.chat`, `litert.wasmLog`, `call`);
 e(`litert.chat`, `types.params`, `type`);
@@ -1362,16 +1385,13 @@ e(`litert.toLitertMessages`, `types.messages`, `type`);
 e(`litert.toLitertMessages`, `types.litertRuntime`, `type`);
 e(`litert.modelCached`, `litert.cacheOpen`, `call`);
 e(`litert.modelCached`, `store.stored`, `call`);
-e(`litert.modelCached`, `models.litertArtifact`, `call`);
 e(`litert.modelCached`, `engine.modelUrl`, `call`);
 e(`litert.remove`, `litert.cacheOpen`, `call`);
 e(`litert.remove`, `engine.modelUrl`, `call`);
 e(`litert.remove`, `store.remove`, `call`);
-e(`litert.remove`, `models.litertArtifact`, `call`);
 e(`litert.purge`, `store.purge`, `call`);
 e(`litert.hasCache`, `litert.cacheOpen`, `call`);
 e(`litert.hasCache`, `store.stored`, `call`);
-e(`litert.hasCache`, `models.litertArtifact`, `call`);
 e(`loadLitert`, `litertWeights`, `store`);
 e(`assets.defaultLitertAssets`, `types.litert`, `type`);
 e(`assetsNode.defaultLitertAssets`, `assetsNodePaths.litertAssetsAt`, `call`);
@@ -1515,6 +1535,82 @@ e(`nodeEsmConfig`, `assetsNodeEsm.defaultWllamaAssets`, `type`);
 e(`nodeEsmConfig`, `assetsNodeEsm.defaultLitertAssets`, `type`);
 e(`tsconfig`, `types.records`, `type`);
 e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
+const FLOWS = {
+    send: {
+        title: `createChat, one reply end to end`,
+        steps: [
+            step([`host.preload`, `chat.preloadModel`, `llm.load`],
+                ` Optional: a preload starts the same load early, so the`
+                + ` first send joins it or finds the model ready.`),
+            step([`host.input`, `chat.createChat`],
+                ` The host passes the model or omits it, the whole message`
+                + ` list, budgets and the callbacks.`),
+            step([`chat.createChatOn`, `chat.emitStatus`],
+                ` Bump the call token, abort the previous stream, emit the`
+                + ` first snapshot synchronously.`),
+            step([`resolveLlmModel`, `deviceModelId`, `chat.run`],
+                ` Pick the requested model or the device default, swap a`
+                + ` Gemma id to the build this device loads and report that`
+                + ` build in the snapshot, reject an unknown model, an empty`
+                + ` prompt with a reported error, or a media turn the`
+                + ` selected file cannot take, then resolve the budgets.`),
+            step([`llm.load`],
+                ` Reuse a ready model, join the same load, or abandon a`
+                + ` different one before starting.`),
+            step([`llm.probes`, `llm.engineFor`],
+                ` Persist storage, detect wasm and WebGPU, pick the engine`
+                + ` named by the model artifact.`),
+            step([`llm.evictPrevious`],
+                ` Keep one model in memory, unload the previous runtime and`
+                + ` remove its cache.`),
+            step([`wllama.startLLM`, `litert.startLLM`, `litert.settings`],
+                ` The selected engine downloads or reads its cache and its`
+                + ` stored file, resuming a cut download, then loads and`
+                + ` returns the unified runtime, reporting progress. LiteRT`
+                + ` reads the file of the resolved catalog entry, asks for`
+                + ` the smallest vision budget and the audio backend only`
+                + ` when that file has them, then opens one conversation it`
+                + ` keeps for later turns. The Gemma 4 audio encoder must run`
+                + ` on the CPU backend the file requires.`),
+            step([`chat.run`, `chat.emitStatus`],
+                ` Snap to ready, requesting true, percent 100.`),
+            step([`llm.chat`, `wllama.chat`, `litert.chat`],
+                ` Wait for the previous stream, then open one engine turn.`
+                + ` LiteRT reuses its conversation while the history matches.`),
+            step([`buildMessages`],
+                ` Fold system turns, cap images and audio newest first, take`
+                + ` the limits window, drop a leading assistant, merge same`
+                + ` roles.`),
+            step([`resizeImages`],
+                ` Center-crop every image part to a square, then resize it to`
+                + ` 288 x 288, before the engine starts. LiteRT then uses its`
+                + ` 70-token budget and never upscales past 384 x 384.`),
+            step([`wllama.toWllamaMessages`, `litert.toLitertMessages`],
+                ` The selected engine maps the built turns to its own message`
+                + ` shape, decoding image and audio parts into bytes. A`
+                + ` LiteRT preface keeps history media as text notes.`),
+            step([`litert.history`],
+                ` Reuse the live conversation and send only the new turn when`
+                + ` it already holds the history, otherwise open a new one.`),
+            step([`engine.logs`],
+                ` Log the censored turn only when the call enables logging,`
+                + ` otherwise stay silent.`),
+            step([`streamReply`, `createThinkSplitter`, `engine.timeout`],
+                ` Run the chunk loop, split reasoning markers, emit deltas,`
+                + ` measure the streamed token speed and stop a silent engine`
+                + ` instead of waiting forever.`),
+            step([`chat.run`],
+                ` Accumulate thinking and reply, call onThinking and`
+                + ` onResponse with the full text so far, forward onSpeed.`),
+            step([`chat.emitStatus`],
+                ` requesting false, then ready or the last error.`),
+            step([`chat.cancel`],
+                ` A stale handle does nothing; otherwise abort the stream,`
+                + ` leave the shared download, or unload the model.`),
+        ],
+    },
+};
+
 // DATA END
 
 (() => {
@@ -1960,83 +2056,6 @@ e(`banner`, `assetsNode.defaultWllamaAssets`, `call`);
         paint();
     };
 
-    const step = (ids, text) => ({ ids, text });
-
-    const FLOWS = {
-        send: {
-            title: `createChat, one reply end to end`,
-            steps: [
-                step([`host.preload`, `chat.preloadModel`, `llm.load`],
-                    ` Optional: a preload starts the same load early, so the`
-                    + ` first send joins it or finds the model ready.`),
-                step([`host.input`, `chat.createChat`],
-                    ` The host passes the model or omits it, the whole message`
-                    + ` list, budgets and the callbacks.`),
-                step([`chat.createChatOn`, `chat.emitStatus`],
-                    ` Bump the call token, abort the previous stream, emit the`
-                    + ` first snapshot synchronously.`),
-                step([`resolveLlmModel`, `chat.run`],
-                    ` Pick the requested model or the device default, resolve`
-                    + ` the LiteRT file for this device, reject an unknown model,`
-                    + ` an empty prompt with a reported error, or a media turn`
-                    + ` the selected artifact cannot take, then resolve the`
-                    + ` budgets.`),
-                step([`llm.load`],
-                    ` Reuse a ready model, join the same load, or abandon a`
-                    + ` different one before starting.`),
-                step([`llm.probes`, `llm.engineFor`],
-                    ` Persist storage, detect wasm and WebGPU, pick the engine`
-                    + ` named by the model artifact.`),
-                step([`llm.evictPrevious`],
-                    ` Keep one model in memory, unload the previous runtime and`
-                    + ` remove its cache.`),
-                step([`wllama.startLLM`, `litert.startLLM`, `litert.settings`],
-                    ` The selected engine downloads or reads its cache and its`
-                    + ` stored file, resuming a cut download, then loads and`
-                    + ` returns the unified runtime, reporting progress. LiteRT`
-                    + ` picks the multimodal desktop file or the text-only phone`
-                    + ` build, asks for the smallest vision budget and the audio`
-                    + ` backend only when that file has them, then opens one`
-                    + ` conversation it keeps for later turns. The Gemma 4 audio`
-                    + ` encoder must run on the CPU backend the file requires.`),
-                step([`chat.run`, `chat.emitStatus`],
-                    ` Snap to ready, requesting true, percent 100.`),
-                step([`llm.chat`, `wllama.chat`, `litert.chat`],
-                    ` Wait for the previous stream, then open one engine turn.`
-                    + ` LiteRT reuses its conversation while the history matches.`),
-                step([`buildMessages`],
-                    ` Fold system turns, cap images and audio newest first, take`
-                    + ` the limits window, drop a leading assistant, merge same`
-                    + ` roles.`),
-                step([`resizeImages`],
-                    ` Center-crop every image part to a square, then resize it to`
-                    + ` 288 x 288, before the engine starts. LiteRT then uses its`
-                    + ` 70-token budget and never upscales past 384 x 384.`),
-                step([`wllama.toWllamaMessages`, `litert.toLitertMessages`],
-                    ` The selected engine maps the built turns to its own message`
-                    + ` shape, decoding image and audio parts into bytes. A`
-                    + ` LiteRT preface keeps history media as text notes.`),
-                step([`litert.continuesHistory`],
-                    ` Reuse the live conversation and send only the new turn when`
-                    + ` it already holds the history, otherwise open a new one.`),
-                step([`engine.logs`],
-                    ` Log the censored turn only when the call enables logging,`
-                    + ` otherwise stay silent.`),
-                step([`streamReply`, `createThinkSplitter`, `withTimeout`],
-                    ` Run the chunk loop, split reasoning markers, emit deltas,`
-                    + ` measure the streamed token speed and stop a silent engine`
-                    + ` instead of waiting forever.`),
-                step([`chat.run`],
-                    ` Accumulate thinking and reply, call onThinking and`
-                    + ` onResponse with the full text so far, forward onSpeed.`),
-                step([`chat.emitStatus`],
-                    ` requesting false, then ready or the last error.`),
-                step([`chat.cancel`],
-                    ` A stale handle does nothing; otherwise abort the stream,`
-                    + ` leave the shared download, or unload the model.`),
-            ],
-        },
-    };
 
     const llmStates = () => {
         const box = (x, y, w, label) =>

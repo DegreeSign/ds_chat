@@ -1,7 +1,7 @@
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
-import { litertArtifact, litertContextWindow, llmModels } from '../models';
+import { litertContextWindow, llmModels } from '../models';
 import {
     contentLength,
     hasAudio,
@@ -70,12 +70,10 @@ const cacheOpen = async (): Promise<Cache | undefined> => {
 
 /** Whether one model file is stored, in the cache or on disk */
 const modelCached = async (model: ChatModel): Promise<boolean> => {
+    const litert = model.litert;
+    if (!litert) return false;
     const
-        litert = model.litert,
-        artifact = litertArtifact(model);
-    if (!litert || !artifact) return false;
-    const
-        url = modelUrl(litert.repo, artifact.file),
+        url = modelUrl(litert.repo, litert.file),
         [cache, stored] = await Promise.all([cacheOpen(), store.stored(url)]);
     if (stored?.complete) return true;
     try {
@@ -336,10 +334,9 @@ const chatOn = async ({
             onStall: reset,
             start: async messages => {
                 if (params.signal?.aborted) throw new Error(`Cancelled`);
-                const artifact = litertArtifact(model);
-                if (hasImages(messages) && !artifact?.vision)
+                if (hasImages(messages) && !model.litert?.vision)
                     throw new Error(`Model does not accept images`);
-                if (hasAudio(messages) && !artifact?.audio)
+                if (hasAudio(messages) && !model.litert?.audio)
                     throw new Error(`Model does not accept audio`);
                 return streamLitert({ engine, mod, params, messages, session });
             },
@@ -357,18 +354,18 @@ const litertSettings = ({
     source,
     mod,
 }: LitertSettingsParams): LitertSettings => {
-    const artifact = litertArtifact(model);
+    const litert = model.litert;
     return {
         model: source,
         mainExecutorSettings: {
             maxNumTokens: litertContextWindow,
-            ...(artifact?.vision
+            ...(litert?.vision
                 ? { maxNumImages: Math.max(1, limits.maxImages) }
                 : {}),
             backendConfig,
         },
         // one small signature
-        ...(artifact?.vision
+        ...(litert?.vision
             ? {
                 visionBackend: mod.Backend.GPU,
                 maxVisionTokensPerImage: visionTokens,
@@ -376,7 +373,7 @@ const litertSettings = ({
             }
             : {}),
         // audio encoder on demand, the Gemma 4 build requires the CPU backend
-        ...(artifact?.audio ? { audioBackend: mod.Backend.CPU } : {}),
+        ...(litert?.audio ? { audioBackend: mod.Backend.CPU } : {}),
     };
 };
 
@@ -389,10 +386,8 @@ const startLLM = async ({
     logging,
 }: StartLlmParams): Promise<LlmRuntime> => {
     loggingOn = logging === true;
-    const
-        litert = model.litert,
-        artifact = litertArtifact(model);
-    if (!litert || !artifact) throw new Error(`Model has no LiteRT artifact`);
+    const litert = model.litert;
+    if (!litert) throw new Error(`Model has no LiteRT artifact`);
     const mod = await loadLitert();
     const
         scope = globalThis as { Module?: unknown },
@@ -405,7 +400,7 @@ const startLLM = async ({
     };
     if (signal?.aborted) throw new Error(`Cancelled`);
     const
-        url = modelUrl(litert.repo, artifact.file),
+        url = modelUrl(litert.repo, litert.file),
         cache = await cacheOpen();
     let source: ReadableStream<Uint8Array> | undefined;
     // a complete file in either store needs no network
@@ -472,12 +467,10 @@ const litertEngine: LlmEngine = {
     hasCache: async () => {
         try {
             for (const model of llmModels) {
-                const
-                    litert = model.litert,
-                    artifact = litertArtifact(model);
-                if (!litert || !artifact) continue;
+                const litert = model.litert;
+                if (!litert) continue;
                 const stored = await store.stored(
-                    modelUrl(litert.repo, artifact.file));
+                    modelUrl(litert.repo, litert.file));
                 if (stored) return true;
             };
             const cache = await cacheOpen();
@@ -486,12 +479,10 @@ const litertEngine: LlmEngine = {
     },
     remove: async model => {
         try {
+            const litert = model.litert;
+            if (!litert) return;
             const
-                litert = model.litert,
-                artifact = litertArtifact(model);
-            if (!litert || !artifact) return;
-            const
-                url = modelUrl(litert.repo, artifact.file),
+                url = modelUrl(litert.repo, litert.file),
                 cache = await cacheOpen();
             await store.remove(url);
             if (cache) await cache.delete(url);

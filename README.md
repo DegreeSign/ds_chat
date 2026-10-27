@@ -126,30 +126,33 @@ only to a model with vision support, center-crops each image to a square,
 resizes it to 288 x 288, and caps the number with `limits.maxImages`. The
 WebGPU engine asks LiteRT for the smallest Gemma 4 vision budget (70 tokens,
 630 patches), so it encodes the crop at 384 x 384 instead of upscaling it to
-768 x 768. The CPU engine uses the 288 crop directly. On a phone or tablet,
-Gemma runs the text-only browser build, so images there go through
-`qwen3_vl_2b` instead.
+768 x 768. The CPU engine uses the 288 crop directly. On a phone or tablet a
+Gemma request resolves to `gemma4_e2b_limited`, the text-only browser build, so
+images there go through `qwen3_vl_2b` instead.
 
 Attach a recording with `audio: [dataUrl]`. Gemma 4 E2B accepts WAV, MP3 and
 FLAC on the desktop WebGPU engine and loads its audio encoder on demand. A short
 16 kHz mono WAV is the best input. `limits.maxAudio` caps the clips (default 1).
 A model without audio drops the clip when the turn also has text; an audio-only
-turn reports `Model does not accept audio`. The phone build is text only, so
-audio follows the same rule as images there. The package does not transcode, so
-the host supplies one of those formats.
+turn reports `Model does not accept audio`. On a phone or tablet
+`gemma4_e2b_limited` is text only, so audio follows the same rule as images
+there. The package does not transcode, so the host supplies one of those
+formats.
 
 The package never writes storage, so the host appends the user message before
 the call and appends the assistant message after the last `onResponse`.
 
 ## Enable WebGPU
 
-A request without `model` picks `gemma4_e2b` when the browser exposes a WebGPU
-adapter and `qwen3_vl_2b` when it does not. A phone or tablet asking for Gemma
-gets `gemma-4-E2B-it-gpu.litertlm`, the 2.0 GB browser build, which is text
-only. A desktop gets the 2.6 GB multimodal build with vision and audio. Hosts
-that need images on mobile pass `qwen3_vl_2b`; audio is desktop only. The GPU
-engine is far faster on a desktop, so check the browser before blaming the
-package:
+A request without `model` picks Gemma when the browser exposes a WebGPU adapter
+and `qwen3_vl_2b` when it does not. A phone or tablet asking for Gemma gets
+`gemma4_e2b_limited`, the 2.0 GB text-only browser build
+(`gemma-4-E2B-it-gpu.litertlm`); a desktop gets `gemma4_e2b`, the 2.6 GB
+multimodal build with vision and audio. Once a model is requested or resolved,
+every status snapshot reports the build that runs in `model`, so a host that
+asks for `gemma4_e2b` on a phone reads `gemma4-e2b-limited` back. Hosts that
+need images on mobile pass `qwen3_vl_2b`; audio is desktop only. The GPU engine
+is far faster on a desktop, so check the browser before blaming the package:
 
 ```js
 // Run in the console of the page that loads the package
@@ -213,8 +216,8 @@ budget, 70 tokens and 630 patches, so the encoder runs one small signature and
 the crop is resized to 384 x 384 rather than the full 768 x 768. If the error
 still appears, close other GPU tabs, unload the model, or switch to the CPU
 model. A lost device needs a page or model reload; later calls cannot reuse it.
-A phone or tablet uses the text-only browser build, so it never starts the
-vision or audio encoder.
+A phone or tablet resolves Gemma to the text-only browser build, so it never
+starts the vision or audio encoder.
 
 ## Public API
 
@@ -320,11 +323,12 @@ search and currency tools fetch over the network; `calculate` does not.
 
 | Field | Description |
 | ----- | ----------- |
+| `model?` | The build that runs after the mobile swap. |
 | `availability` | `ChatStatus.online`, `.away` or `.offline`, derived from `status`. |
 | `status` | `LlmStatus`: `idle`, `downloading`, `ready`, `error` or `unsupported`. |
 | `backend` | `LlmBackend.cpu`, `.gpu` or `.none`. |
-| `supportsImages` | Whether the requested model accepts images. |
-| `supportsAudio` | Whether the requested model accepts audio. |
+| `supportsImages` | Whether the model accepts images on this device. |
+| `supportsAudio` | Whether the model accepts audio on this device. |
 | `ready` | Whether a model is loaded and accepts a reply. |
 | `loading` | Whether a download or load is in flight. |
 | `requesting` | Whether a reply is streaming right now. |
@@ -351,12 +355,15 @@ without it goes quiet again.
 | `ChatModelId` | Name | Reasoning | Images | Audio | CPU | WebGPU |
 | ------------- | ---- | --------- | ------ | ----- | --- | ------ |
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
-| `gemma4_e2b` | Gemma 4 E2B | Yes | Desktop | Desktop | No | Yes |
+| `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | Yes | No | Yes |
+| `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Mobile |
 
-A phone or tablet asking for Gemma gets the browser build,
-`gemma-4-E2B-it-gpu.litertlm`, which is text only. It has no vision or audio
-encoder, so `supportsImages` and `supportsAudio` report `false` there. Use
-`qwen3_vl_2b` for images on mobile.
+A phone or tablet asking for any Gemma id gets `gemma4_e2b_limited`,
+`gemma-4-E2B-it-gpu.litertlm`, which is text only. A desktop asking for the
+limited id gets the full `gemma4_e2b` build instead. The build that actually
+runs is always the one in `ChatStatusSnapshot.model`. The limited build has no
+vision or audio encoder, so `supportsImages` and `supportsAudio` report `false`
+there. Use `qwen3_vl_2b` for images on mobile.
 
 The first call downloads the model before its engine loads it. Later calls
 reuse the loaded runtime. Only one model stays in memory. An interrupted
@@ -371,7 +378,7 @@ Gemma 4 WebGPU path. Use the GPU model when images need to be fast.
 
 Gemma 4 E2B downloads `gemma-4-E2B-it.litertlm`, about 2.6 GB, on a desktop. It
 runs on the WebGPU engine with its vision and audio encoders in the same file,
-so an image or audio prompt does not download a projector. A phone or tablet
+so an image or audio prompt does not download a projector. `gemma4_e2b_limited`
 instead downloads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm`, the precompiled
 GPU_ARTISAN build Google ships for browsers. The smaller file is what keeps a
 mobile tab alive at the end of the model load.
@@ -585,22 +592,23 @@ No. The host passes the full prompt on every call and keeps the reply.
 
 Yes, on models with vision support. Put image URLs in a user turn's `images`
 array. Qwen3-VL 2B accepts images on the CPU engine and Gemma 4 E2B accepts
-images on the desktop WebGPU engine. On a phone or tablet Gemma runs the
-text-only browser build, so use `qwen3_vl_2b` for mobile images. Each image is
-center-cropped to a square and resized to 288 x 288 before the engine sees it.
-The WebGPU engine encodes that crop at 384 x 384 with the smallest Gemma 4
-vision budget. A model without vision drops images when the turn also has text;
-an image-only turn reports `Model does not accept images`.
+images on the desktop WebGPU engine. On a phone or tablet Gemma resolves to
+`gemma4_e2b_limited`, the text-only browser build, so use `qwen3_vl_2b` for
+mobile images. Each image is center-cropped to a square and resized to 288 x 288
+before the engine sees it. The WebGPU engine encodes that crop at 384 x 384
+with the smallest Gemma 4 vision budget. A model without vision drops images
+when the turn also has text; an image-only turn reports
+`Model does not accept images`.
 
 ### Does it support audio?
 
 Yes, on models with audio support. Put an audio URL in a user turn's `audio`
 array. Gemma 4 E2B accepts WAV, MP3 and FLAC on the desktop WebGPU engine, and a
 short 16 kHz mono WAV is the best input. `limits.maxAudio` caps the clips
-(default 1). Audio is desktop only; the mobile browser build has no audio
-encoder. The package does not transcode, so the host supplies one of those
-formats. A model without audio drops the clip when the turn also has text; an
-audio-only turn reports `Model does not accept audio`.
+(default 1). Audio is desktop only; `gemma4_e2b_limited` has no audio encoder.
+The package does not transcode, so the host supplies one of those formats. A
+model without audio drops the clip when the turn also has text; an audio-only
+turn reports `Model does not accept audio`.
 
 ### Does it need a server?
 
@@ -627,7 +635,7 @@ Qwen3-VL 2B supports reasoning and images on the CPU. Gemma 4 E2B supports
 reasoning, images and audio on desktop WebGPU, with much faster media prompts
 but a larger download and a slower first compile. Use Qwen for broad browser
 support and for mobile images. Use Gemma on a desktop with Chromium WebGPU, or
-on a phone for text with the smaller browser build.
+on a phone for text, where it resolves to `gemma4_e2b_limited`.
 
 ## Licensing
 

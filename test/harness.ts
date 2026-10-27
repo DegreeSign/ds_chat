@@ -18,9 +18,9 @@ import {
 import {
     cpuContextWindow,
     defaultLlmModel,
+    deviceModelId,
     findLlmModel,
     gpuAdapter,
-    litertArtifact,
     litertContextWindow,
     llmModels,
     mobileCpuContextWindow,
@@ -298,6 +298,11 @@ const definitions: Array<{
                 assertEqual(LlmRole.assistant, `assistant`, `assistant role`);
                 assertEqual(ChatModelId.qwen3_vl_2b, `qwen3-vl-2b`, `qwen id`);
                 assertEqual(ChatModelId.gemma4_e2b, `gemma4-e2b`, `gemma id`);
+                assertEqual(
+                    ChatModelId.gemma4_e2b_limited,
+                    `gemma4-e2b-limited`,
+                    `limited gemma id`,
+                );
                 assertEqual(BuiltinTool.websearch, `websearch`, `websearch tool`);
                 assertEqual(BuiltinTool.calculate, `calculate`, `calculate tool`);
                 assertEqual(BuiltinTool.currency, `currency`, `currency tool`);
@@ -316,7 +321,7 @@ const definitions: Array<{
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 2, `catalog size`);
+                assertEqual(llmModels.length, 3, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
                 assertEqual(litertContextWindow, 4096, `gpu window`);
                 assertEqual(
@@ -348,17 +353,24 @@ const definitions: Array<{
                 );
                 assertEqual(gemma.litert?.vision, true, `gemma vision`);
                 assertEqual(gemma.litert?.audio, true, `gemma audio`);
+                const limited = modelOf(ChatModelId.gemma4_e2b_limited);
+                assertEqual(limited.reasoning, true, `limited reasoning`);
                 assertEqual(
-                    gemma.litert?.web?.file,
-                    `gemma-4-E2B-it-gpu.litertlm`,
-                    `gemma mobile file`,
+                    limited.litert?.repo,
+                    gemma.litert?.repo,
+                    `limited shared repo`,
                 );
-                assertEqual(gemma.litert?.web?.vision, false, `mobile vision`);
-                assertEqual(gemma.litert?.web?.audio, false, `mobile audio`);
+                assertEqual(
+                    limited.litert?.file,
+                    `gemma-4-E2B-it-gpu.litertlm`,
+                    `limited file`,
+                );
+                assertEqual(limited.litert?.vision, false, `limited vision`);
+                assertEqual(limited.litert?.audio, false, `limited audio`);
                 assertEqual(supportsImages(gemma), true, `gpu images`);
                 assertEqual(supportsAudio(gemma), true, `gpu audio`);
-                assertEqual(supportsImages(gemma, true), false, `mobile images`);
-                assertEqual(supportsAudio(gemma, true), false, `mobile audio`);
+                assertEqual(supportsImages(limited), false, `limited images`);
+                assertEqual(supportsAudio(limited), false, `limited audio support`);
                 const textOnly: ChatModel = {
                     id: ChatModelId.qwen3_vl_2b,
                     reasoning: false,
@@ -420,11 +432,23 @@ const definitions: Array<{
                     true,
                     `default pick`,
                 );
+                assertEqual(
+                    picked,
+                    await gpuAdapter()
+                        ? deviceModelId(ChatModelId.gemma4_e2b)
+                        : ChatModelId.qwen3_vl_2b,
+                    `default device pick`,
+                );
                 assertEqual((await resolveLlmModel())?.id, picked, `resolved default`);
                 assertEqual(
                     (await resolveLlmModel(ChatModelId.qwen3_vl_2b))?.id,
                     ChatModelId.qwen3_vl_2b,
                     `asked model`,
+                );
+                assertEqual(
+                    (await resolveLlmModel(ChatModelId.gemma4_e2b))?.id,
+                    deviceModelId(ChatModelId.gemma4_e2b),
+                    `asked gemma`,
                 );
                 assertEqual(
                     await resolveLlmModel(`missing` as ChatModelId),
@@ -497,28 +521,42 @@ const definitions: Array<{
                     `client hint wins`,
                 );
                 assertEqual(mobileCpuContextWindow, 4096, `mobile window`);
-                const gemma = modelOf(ChatModelId.gemma4_e2b);
                 assertEqual(
-                    litertArtifact(gemma)?.file,
-                    `gemma-4-E2B-it.litertlm`,
-                    `desktop artifact`,
+                    deviceModelId(ChatModelId.gemma4_e2b),
+                    ChatModelId.gemma4_e2b,
+                    `desktop gemma`,
                 );
                 assertEqual(
-                    litertArtifact(gemma, true)?.file,
-                    `gemma-4-E2B-it-gpu.litertlm`,
-                    `mobile artifact`,
+                    deviceModelId(ChatModelId.gemma4_e2b_limited),
+                    ChatModelId.gemma4_e2b,
+                    `desktop limited swap`,
                 );
                 assertEqual(
-                    litertArtifact(gemma, true)?.vision,
+                    deviceModelId(ChatModelId.gemma4_e2b, true),
+                    ChatModelId.gemma4_e2b_limited,
+                    `mobile gemma swap`,
+                );
+                assertEqual(
+                    deviceModelId(ChatModelId.gemma4_e2b_limited, true),
+                    ChatModelId.gemma4_e2b_limited,
+                    `mobile limited`,
+                );
+                assertEqual(
+                    deviceModelId(ChatModelId.qwen3_vl_2b, true),
+                    ChatModelId.qwen3_vl_2b,
+                    `mobile qwen`,
+                );
+                assertEqual(deviceModelId(undefined, true), undefined, `no model`);
+                assertEqual(
+                    supportsImages(modelOf(ChatModelId.gemma4_e2b_limited)),
                     false,
-                    `mobile artifact vision`,
+                    `limited images`,
                 );
                 assertEqual(
-                    supportsImages(gemma, false),
-                    true,
-                    `desktop images`,
+                    supportsAudio(modelOf(ChatModelId.gemma4_e2b_limited)),
+                    false,
+                    `limited audio`,
                 );
-                assertEqual(supportsAudio(gemma, false), true, `desktop audio`);
             },
         },
         {
@@ -1336,6 +1374,33 @@ const definitions: Array<{
             },
         },
         {
+            name: `runtime/gemma builds evict`,
+            run: async () => {
+                const
+                    { runtime, calls, models } = runtimeWith({
+                        backend: LlmBackend.gpu,
+                    }),
+                    load = (id: ChatModelId) => runtime.load({
+                        model: modelOf(id),
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                assertEqual(
+                    await load(ChatModelId.gemma4_e2b),
+                    true,
+                    `desktop loaded`,
+                );
+                assertEqual(
+                    await load(ChatModelId.gemma4_e2b_limited),
+                    true,
+                    `limited loaded`,
+                );
+                assertEqual(calls.start, 2, `two builds started`);
+                assertEqual(calls.remove, 1, `desktop build removed`);
+                assertEqual(models[1].id, ChatModelId.gemma4_e2b_limited, `limited build`);
+            },
+        },
+        {
             name: `runtime/backend selection`,
             run: async () => {
                 const cpuOnly = runtimeWith({ backend: LlmBackend.cpu });
@@ -1658,6 +1723,7 @@ const definitions: Array<{
                 assertEqual(calls.start, 1, `gpu start`);
                 const last = statuses[statuses.length - 1];
                 assertEqual(last.ready, true, `gpu ready`);
+                assertEqual(last.model, ChatModelId.gemma4_e2b, `gpu model`);
                 assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
                 assertEqual(last.supportsImages, true, `gpu images`);
                 assertEqual(last.supportsAudio, true, `gpu audio`);
@@ -1754,6 +1820,11 @@ const definitions: Array<{
                 await sleep(20);
                 assertEqual(statuses[0].requesting, false, `idle start`);
                 assertEqual(statuses[0].ready, false, `not ready start`);
+                assertEqual(
+                    statuses[0].model,
+                    ChatModelId.qwen3_vl_2b,
+                    `model start`,
+                );
                 assertEqual(statuses[0].availability, ChatStatus.away, `away start`);
                 assertEqual(
                     statuses.some(value => value.requesting),
@@ -1847,10 +1918,77 @@ const definitions: Array<{
                 assertEqual(requests.length, 1, `gpu chat`);
                 assertEqual(requests[0].messages[0].images?.[0], image, `gpu image`);
                 const last = statuses[statuses.length - 1];
+                assertEqual(statuses[0].model, ChatModelId.gemma4_e2b, `gpu model start`);
                 assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
                 assertEqual(last.supportsImages, true, `gpu supports images`);
                 assertEqual(last.supportsAudio, true, `gpu supports audio`);
                 assertEqual(last.error, undefined, `gpu no error`);
+            },
+        },
+        {
+            name: `chat/mobile gemma build`,
+            run: async () => {
+                const
+                    nav = navigator as Navigator & {
+                        userAgentData?: { mobile?: boolean },
+                    },
+                    hadAgent = Object.prototype.hasOwnProperty.call(nav, `userAgent`),
+                    agent = nav.userAgent,
+                    hadHints = Object.prototype.hasOwnProperty.call(nav, `userAgentData`),
+                    hints = nav.userAgentData;
+                Object.defineProperty(nav, `userAgent`, {
+                    configurable: true,
+                    value: `Mozilla/5.0 (Linux; Android 14; Pixel 8)`,
+                });
+                Object.defineProperty(nav, `userAgentData`, {
+                    configurable: true,
+                    value: { mobile: true },
+                });
+                try {
+                    const
+                        statuses: ChatStatusSnapshot[] = [],
+                        { chat, models, requests } = chatWith({
+                            backend: LlmBackend.gpu,
+                            chatText: `seen`,
+                        });
+                    chat({
+                        model: ChatModelId.gemma4_e2b,
+                        messages: [userMessage(`hi`)],
+                        onResponse: () => { },
+                        onStatus: value => statuses.push(value),
+                    });
+                    await waitFor(() => requests.length == 1, `mobile swap chat`);
+                    assertEqual(
+                        models[0].id,
+                        ChatModelId.gemma4_e2b_limited,
+                        `mobile build loaded`,
+                    );
+                    assertEqual(
+                        statuses[0].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `mobile build start`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `mobile build end`,
+                    );
+                    assertEqual(statuses[0].supportsImages, false, `mobile no images`);
+                    assertEqual(statuses[0].supportsAudio, false, `mobile no audio`);
+                } finally {
+                    if (hadAgent)
+                        Object.defineProperty(nav, `userAgent`, {
+                            configurable: true,
+                            value: agent,
+                        });
+                    else delete (nav as unknown as Record<string, unknown>).userAgent;
+                    if (hadHints)
+                        Object.defineProperty(nav, `userAgentData`, {
+                            configurable: true,
+                            value: hints,
+                        });
+                    else delete (nav as unknown as Record<string, unknown>).userAgentData;
+                };
             },
         },
         {
