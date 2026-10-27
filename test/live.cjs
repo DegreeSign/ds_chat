@@ -44,6 +44,18 @@ window.fetch = (input, init) => {
         .exec(url);
     return realFetch(match ? "/models/" + match[1] : input, init);
 };
+// keep the device so a test can force a device loss
+window.__devices = [];
+if (globalThis.GPUAdapter) {
+    const requestDevice = GPUAdapter.prototype.requestDevice;
+    GPUAdapter.prototype.requestDevice = async function (...args) {
+        const device = await requestDevice.apply(this, args);
+        window.__devices.push(device);
+        return device;
+    };
+};
+window.__loseDevice = () =>
+    window.__devices[window.__devices.length - 1]?.destroy();
 window.addEventListener("error", event => {
     console.log("PAGE_ERROR", event.error?.stack || event.message);
 });
@@ -195,6 +207,30 @@ const run = async () => {
             ],
         }, "text");
         record("text", !!text.reply && !text.last?.error, {
+            reply: text.reply.slice(0, 120),
+            error: text.last?.error,
+            timedOut: text.timedOut,
+        });
+    });
+
+    await timed("loss", async () => {
+        if (new URLSearchParams(location.search).get("loseprobe") != "1") return;
+        if (!window.__devices?.length) {
+            record("loss", false, { error: "no device captured" });
+            return;
+        };
+        write("destroying device " + window.__devices.length);
+        window.__loseDevice();
+        const text = await ask({
+            model: chosen,
+            logging: true,
+            limits: replyBudget,
+            messages: [
+                { role: LlmRole.system, content: "Answer in one short sentence." },
+                { role: LlmRole.user, content: "Name one planet." },
+            ],
+        }, "loss");
+        record("loss", !!text.reply && !text.last?.error, {
             reply: text.reply.slice(0, 120),
             error: text.last?.error,
             timedOut: text.timedOut,
@@ -419,6 +455,7 @@ const main = async () => {
     await send("Page.navigate", {
         url: `http://127.0.0.1:${PORT}/${page}?model=${model}`
             + (only ? `&only=${only}` : "")
+            + (process.env.LIVE_FORCE_LOSS ? `&loseprobe=1` : "")
             + (process.env.LIVE_QUERY ? `&${process.env.LIVE_QUERY}` : ""),
     });
 

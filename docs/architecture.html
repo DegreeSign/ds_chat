@@ -515,13 +515,13 @@ const step = (ids, text) => ({ ids, text });
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 27);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 65);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 765);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 310);
-f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 283);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 795);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 317);
+f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 294);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 146);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 393);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 607);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 714);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
@@ -539,9 +539,9 @@ f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
 f(`services`, `assets`, `public services`,
     `wikipedia.org · duckduckgo.com · srv.coinexams.com`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4123);
-f(`live`, `test`, `live.cjs`, `test/live.cjs`, 457);
-f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4349);
+f(`live`, `test`, `live.cjs`, `test/live.cjs`, 494);
+f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 83);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 160);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 206);
 f(`vwebpack`, `test`, `webpack.config.cjs`, `test/webpack.config.cjs`, 42);
@@ -565,7 +565,7 @@ n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
 // entry, enums and types
 n(`entry`, `exports`, 1, `public exports`, `createChat · preloadModel + 8 enums`,
     `Only createChat, preloadModel and the public types leave the package`);
-n(`chat`, `createChat`, 306, `createChat`, `(input: ChatInput) => CancelChat`,
+n(`chat`, `createChat`, 313, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
 n(`chat`, `createChatOn`, 60, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
@@ -577,13 +577,14 @@ n(`chat`, `emitStatus`, 67, `emitStatus`, `(call: ActiveCall) => void`,
     `Publish the snapshot for one live call`);
 n(`chat`, `run`, 71, `run`, `(call: ActiveCall) => Promise<void>`,
     `Resolve the model, resolve the tools, guard the model, load it, strip`
-    + ` unsupported media, report an error, stream and forward the callbacks`);
-n(`chat`, `cancel`, 226, `cancel`, `(call: ActiveCall) => void`,
+    + ` unsupported media, report an error, stream and forward the callbacks,`
+    + ` clearing the text when a rebuilt engine restarts`);
+n(`chat`, `cancel`, 233, `cancel`, `(call: ActiveCall) => void`,
     `Stale no-op, leave the load wait, abort the stream, or unload`);
-n(`chat`, `createPreloadOn`, 257, `createPreloadOn`,
+n(`chat`, `createPreloadOn`, 264, `createPreloadOn`,
     `(service: Runtime) => (input?: ChatPreloadInput) => Promise<boolean>`,
     `Testable preload factory over one runtime`);
-n(`chat`, `preloadModel`, 308, `preloadModel`,
+n(`chat`, `preloadModel`, 315, `preloadModel`,
     `(input?: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
@@ -657,30 +658,32 @@ n(`types`, `store`, 413, `StoredPart · StoredFilePart · StoredModel`
     + ` · stored · download · remove · purge`,
     `What the model file store keeps in its parts and metadata, where one`
     + ` response resumes, one download request and one engine store`);
-n(`types`, `params`, 505, `RuntimeChatParams · EngineChatParams`
+n(`types`, `params`, 507, `RuntimeChatParams · EngineChatParams`
     + ` · StartLlmParams · StreamReplyParams`,
     `messages · limits · reasoning · logging · tools · maxToolRounds`
-    + ` · onReason · onText · onSpeed · onToolCall · onToolResult`
-    + ` · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
+    + ` · onReason · onText · onRestart · onSpeed · onToolCall`
+    + ` · onToolResult · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
     `Per-call budgets, tool fields, accumulated text and speed callbacks`);
-n(`types`, `runtimeContract`, 551, `LlmRuntime · LlmEngine`,
+n(`types`, `runtimeContract`, 541, `LlmRuntime · LlmEngine`,
     `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`,
-    `The engine returns model, backend, contextSize, chat and unload`);
-n(`types`, `contentParts`, 566, `EngineContentPart`,
+    `The engine returns model, backend, contextSize, chat, an optional`
+    + ` fatal probe and unload`);
+n(`types`, `contentParts`, 572, `EngineContentPart`,
     `text | image | audio`,
     `One segment of a user turn before an engine maps it`);
-n(`types`, `messages`, 584, `EngineMessage`, `role + content`,
+n(`types`, `messages`, 590, `EngineMessage`, `role + content`,
     `One OpenAI-style turn, a user turn may carry media parts`);
-n(`types`, `litertRuntime`, 590, `LitertContentPart · LitertMessage`
+n(`types`, `litertRuntime`, 596, `LitertContentPart · LitertMessage`
     + ` · LitertEngine · LitertModule`,
     `text | image | audio · role + content + channels`,
     `The LiteRT content, turn, engine and module types, type only`);
-n(`types`, `litertParams`, 617, `LitertSession · LitertChatParams`
+n(`types`, `litertParams`, 646, `LitertGpu · LitertSession · LitertChatParams`
     + ` · StreamLitertParams`,
-    `conversation? (ChatInterface) · sent · reasoning · maxTokens · tools`
-    + ` · engine · model · mod · params · messages · session`,
-    `The reused conversation or tool chat, one LiteRT chat call and one`
-    + ` stream over it`);
+    `engine · mod · device? · lost · contextStep · reopen · conversation?`
+    + ` (ChatInterface) · sent · reasoning · maxTokens · tools · model`
+    + ` · params · messages · session`,
+    `The live engine and its device, the reused conversation or tool chat,`
+    + ` one LiteRT chat call and one stream over it`);
 
 // model runtime
 n(`llm`, `createRuntime`, 17, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
@@ -714,14 +717,15 @@ n(`llm`, `load`, 149, `load`,
 n(`llm`, `unload`, 240, `unload`, `() => Promise<void>`,
     `Abort the load, release the engine, keep the cache`);
 n(`llm`, `chat`, 250, `chat`, `(params) => Promise<string | undefined>`,
-    `Serialize one engine turn, then stream on the loaded runtime`);
-n(`llm`, `isLoading`, 264, `isLoading`, `() => boolean`,
+    `Serialize one engine turn, then stream on the loaded runtime; a fatal`
+    + ` engine is unloaded and reported as an error`);
+n(`llm`, `isLoading`, 275, `isLoading`, `() => boolean`,
     `Not ready and downloading`);
-n(`llm`, `error`, 276, `runtime.error`, `() => string | undefined`,
+n(`llm`, `error`, 287, `runtime.error`, `() => string | undefined`,
     `Last model load error, cleared when a load starts`);
-n(`llm`, `model`, 277, `runtime.model`, `() => ChatModel | undefined`,
+n(`llm`, `model`, 288, `runtime.model`, `() => ChatModel | undefined`,
     `The model currently loaded on the runtime`);
-n(`llm`, `runtime`, 281, `runtime`, `createRuntime()`,
+n(`llm`, `runtime`, 292, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
@@ -885,71 +889,87 @@ n(`wllama`, `purge`, 377, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 556, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 659, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, hasCache, remove, purge`);
-n(`litert`, `cache`, 44, `cacheName · store · backendConfig`,
-    `litertlm-models · ModelStore · GPU executor settings`,
-    `Cache Storage bucket, the resumable store and the GPU config tuned by`
-    + ` the LiteRT demo`);
-n(`litert`, `visionTokens`, 46, `visionTokens`, `70`,
+n(`litert`, `cache`, 47, `cacheName · contextWindows · store`,
+    `litertlm-models · 4096, 2048, 1024 · ModelStore`,
+    `Cache Storage bucket, the context windows tried after a loss, the`
+    + ` resumable store and the GPU config tuned by the LiteRT demo`);
+n(`litert`, `visionTokens`, 49, `visionTokens`, `70`,
     `Smallest Gemma 4 vision budget, 630 patches`);
-n(`litert`, `wasmLog`, 64, `loggingOn · wasmOut · wasmErr`,
+n(`litert`, `wasmLog`, 69, `loggingOn · wasmOut · wasmErr`,
     `boolean · (...args) => void`,
     `Wasm stdout and stderr, quiet until a call turns logging on`);
-n(`litert`, `cacheOpen`, 73, `cacheOpen`, `() => Promise<Cache | undefined>`,
+n(`litert`, `lostError`, 78, `lostDeviceError`, `(error) => boolean`,
+    `Whether one failure names a lost or destroyed device`);
+n(`litert`, `watchDevice`, 83, `watchDevice`, `(gpu: LitertGpu) => void`,
+    `Mark the engine dead once its live device reports a loss, a replaced`
+    + ` device is ignored`);
+n(`litert`, `cacheOpen`, 96, `cacheOpen`, `() => Promise<Cache | undefined>`,
     `Open the model cache, absent in Node and on an insecure origin`);
-n(`litert`, `modelCached`, 81, `modelCached`, `(model) => Promise<boolean>`,
+n(`litert`, `loadModule`, 104, `loadModule`, `(mod) => Promise<void>`,
+    `Load the wasm module with the print hooks, a rebuild reloads it after`
+    + ` an abort`);
+n(`litert`, `modelCached`, 117, `modelCached`, `(model) => Promise<boolean>`,
     `Whether the model file is complete in the store or in Cache Storage`);
-n(`litert`, `downloads`, 96, `downloads`, `Map<string, Promise<void>>`,
+n(`litert`, `downloads`, 132, `downloads`, `Map<string, Promise<void>>`,
     `Every model file download in flight, shared by every caller`);
-n(`litert`, `countStream`, 99, `countStream`, `(body, total, onProgress) => stream`,
+n(`litert`, `countStream`, 135, `countStream`, `(body, total, onProgress) => stream`,
     `Report download progress while the file streams to the cache`);
-n(`litert`, `cacheModel`, 115, `cacheModel`, `(url, cache, signal, onProgress)`,
+n(`litert`, `cacheModel`, 151, `cacheModel`, `(url, cache, signal, onProgress)`,
     `Fallback for a host without a file store, Cache Storage holds the file`);
-n(`litert`, `fetchModel`, 145, `fetchModel`, `(url, signal, onProgress) => stream`,
+n(`litert`, `fetchModel`, 181, `fetchModel`, `(url, signal, onProgress) => stream`,
     `Network stream for a host without a cache or a store`);
-n(`litert`, `toLitertMessages`, 157, `toLitertMessages`,
+n(`litert`, `openSource`, 193, `openSource`,
+    `({ url, signal, onProgress }) => Promise<ReadableStream>`,
+    `Read a complete file from the store or the cache, else download and`
+    + ` resume it, a rebuild reopens the same file`);
+n(`litert`, `toLitertMessages`, 239, `toLitertMessages`,
     `(messages, keepMedia?) => Promise<LitertMessage[]>`,
     `Map built turns to LiteRT turns, history media becomes text notes`);
-n(`litert`, `sameMessage`, 189, `sameMessage`, `(first, next) => boolean`,
+n(`litert`, `sameMessage`, 271, `sameMessage`, `(first, next) => boolean`,
     `Same role, text and media URLs`);
-n(`litert`, `history`, 213, `continuesHistory`, `(sent, history) => boolean`,
+n(`litert`, `history`, 295, `continuesHistory`, `(sent, history) => boolean`,
     `Whether the live conversation already holds the incoming turns`);
-n(`litert`, `toolRounds`, 234, `toolRounds`, `(value?: number) => number`,
+n(`litert`, `toolRounds`, 316, `toolRounds`, `(value?: number) => number`,
     `Clamp the tool round budget, 4 by default and 1 to 25`);
-n(`litert`, `engineTool`, 240, `engineTool`, `(tool: ChatTool) => engine tool`,
+n(`litert`, `engineTool`, 322, `engineTool`, `(tool: ChatTool) => engine tool`,
     `Map one host or built-in tool to the engine declaration and function`);
-n(`litert`, `sameTools`, 252, `sameTools`, `(first?, next?) => boolean`,
+n(`litert`, `sameTools`, 334, `sameTools`, `(first?, next?) => boolean`,
     `Same names, descriptions, declarations and execute references`);
-n(`litert`, `reportTool`, 271, `reportTool`,
+n(`litert`, `reportTool`, 353, `reportTool`,
     `(params, event) => void`,
     `Map a started, completed or error progress event to the host callbacks`);
-n(`litert`, `streamLitert`, 297, `streamLitert`,
+n(`litert`, `streamLitert`, 379, `streamLitert`,
     `(engine, mod, params, messages, session) => AsyncGenerator<EngineChunk>`,
     `Reuse one conversation or tool chat, stream content and thought`
     + ` channels, cancel through the abort signal, drop a turn that cannot`
     + ` continue`);
-n(`litert`, `chat`, 402, `chatOn`, `(engine, model, mod, params, session)`,
+n(`litert`, `chat`, 484, `chatOn`, `({ gpu, model, params, session })`,
     `Follow the logging flag, reject unsupported media or tools, then`
-    + ` stream through the shared reply loop`);
-n(`litert`, `settings`, 441, `litertSettings`,
-    `({ model, limits, source, mod }) => LitertSettings`,
+    + ` stream through the shared reply loop; a lost device is rebuilt on a`
+    + ` smaller window and the turn is replayed once`);
+n(`litert`, `settings`, 546, `litertSettings`,
+    `({ model, limits, source, mod, contextTokens? }) => LitertSettings`,
     `Build the engine settings from the device artifact, with the smallest`
-    + ` vision budget and the CPU audio backend only when that artifact has`
-    + ` audio`);
-n(`litert`, `startLLM`, 471, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    + ` vision budget, the CPU audio backend only when that artifact has`
+    + ` audio, and the context window of the current step`);
+n(`litert`, `rebuild`, 577, `rebuildGpu`, `(gpu, model, limits) => Promise<void>`,
+    `Give up at the last window, else delete the dead engine, reload the`
+    + ` aborted wasm, request a fresh adapter, reopen the file and open a`
+    + ` smaller engine`);
+n(`litert`, `startLLM`, 601, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Route the wasm output through the logging flag, load wasm and module,`
     + ` read the stored file or download it with resume, compile it with`
-    + ` progress, size the vision and audio encoders and open one reused`
-    + ` conversation`);
-n(`litert`, `unload`, 547, `runtime.unload`, `() => Promise<void>`,
+    + ` progress, watch the device and open one reused conversation`);
+n(`litert`, `unload`, 650, `runtime.unload`, `() => Promise<void>`,
     `Clear the conversation and the tool list, delete the wasm engine, keep`
     + ` the cache`);
-n(`litert`, `hasCache`, 560, `hasCache`, `() => Promise<boolean>`,
+n(`litert`, `hasCache`, 663, `hasCache`, `() => Promise<boolean>`,
     `A stored file of any catalog model or any Cache Storage entry`);
-n(`litert`, `remove`, 575, `remove`, `(model) => Promise<void>`,
+n(`litert`, `remove`, 678, `remove`, `(model) => Promise<void>`,
     `Delete the model file from the store and from Cache Storage`);
-n(`litert`, `purge`, 588, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 691, `purge`, `() => Promise<void>`,
     `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
@@ -1446,19 +1466,21 @@ e(`litertEngine`, `litert.hasCache`, `inner`);
 e(`litertEngine`, `litert.remove`, `inner`);
 e(`litertEngine`, `litert.purge`, `inner`);
 e(`litert.startLLM`, `loadLitert`, `call`);
+e(`litert.startLLM`, `litert.loadModule`, `call`);
 e(`litert.startLLM`, `litert.wasmLog`, `call`);
 e(`litert.startLLM`, `litert.settings`, `call`);
 e(`litert.startLLM`, `models.litertArtifact`, `call`);
 e(`litert.settings`, `litert.visionTokens`, `inner`);
 e(`litert.settings`, `models.litertArtifact`, `call`);
 e(`litert.startLLM`, `assets.defaultLitertAssets`, `call`);
-e(`litert.startLLM`, `models.litertWindow`, `call`);
-e(`litert.startLLM`, `litert.cacheOpen`, `call`);
-e(`litert.startLLM`, `litert.cacheModel`, `call`);
-e(`litert.startLLM`, `litert.fetchModel`, `call`);
-e(`litert.startLLM`, `store.stored`, `call`);
-e(`litert.startLLM`, `store.download`, `call`);
-e(`litert.startLLM`, `store.isStoreError`, `call`);
+e(`litert.startLLM`, `litert.openSource`, `call`);
+e(`litert.startLLM`, `litert.watchDevice`, `call`);
+e(`litert.openSource`, `litert.cacheOpen`, `call`);
+e(`litert.openSource`, `litert.cacheModel`, `call`);
+e(`litert.openSource`, `litert.fetchModel`, `call`);
+e(`litert.openSource`, `store.stored`, `call`);
+e(`litert.openSource`, `store.download`, `call`);
+e(`litert.openSource`, `store.isStoreError`, `call`);
 e(`litert.startLLM`, `engine.modelUrl`, `call`);
 e(`litert.startLLM`, `litert.chat`, `inner`);
 e(`litert.startLLM`, `litert.unload`, `inner`);
@@ -1474,8 +1496,16 @@ e(`litert.chat`, `engine.hasAudio`, `call`);
 e(`litert.chat`, `engine.runEngineChat`, `call`);
 e(`litert.chat`, `models.litertArtifact`, `call`);
 e(`litert.chat`, `litert.streamLitert`, `call`);
+e(`litert.chat`, `litert.rebuild`, `call`);
+e(`litert.chat`, `litert.lostError`, `call`);
 e(`litert.chat`, `litert.wasmLog`, `call`);
 e(`litert.chat`, `types.params`, `type`);
+e(`litert.rebuild`, `litert.watchDevice`, `call`);
+e(`litert.rebuild`, `litert.loadModule`, `call`);
+e(`litert.rebuild`, `litert.settings`, `call`);
+e(`litert.rebuild`, `litert.openSource`, `call`);
+e(`litert.watchDevice`, `types.litertParams`, `type`);
+e(`litert.settings`, `models.litertWindow`, `call`);
 e(`litert.startLLM`, `types.litertParams`, `type`);
 e(`litert.streamLitert`, `litert.toLitertMessages`, `call`);
 e(`litert.streamLitert`, `litert.history`, `call`);
@@ -1708,6 +1738,10 @@ FLOWS.send = {
             ` Snap to ready, requesting true, percent 100.`),
         step([`llm.chat`, `wllama.chat`, `litert.chat`],
             ` Wait for the previous stream, then open one engine turn.`),
+        step([`litert.rebuild`, `litert.watchDevice`],
+            ` A lost device is rebuilt once on the next smaller context window,`
+            + ` the reply restarts, and a runtime that cannot rebuild reports`
+            + ` itself fatal so the host drops it.`),
         step([`buildMessages`],
             ` Fold system turns, cap images and audio newest first, take the`
             + ` limits window, drop a leading assistant, merge same roles.`),
@@ -1734,7 +1768,8 @@ FLOWS.send = {
             + ` measure the token speed and stop a silent engine.`),
         step([`chat.run`],
             ` Accumulate thinking and reply, call onThinking and onResponse`
-            + ` with the full text so far, forward onSpeed.`),
+            + ` with the full text so far, forward onSpeed and clear the text`
+            + ` when a rebuilt engine restarts.`),
         step([`chat.emitStatus`],
             ` requesting false, then ready or the last error.`),
         step([`chat.cancel`],

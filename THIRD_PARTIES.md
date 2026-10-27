@@ -43,7 +43,7 @@ The weights download at runtime and are not part of this package.
 
 ### CoinExams price feed
 
-- Source: https://srv.coinexams.com/data.json
+- Source: [CoinExams](https://coinexams.com)
 - Contents: EUR exchange rates for fiat currencies and metals, plus crypto
   prices with their 24-hour values.
 - Purpose: the built-in `currency` tool. The package fetches the whole file on

@@ -439,8 +439,8 @@ const
             splitter.flush();
         } catch (error) {
             if (logging) console.log(`Local chat failed`, error);
-            // a stalled engine must reach the host
-            if (error instanceof StallError && !stopped()) throw error;
+            // every failure reaches the host
+            if (!stopped()) throw error;
         };
         const result = stopped() ? undefined : reply || undefined;
         if (logging) {

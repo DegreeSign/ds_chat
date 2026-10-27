@@ -17,6 +17,10 @@ export interface FakeEngineOptions {
     thinkingText?: string;
     failStart?: boolean;
     failChat?: boolean;
+    /** Whether the loaded engine reports itself dead */
+    fatal?: boolean;
+    /** Text replayed after an engine restart */
+    restartText?: string;
     onStart?: (model: ChatModel) => void;
     onChat?: (params: EngineChatParams) => void;
     /** Replace the scripted reply with a real engine run */

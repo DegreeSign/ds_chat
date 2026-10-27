@@ -458,6 +458,12 @@ A stream that never produces its first chunk ends with an error after 180
 seconds instead of waiting forever. Once a chunk has arrived, 30 seconds of
 silence ends the stream and keeps the text already delivered.
 
+A lost WebGPU device is rebuilt once: the package drops the dead engine and its
+device, reloads the LiteRT wasm, retries the turn on the next smaller context
+window (4096, 2048, 1024) and reports the reply normally. When no rebuild is
+possible the runtime ends as `error` with `backend: none`, so the host can fall
+back to the CPU model.
+
 ## Logging
 
 Console output stays off by default. Pass `logging: true` in a call to receive

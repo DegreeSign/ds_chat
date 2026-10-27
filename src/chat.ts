@@ -204,6 +204,13 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                         reply += delta;
                         input.onResponse?.(reply);
                     },
+                    onRestart: () => {
+                        // a rebuilt engine restarts the text
+                        thinking = ``;
+                        reply = ``;
+                        input.onThinking?.(thinking);
+                        input.onResponse?.(reply);
+                    },
                     onSpeed: speed => {
                         if (call.token != token || call.cancelled) return;
                         input.onSpeed?.(speed);

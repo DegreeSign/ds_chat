@@ -480,6 +480,8 @@ interface RuntimeChatParams extends ChatToolParams {
     logging?: boolean,
     onReason: (text: string) => void,
     onText: (text: string) => void,
+    /** Called before a rebuilt engine restarts the reply */
+    onRestart?: () => void,
     /** Current generation speed in tokens per second */
     onSpeed?: (tokensPerSecond: number) => void,
     signal?: AbortSignal,
@@ -513,6 +515,8 @@ interface EngineChatParams extends ChatToolParams {
     onReason: (text: string) => void,
     /** Streamed reply delta */
     onText: (text: string) => void,
+    /** Called before a rebuilt engine restarts the reply */
+    onRestart?: () => void,
     /** Current generation speed in tokens per second */
     onSpeed?: (tokensPerSecond: number) => void,
     signal?: AbortSignal,
@@ -543,6 +547,8 @@ interface LlmRuntime {
     contextSize: number,
     /** Stream one reply, returning the final text or undefined when stopped */
     chat: (params: EngineChatParams) => Promise<string | undefined>,
+    /** Whether the runtime cannot serve another turn */
+    fatal?: () => boolean,
     /** Release the model from memory, keeping its cache */
     unload: () => Promise<void>,
 }
@@ -595,6 +601,27 @@ type LitertMessage = import('@litert-lm/core').Message;
 /** One LiteRT-LM engine */
 type LitertEngine = import('@litert-lm/core').Engine;
 
+/** WebGPU device the wasm module initialized */
+type LitertDevice = NonNullable<
+    import('@litert-lm/core').Wasm.LiteRtLmWasm[`preinitializedWebGPUDevice`]
+>;
+
+/** One live LiteRT-LM engine and its device */
+interface LitertGpu {
+    /** Live engine, rebuilt after a device loss */
+    engine: LitertEngine,
+    /** Wasm module the engine belongs to */
+    mod: LitertModule,
+    /** Device the engine runs on */
+    device?: LitertDevice,
+    /** Whether the device was lost */
+    lost: boolean,
+    /** Context window step of this engine */
+    contextStep: number,
+    /** Model file stream of a rebuild */
+    reopen: () => Promise<ReadableStream<Uint8Array>>,
+}
+
 /** The LiteRT-LM module namespace */
 type LitertModule = typeof import('@litert-lm/core');
 
@@ -611,6 +638,8 @@ interface LitertSettingsParams {
     source: ReadableStream<Uint8Array>,
     /** Loaded LiteRT module */
     mod: LitertModule,
+    /** Context window of this engine */
+    contextTokens?: number,
 }
 
 /** One reused LiteRT-LM conversation and the turns it already holds */
@@ -629,9 +658,8 @@ interface LitertSession {
 
 /** Params of one LiteRT-LM chat call */
 interface LitertChatParams {
-    engine: LitertEngine,
+    gpu: LitertGpu,
     model: ChatModel,
-    mod: LitertModule,
     params: EngineChatParams,
     session: LitertSession,
 }
@@ -753,6 +781,8 @@ export type {
     LitertMessage,
     LitertEngine,
     LitertModule,
+    LitertDevice,
+    LitertGpu,
     LitertSettings,
     LitertSettingsParams,
     LitertSession,

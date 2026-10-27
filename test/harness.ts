@@ -38,6 +38,7 @@ import {
 } from "../src/engines/wllama";
 import {
     cacheModel,
+    chatOn,
     continuesHistory,
     engineTool,
     litertSettings,
@@ -105,8 +106,10 @@ import type {
     EngineChatParams,
     EngineMessage,
     LitertEngine,
+    LitertGpu,
     LitertModule,
     LitertSession,
+    LitertSettings,
     PriceSnapshot,
 } from "../src/types";
 import type { FakeEngineOptions } from "./fixtures.js";
@@ -1028,6 +1031,175 @@ const definitions: Array<{
             },
         },
         {
+            name: `litert/lost device`,
+            run: async () => {
+                let
+                    deletes = 0,
+                    adapters = 0,
+                    restarts = 0,
+                    loses = 0,
+                    wasmLoads = 0;
+                const
+                    model = modelOf(ChatModelId.gemma4_e2b),
+                    stream = (text: string) => new ReadableStream({
+                        start(controller) {
+                            controller.enqueue({
+                                role: `assistant`,
+                                content: [{ type: `text`, text }],
+                            });
+                            controller.close();
+                        },
+                    }),
+                    engineWith = (fail: boolean) => ({
+                        createConversation: async () => ({
+                            sendMessageStreaming: () => {
+                                if (fail) {
+                                    loses += 1;
+                                    throw new Error(
+                                        `A WebGPU device was lost`);
+                                };
+                                return stream(`recovered`);
+                            },
+                        }),
+                        delete: async () => { deletes += 1; },
+                    }) as unknown as LitertEngine,
+                    wasm = {
+                        preinitializedWebGPUDevice: { lost: new Promise(() => { }) },
+                    },
+                    lm = {
+                        liteRtLmWasm: wasm,
+                        setupDefaultWebGpuDevice: async () => {
+                            adapters += 1;
+                            wasm.preinitializedWebGPUDevice = {
+                                lost: new Promise(() => { }),
+                            };
+                        },
+                    },
+                    settingsSeen: LitertSettings[] = [],
+                    mod = {
+                        Backend: { GPU: 3, CPU: 1 },
+                        SamplerType: { TOP_K: 0 },
+                        Engine: {
+                            create: async (settings: LitertSettings) => {
+                                settingsSeen.push(settings);
+                                return engineWith(false);
+                            },
+                        },
+                        getOrLoadGlobalLiteRtLm: async () => {
+                            wasmLoads += 1;
+                        },
+                        unloadLiteRtLm: () => { },
+                        getGlobalLiteRtLm: () => lm,
+                    } as unknown as LitertModule,
+                    gpu: LitertGpu = {
+                        engine: engineWith(true),
+                        mod,
+                        lost: false,
+                        contextStep: 0,
+                        reopen: async () => new ReadableStream<Uint8Array>(),
+                    },
+                    session: LitertSession = {
+                        sent: [],
+                        reasoning: false,
+                        maxTokens: 0,
+                    },
+                    params: EngineChatParams = {
+                        messages: [userMessage(`hi`)],
+                        limits: defaultLlmLimits,
+                        reasoning: false,
+                        onReason: () => { },
+                        onText: () => { },
+                        onRestart: () => { restarts += 1; },
+                    },
+                    reply = await chatOn({ gpu, model, params, session });
+                assertEqual(loses, 1, `device lost once`);
+                assertEqual(deletes, 1, `old engine deleted`);
+                assertEqual(wasmLoads, 1, `wasm reloaded`);
+                assertEqual(adapters, 1, `fresh adapter`);
+                assertEqual(restarts, 1, `restart signalled`);
+                assertEqual(reply, `recovered`, `retried reply`);
+                assertEqual(gpu.contextStep, 1, `window lowered`);
+                assertEqual(gpu.lost, false, `device healed`);
+                assertEqual(
+                    settingsSeen[0]?.mainExecutorSettings?.maxNumTokens,
+                    2048,
+                    `smaller window`,
+                );
+            },
+        },
+        {
+            name: `litert/lost device gone`,
+            run: async () => {
+                let restarts = 0;
+                const
+                    model = modelOf(ChatModelId.gemma4_e2b),
+                    broken = () => { throw new Error(`No GPU adapter found.`); },
+                    mod = {
+                        Backend: { GPU: 3, CPU: 1 },
+                        SamplerType: { TOP_K: 0 },
+                        Engine: { create: async () => broken() },
+                        getOrLoadGlobalLiteRtLm: async () => { },
+                        unloadLiteRtLm: () => { },
+                        getGlobalLiteRtLm: () => ({
+                            liteRtLmWasm: { preinitializedWebGPUDevice: {} },
+                            setupDefaultWebGpuDevice: async () => broken(),
+                        }),
+                    } as unknown as LitertModule,
+                    engine = {
+                        createConversation: async () => ({
+                            sendMessageStreaming: () => {
+                                throw new Error(`vkQueueSubmit failed`);
+                            },
+                        }),
+                        delete: async () => { },
+                    } as unknown as LitertEngine,
+                    params: EngineChatParams = {
+                        messages: [userMessage(`hi`)],
+                        limits: defaultLlmLimits,
+                        reasoning: false,
+                        onReason: () => { },
+                        onText: () => { },
+                        onRestart: () => { restarts += 1; },
+                    },
+                    gpu: LitertGpu = {
+                        engine,
+                        mod,
+                        lost: false,
+                        contextStep: 0,
+                        reopen: async () => new ReadableStream<Uint8Array>(),
+                    },
+                    error = await errorOf(() => chatOn({
+                        gpu,
+                        model,
+                        params,
+                        session: {
+                            sent: [],
+                            reasoning: false,
+                            maxTokens: 0,
+                        },
+                    }));
+                assertEqual(error, `No GPU adapter found.`, `rebuild failed`);
+                assertEqual(restarts, 1, `restart signalled`);
+                assertEqual(gpu.lost, true, `engine stays dead`);
+                const floor = await errorOf(() => chatOn({
+                    gpu: {
+                        ...gpu,
+                        engine,
+                        lost: false,
+                        contextStep: 2,
+                    },
+                    model,
+                    params,
+                    session: {
+                        sent: [],
+                        reasoning: false,
+                        maxTokens: 0,
+                    },
+                }));
+                assertEqual(floor, `The graphics device was lost`, `last window`);
+            },
+        },
+        {
             name: `litert/vision budget`,
             run: () => {
                 const
@@ -1207,14 +1379,23 @@ const definitions: Array<{
                     stopped: () => true,
                 });
                 assertEqual(stopped, undefined, `stopped reply`);
-                const failed = await streamReply({
-                    model,
-                    onReason: () => { },
-                    onText: () => { },
-                    start: async () => { throw new Error(`boom`); },
-                    stopped: () => false,
-                });
-                assertEqual(failed, undefined, `failed reply`);
+                const
+                    failed = await errorOf(() => streamReply({
+                        model,
+                        onReason: () => { },
+                        onText: () => { },
+                        start: async () => { throw new Error(`boom`); },
+                        stopped: () => false,
+                    })),
+                    halted = await streamReply({
+                        model,
+                        onReason: () => { },
+                        onText: () => { },
+                        start: async () => { throw new Error(`boom`); },
+                        stopped: () => true,
+                    });
+                assertEqual(failed, `boom`, `failed reply`);
+                assertEqual(halted, undefined, `stopped failure`);
                 const
                     sent: EngineMessage[] = [],
                     built = await runEngineChat({
@@ -1570,6 +1751,36 @@ const definitions: Array<{
             },
         },
         {
+            name: `runtime/fatal engine`,
+            run: async () => {
+                const
+                    { runtime, calls } = runtimeWith({
+                        backend: LlmBackend.gpu,
+                        failChat: true,
+                        fatal: true,
+                    }),
+                    limits = resolveLlmLimits();
+                await runtime.load({
+                    model: modelOf(ChatModelId.gemma4_e2b),
+                    limits,
+                    onProgress: () => { },
+                });
+                const failure = await errorOf(() => runtime.chat({
+                    messages: [userMessage(`hi`)],
+                    limits,
+                    reasoning: false,
+                    onReason: () => { },
+                    onText: () => { },
+                }));
+                assertEqual(failure, `chat failed`, `chat error`);
+                assertEqual(runtime.status(), LlmStatus.error, `error status`);
+                assertEqual(runtime.backend(), LlmBackend.none, `no backend`);
+                assertEqual(runtime.ready(), false, `runtime dropped`);
+                assertEqual(runtime.error(), `chat failed`, `kept error`);
+                assertEqual(calls.unload, 1, `engine unloaded`);
+            },
+        },
+        {
             name: `runtime/unload`,
             run: async () => {
                 const { runtime, calls } = runtimeWith();
@@ -1780,6 +1991,21 @@ const definitions: Array<{
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
                 assertEqual(replies[replies.length - 1], `hello`, `accumulated reply`);
                 assertEqual(reasoned[reasoned.length - 1], `why`, `accumulated thinking`);
+            },
+        },
+        {
+            name: `chat/restart resets text`,
+            run: async () => {
+                const
+                    replies: string[] = [],
+                    { chat } = chatWith({ restartText: `ok` });
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: value => replies.push(value),
+                });
+                await waitFor(() => replies.length >= 3, `restart stream`);
+                assertEqual(replies.join(`|`), `ok||ok`, `restart resets text`);
             },
         },
         {
@@ -2246,19 +2472,19 @@ const definitions: Array<{
                     const logged = captured[0]?.[2] as Array<{ content: string }>;
                     assertEqual(logged[0].content, `****`, `censored messages`);
                     captured.length = 0;
-                    await runEngineChat({
+                    await errorOf(() => runEngineChat({
                         model,
                         params,
                         start: async () => { throw new Error(`boom`); },
                         stopped: () => false,
-                    });
+                    }));
                     assertEqual(captured.length, 0, `failure silent`);
-                    await runEngineChat({
+                    await errorOf(() => runEngineChat({
                         model,
                         params: { ...params, logging: true },
                         start: async () => { throw new Error(`boom`); },
                         stopped: () => false,
-                    });
+                    }));
                     assertEqual(
                         captured.some(args => args[0] == `Local chat failed`),
                         true,
