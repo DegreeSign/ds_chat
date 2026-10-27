@@ -306,9 +306,10 @@ describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 Describe every image in English with `qwen3_vl_2b_instruct`, the Unsloth
 Qwen3-VL 2B Instruct build, one image at a time. When a WebGPU adapter exists
 and `targetLanguage` is not English, the English descriptions are then
-translated one by one with `gemma4_e2b_limited`. Without a GPU, or when the
-translation model cannot load, `description` stays equal to `descriptionEN`.
-The description call uses a 1024-token reply budget unless
+translated one by one with `gemma4_e2b_limited`. Without a GPU, when the
+translation model cannot load, or when the translator replies
+`CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. The
+description call uses a 1024-token reply budget unless
 `limits.maxReplyTokens` overrides it.
 
 `DescribeImagesInput`:
@@ -320,6 +321,7 @@ The description call uses a 1024-token reply budget unless
 | `currentIndex?` | Receives `index`, then `index` and `descriptionEN`, then `index`, `descriptionEN` and `description`. |
 | `limits?` | Partial `LlmLimits` for both the description and translation calls. |
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
+| `onStatus?` | Receives a `ChatStatusSnapshot` while the describer and translator load and run. |
 
 The promise resolves one `ImageDescription` per image, in input order:
 
@@ -333,6 +335,13 @@ the English text is ready, and once when the final description is ready. The
 first call carries the index alone, the second adds `descriptionEN`, and the
 third adds `description`. The function uses the shared runtime, so it loads the
 describer and then the translator, replacing whichever model was loaded before.
+
+`onStatus` follows the same snapshots as `createChat`. The describer reports
+first, with `supportsImages: true`. When a translation pass follows, the
+snapshots switch to `gemma4_e2b_limited` while it loads and translates. The
+final snapshot has `requesting: false`; when the translator cannot load, it also
+carries that error and the descriptions stay English. An empty `images` list
+touches no model and reports nothing.
 
 ## Tools
 
@@ -384,7 +393,9 @@ search and currency tools fetch over the network; `calculate` does not.
 | `error?` | The last failure, cleared when a reply starts. |
 
 The first snapshot fires synchronously inside `createChat`. A final snapshot
-with `requesting: false` marks the end of the call.
+with `requesting: false` marks the end of the call. `describeImages` reports the
+same snapshot for each model it loads: `qwen3_vl_2b_instruct` while it
+describes, then `gemma4_e2b_limited` while it translates.
 
 A stream that never produces its first chunk ends with an error after 180
 seconds instead of waiting forever. Once a chunk has arrived, 30 seconds of
@@ -420,9 +431,9 @@ next attempt, including after a reload.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
-context on a phone and 8192 on a desktop. Its projector runs on two CPU threads
-because more threads stall the encoder, so its image turns are slower than the
-Gemma 4 WebGPU path. Use the GPU model when images need to be fast.
+context on a phone and 8192 on a desktop. Its projector uses the same CPU thread
+budget as the text pass, so image turns are slower than the Gemma 4 WebGPU path.
+Use the GPU model when images need to be fast.
 
 `qwen3_vl_2b_instruct` is the Unsloth Qwen3-VL 2B Instruct build that
 `describeImages` loads for the English pass. Its Q4_K_M file and F16 projector
@@ -493,7 +504,8 @@ matches the requested model.
 
 The CPU engine derives a raw thread count from the device, then caps it at
 `limits.maxThreads`, default 6. The cap is applied after the raw maximum, so the
-engine never exceeds the device or the caller budget.
+engine never exceeds the device or the caller budget. Every CPU model uses the
+same count, including the vision projector models.
 
 The CPU engine needs cross-origin isolation for its threads. Serve the page with
 both headers:

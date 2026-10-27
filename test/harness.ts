@@ -1940,7 +1940,8 @@ const definitions: Array<{
                         `Ensure accuracy so a blind person can know exactly what is in the image.`,
                         `Reply in English.`,
                     ].join(` `),
-                    events: Array<[number, string?, string?]> = [];
+                    events: Array<[number, string?, string?]> = [],
+                    statuses: ChatStatusSnapshot[] = [];
                 let described = 0;
                 const
                     cpu = createFakeEngine({
@@ -1956,6 +1957,7 @@ const definitions: Array<{
                         images: [`one`, `two`],
                         currentIndex: (index, descriptionEN, description) =>
                             events.push([index, descriptionEN, description]),
+                        onStatus: value => statuses.push(value),
                     });
                 assertEqual(cpu.calls.start, 1, `describer load`);
                 assertEqual(cpu.calls.chat, 2, `one chat per image`);
@@ -1980,6 +1982,30 @@ const definitions: Array<{
                     imageNote,
                     `image note`,
                 );
+                assertEqual(
+                    statuses[0].model,
+                    ChatModelId.qwen3_vl_2b_instruct,
+                    `describer status`,
+                );
+                assertEqual(statuses[0].requesting, false, `idle status`);
+                assertEqual(statuses[0].supportsImages, true, `vision status`);
+                assertEqual(
+                    statuses.some(value => value.requesting),
+                    true,
+                    `requesting status`,
+                );
+                assertEqual(
+                    statuses[statuses.length - 1].requesting,
+                    false,
+                    `final status`,
+                );
+                assertEqual(statuses[statuses.length - 1].ready, true, `final ready`);
+                assertEqual(statuses[statuses.length - 1].percent, 100, `final percent`);
+                assertEqual(
+                    statuses[statuses.length - 1].error,
+                    undefined,
+                    `final error`,
+                );
             },
         },
         {
@@ -1988,6 +2014,7 @@ const definitions: Array<{
                 await withGpu(async () => {
                     const
                         events: Array<[number, string?, string?]> = [],
+                        statuses: ChatStatusSnapshot[] = [],
                         prompts: string[] = [];
                     let described = 0;
                     const
@@ -1998,7 +2025,11 @@ const definitions: Array<{
                         gpu = createFakeEngine({
                             backend: LlmBackend.gpu,
                             chatImpl: async params => {
-                                prompts.push(`${params.messages[0].content}`);
+                                prompts.push(
+                                    params.messages
+                                        .map(message => `${message.content}`)
+                                        .join(`\n`),
+                                );
                                 return `translated ${prompts.length}`;
                             },
                         }),
@@ -2010,6 +2041,7 @@ const definitions: Array<{
                             images: [`one`, `two`],
                             currentIndex: (index, descriptionEN, description) =>
                                 events.push([index, descriptionEN, description]),
+                            onStatus: value => statuses.push(value),
                         });
                     assertEqual(
                         cpu.models[0].id,
@@ -2031,6 +2063,55 @@ const definitions: Array<{
                     assertEqual(events.length, 6, `four events per image`);
                     assertEqual(events[4][2], `translated 1`, `first final`);
                     assertEqual(events[5][2], `translated 2`, `second final`);
+                    assertEqual(
+                        statuses.some(value =>
+                            value.model == ChatModelId.gemma4_e2b_limited),
+                        true,
+                        `translator status`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `translator final`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].supportsImages,
+                        false,
+                        `translator vision`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].ready,
+                        true,
+                        `translator ready`,
+                    );
+                });
+            },
+        },
+        {
+            name: `describe/refusal`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        events: Array<[number, string?, string?]> = [],
+                        cpu = createFakeEngine({
+                            backend: LlmBackend.cpu,
+                            chatImpl: async () => `plain english`,
+                        }),
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            chatImpl: async () => `"CANNOT TRANSLATE."`,
+                        }),
+                        runtime = createRuntime({
+                            engines: { cpu: cpu.engine, litert: gpu.engine },
+                        }),
+                        results = await createDescribeOn(runtime)({
+                            targetLanguage: `fa`,
+                            images: [`one`],
+                            currentIndex: (index, descriptionEN, description) =>
+                                events.push([index, descriptionEN, description]),
+                        });
+                    assertEqual(results[0].description, `plain english`, `english kept`);
+                    assertEqual(events[2][2], `plain english`, `refusal event`);
                 });
             },
         },
@@ -2040,6 +2121,7 @@ const definitions: Array<{
                 await withGpu(async () => {
                     const
                         events: Array<[number, string?, string?]> = [],
+                        statuses: ChatStatusSnapshot[] = [],
                         cpu = createFakeEngine({
                             backend: LlmBackend.cpu,
                             chatImpl: async () => `plain english`,
@@ -2053,11 +2135,23 @@ const definitions: Array<{
                             images: [`one`],
                             currentIndex: (index, descriptionEN, description) =>
                                 events.push([index, descriptionEN, description]),
+                            onStatus: value => statuses.push(value),
                         });
                     assertEqual(cpu.calls.start, 1, `describer load`);
                     assertEqual(results[0].description, `plain english`, `english fallback`);
                     assertEqual(events.length, 3, `three events`);
                     assertEqual(events[2][2], `plain english`, `fallback event`);
+                    assertEqual(
+                        statuses.some(value =>
+                            value.model == ChatModelId.gemma4_e2b_limited),
+                        false,
+                        `no translator status`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].model,
+                        ChatModelId.qwen3_vl_2b_instruct,
+                        `describer final`,
+                    );
                 }, null);
             },
         },
@@ -2067,6 +2161,7 @@ const definitions: Array<{
                 await withGpu(async () => {
                     const
                         events: Array<[number, string?, string?]> = [],
+                        statuses: ChatStatusSnapshot[] = [],
                         cpu = createFakeEngine({
                             backend: LlmBackend.cpu,
                             chatImpl: async () => `plain english`,
@@ -2083,10 +2178,26 @@ const definitions: Array<{
                             images: [`one`],
                             currentIndex: (index, descriptionEN, description) =>
                                 events.push([index, descriptionEN, description]),
+                            onStatus: value => statuses.push(value),
                         });
                     assertEqual(gpu.calls.start, 1, `translator attempted`);
                     assertEqual(results[0].description, `plain english`, `english kept`);
                     assertEqual(events[2][2], `plain english`, `fallback event`);
+                    assertEqual(
+                        statuses[statuses.length - 1].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `translator final`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].error,
+                        `start failed`,
+                        `translator error`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].status,
+                        LlmStatus.error,
+                        `translator failed`,
+                    );
                 });
             },
         },
@@ -2094,6 +2205,9 @@ const definitions: Array<{
             name: `describe/empty and failures`,
             run: async () => {
                 const
+                    emptyStatuses: ChatStatusSnapshot[] = [],
+                    loadStatuses: ChatStatusSnapshot[] = [],
+                    replyStatuses: ChatStatusSnapshot[] = [],
                     idle = createFakeEngine({ backend: LlmBackend.cpu }),
                     idleRuntime = createRuntime({
                         engines: { cpu: idle.engine },
@@ -2102,6 +2216,7 @@ const definitions: Array<{
                     empty = await createDescribeOn(idleRuntime)({
                         targetLanguage: `de`,
                         images: [],
+                        onStatus: value => emptyStatuses.push(value),
                     }),
                     failed = createFakeEngine({
                         backend: LlmBackend.cpu,
@@ -2114,6 +2229,7 @@ const definitions: Array<{
                     loadError = await errorOf(() => createDescribeOn(failedRuntime)({
                         targetLanguage: `en`,
                         images: [`one`],
+                        onStatus: value => loadStatuses.push(value),
                     })),
                     silent = createFakeEngine({
                         backend: LlmBackend.cpu,
@@ -2126,11 +2242,28 @@ const definitions: Array<{
                     replyError = await errorOf(() => createDescribeOn(silentRuntime)({
                         targetLanguage: `en`,
                         images: [`one`],
+                        onStatus: value => replyStatuses.push(value),
                     }));
                 assertEqual(empty.length, 0, `no results`);
                 assertEqual(idle.calls.start, 0, `empty skips load`);
+                assertEqual(emptyStatuses.length, 0, `empty skips status`);
                 assertEqual(loadError, `start failed`, `load error`);
+                assertEqual(
+                    loadStatuses[loadStatuses.length - 1].error,
+                    `start failed`,
+                    `load status`,
+                );
+                assertEqual(
+                    loadStatuses[loadStatuses.length - 1].requesting,
+                    false,
+                    `load done`,
+                );
                 assertEqual(replyError, `No description`, `empty reply`);
+                assertEqual(
+                    replyStatuses[replyStatuses.length - 1].error,
+                    `No description`,
+                    `reply status`,
+                );
             },
         },
         {
@@ -2831,6 +2964,7 @@ const definitions: Array<{
                 assertEqual(cpuThreads(16, 99), 8, `sixteen cores raw eight`);
                 assertEqual(cpuThreads(1, 2), 2, `one core raw two`);
                 assertEqual(cpuThreads(8, 3), 3, `eight cores cap three`);
+                assertEqual(cpuThreads(8, 6), 6, `default budget six`);
             },
         },
         {

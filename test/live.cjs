@@ -3,7 +3,7 @@
 // Usage: CHROME_BIN=chromium node test/live.cjs [port] [debugPort] [model]
 // Optional: LIVE_ONLY=text,image,audio LIVE_TIMEOUT_MS=...
 // The Gemma 4 GPU model covers text, image and audio. The Qwen CPU model
-// covers text and images; its projector is slower and runs on two threads.
+// covers text and images; its projector shares the model thread budget.
 // The limited Gemma build covers text only.
 const http = require("http");
 const fs = require("fs");

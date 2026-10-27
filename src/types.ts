@@ -319,6 +319,8 @@ interface DescribeImagesInput {
     limits?: Partial<LlmLimits>,
     /** Whether package and engine logs reach the console, defaults to off */
     logging?: boolean,
+    /** Model and request state, reported on every change */
+    onStatus?: (snapshot: ChatStatusSnapshot) => void,
 }
 
 /** wllama wasm assets used by the CPU engine */

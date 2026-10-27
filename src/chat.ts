@@ -288,4 +288,5 @@ export {
     createChatOn,
     createPreloadOn,
     preloadModel,
+    statusSnapshot,
 };

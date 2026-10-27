@@ -419,11 +419,12 @@
             <h2>Reading the map</h2>
             <div class="card empty" style="font-size:11px">
                 Bands run top to bottom in dependency order: the host passes one
-                <b>ChatInput</b> or a smaller <b>ChatPreloadInput</b>,
-                <b>createChat</b> binds its callbacks to the shared runtime, the
-                runtime lazily imports an engine, and the engine streams the
-                reply back. <b>describeImages</b> loads the vision model, then
-                the GPU translator when the target is not English.
+                <b>ChatInput</b>, a smaller <b>ChatPreloadInput</b> or a
+                <b>DescribeImagesInput</b>, <b>createChat</b> binds its callbacks
+                to the shared runtime, the runtime lazily imports an engine, and
+                the engine streams the reply back. <b>describeImages</b> loads the
+                vision model, then the GPU translator when the target is not
+                English, reporting each model through <b>onStatus</b>.
                 <b>clearModelCache</b> releases the model and
                 deletes every stored file. Hover brightens one function and its
                 neighbours, click pins it, and the panel lists every caller and
@@ -440,11 +441,12 @@ const MAP = {
     root: `entry.exports`,
     flow: `send`,
     intro: `Bands run top to bottom in dependency order: the host passes one`
-        + ` ChatInput or a smaller ChatPreloadInput, createChat binds the`
-        + ` callbacks to the shared runtime, describeImages describes each`
-        + ` image and translates it on a GPU, clearModelCache deletes every`
-        + ` stored model, the built-in tools run on the host, the runtime`
-        + ` lazily imports an engine, and the engine streams the reply.`,
+        + ` ChatInput, a smaller ChatPreloadInput or a DescribeImagesInput,`
+        + ` createChat binds the callbacks to the shared runtime,`
+        + ` describeImages describes each image, translates it on a GPU and`
+        + ` reports both models, clearModelCache deletes every stored model, the`
+        + ` built-in tools run on the host, the runtime lazily imports an`
+        + ` engine, and the engine streams the reply.`,
     ignore: [],
 };
 
@@ -517,13 +519,13 @@ const step = (ids, text) => ({ ids, text });
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 36);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 67);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 753);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 291);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 121);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 755);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 292);
+f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 223);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 271);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 140);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 374);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 370);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 494);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
@@ -540,7 +542,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4218);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4351);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 195);
@@ -553,6 +555,7 @@ f(`vswitchcfg`, `test`, `webpack.switch.config.cjs`,
 f(`vassets`, `test`, `assets.ts`, `test/assets.ts`, 16);
 f(`webpack`, `build`, `webpack.config.ts`, `webpack.config.ts`, 150);
 f(`scripts`, `build`, `banner-wllama.cjs`, `scripts/banner-wllama.cjs`, 19);
+f(`patchLitert`, `build`, `patch-litert.cjs`, `scripts/patch-litert.cjs`, 30);
 f(`package`, `build`, `package.json`, `package.json`, 78);
 f(`tsconfig`, `build`, `tsconfig.json`, `tsconfig.json`, 18);
 
@@ -564,6 +567,9 @@ n(`host`, `input`, 0, `ChatInput`,
 n(`host`, `preload`, 0, `ChatPreloadInput`,
     `model? · limits · logging · onStatus`,
     `Model preload request, the subset of ChatInput that createChat does not own`);
+n(`host`, `describe`, 0, `DescribeImagesInput`,
+    `targetLanguage · images · currentIndex · limits · logging · onStatus`,
+    `One batch image request, owned by the host, without a model choice`);
 n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
     `Returned by createChat; cancels the call or frees the model`);
 
@@ -582,7 +588,7 @@ n(`chat`, `createChatOn`, 59, `createChatOn`,
 n(`chat`, `statusSnapshot`, 28, `statusSnapshot`,
     `(service, model, state) => ChatStatusSnapshot`,
     `Swap the model to this device's build, derive availability and image or`
-    + ` audio support, build one snapshot for chat or preload`);
+    + ` audio support, build one snapshot for chat, preload or describe`);
 n(`chat`, `emitStatus`, 66, `emitStatus`, `(call: ActiveCall) => void`,
     `Publish the snapshot for one live call`);
 n(`chat`, `run`, 70, `run`, `(call: ActiveCall) => Promise<void>`,
@@ -598,24 +604,34 @@ n(`chat`, `preloadModel`, 278, `preloadModel`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`chat`, `clearModelCache`, 281, `clearModelCache`, `() => Promise<void>`,
     `Release the loaded model and delete every cached model file`);
-n(`describe`, `describeImages`, 119, `describeImages`,
+n(`describe`, `describeImages`, 221, `describeImages`,
     `(input: DescribeImagesInput) => Promise<ImageDescription[]>`,
     `Describe every image, then translate each description on a GPU, bound to`
     + ` the singleton runtime`);
-n(`describe`, `createDescribeOn`, 35, `createDescribeOn`,
+n(`describe`, `createDescribeOn`, 48, `createDescribeOn`,
     `(service: Runtime) => (input) => Promise<ImageDescription[]>`,
     `Testable factory: load the describer, describe each image with a generous`
     + ` reply budget, then load the translator when a GPU exists and the`
-    + ` target is not English`);
-n(`describe`, `imageNote`, 12, `imageNote`, `string`,
+    + ` target is not English; a CANNOT_TRANSLATE reply keeps English and every`
+    + ` model or request state reaches onStatus`);
+n(`describe`, `report`, 63, `report`, `(model, state) => void`,
+    `Publish one snapshot for the describer, translator or final state`);
+n(`describe`, `load`, 66, `load`, `(model, limits) => Promise<string | undefined>`,
+    `Load one model, forward its progress and return its failure text`);
+n(`describe`, `generate`, 98, `generate`,
+    `(model, messages) => Promise<string | undefined>`,
+    `Run one reply and report the error before rethrowing it`);
+n(`describe`, `imageNote`, 17, `imageNote`, `string`,
     `The exact English note sent with every image`);
-n(`describe`, `imageReplyTokens`, 21, `imageReplyTokens`, `1024`,
+n(`describe`, `imageReplyTokens`, 26, `imageReplyTokens`, `1024`,
     `Default reply budget of one description, overridable by limits`);
-n(`describe`, `needsTranslation`, 24, `needsTranslation`,
+n(`describe`, `cannotTranslate`, 29, `cannotTranslate`, `CANNOT_TRANSLATE`,
+    `The exact reply that makes the description fall back to English`);
+n(`describe`, `needsTranslation`, 32, `needsTranslation`,
     `(language: string) => boolean`,
     `English tags skip the translation pass`);
-n(`describe`, `translatePrompt`, 30, `translatePrompt`,
-    `(language, description) => string`,
+n(`describe`, `translatePrompt`, 38, `translatePrompt`,
+    `(language) => string`,
     `One translation request that asks for the translation alone`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
     `LlmRole, ChatStatus, LlmStatus, LlmBackend (cpu, gpu, none), LlmPhase,`
@@ -658,9 +674,9 @@ n(`types`, `preload`, 293, `ChatPreloadInput`,
     `The model preload subset a host may call before the first chat`);
 n(`types`, `describe`, 299, `ImageDescription · DescribeImagesInput`,
     `descriptionEN · description · targetLanguage · images · currentIndex`
-    + ` · limits · logging`,
+    + ` · limits · logging · onStatus`,
     `One English and translated description and the batch request that`
-    + ` describeImages reads`);
+    + ` describeImages reads, including its status callback`);
 n(`types`, `call`, 359, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · cancelled · model · requesting · phase`
     + ` · percent · load · chat · unload · clear · error() · model()`,
@@ -854,7 +870,7 @@ n(`engine`, `runEngineChat`, 461, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
-n(`wllama`, `wllamaEngine`, 348, `wllamaEngine`, `LlmEngine`,
+n(`wllama`, `wllamaEngine`, 344, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, purge`);
 n(`wllama`, `resolveAssets`, 54, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
@@ -880,24 +896,22 @@ n(`wllama`, `toWllamaMessages`, 171, `toWllamaMessages`,
 n(`wllama`, `dropWllama`, 101, `dropWllama`, `() => Promise<void>`,
     `Drop the worker, a crashed or exited one cannot be reused`);
 n(`wllama`, `runtime`, 27, `runtime`,
-    `store · visionThreads · cpuThreads · gpuProbeLog · loggingOn`,
-    `The resumable store, hardware threads capped by limits.maxThreads and two`
-    + ` for a vision projector, 0 GPU layers`);
-n(`wllama`, `visionThreads`, 31, `visionThreads`, `2`,
-    `CPU threads for the projector, more threads stall the Qwen-VL encoder`);
-n(`wllama`, `cpuThreads`, 36, `cpuThreads`, `(cores, maxThreads) => number`,
+    `store · cpuThreads · gpuProbeLog · loggingOn`,
+    `The resumable store, hardware threads capped by limits.maxThreads`
+    + ` for every model, 0 GPU layers`);
+n(`wllama`, `cpuThreads`, 34, `cpuThreads`, `(cores, maxThreads) => number`,
     `Raw hardware maximum first, then the caller cap, minimum 1`);
-n(`wllama`, `startLLM`, 226, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`wllama`, `startLLM`, 224, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Pick 4k or 8k context, load the model and projector from stored blobs,`
-    + ` fall back to the cache or network, cap CPU threads to two with a`
-    + ` vision projector, abortable`);
-n(`wllama`, `cached`, 351, `cached`, `(model) => Promise<boolean>`,
+    + ` fall back to the cache or network, cap CPU threads to the shared`
+    + ` budget, abortable`);
+n(`wllama`, `cached`, 347, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `chat`, 198, `chatOn`, `(instance, model, params)`,
+n(`wllama`, `chat`, 196, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 342, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 338, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `purge`, 358, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 354, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
@@ -1117,10 +1131,10 @@ n(`harness`, `withGpu`, 261, `withGpu`,
     `Stub or remove the WebGPU adapter for one description test`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 287, `definitions`, `87 deferred cases`,
+n(`harness`, `definitions`, 287, `definitions`, `88 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, describe, chat,`
     + ` speed, threads, square`);
-n(`harness`, `main`, 4205, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 4338, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 34, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat, preloadModel,`
@@ -1170,8 +1184,11 @@ n(`webpack`, `nodeEsmConfig`, 133, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.9.0`,
-    `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
+n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
+    `Appends a console filter for the benign encoder-hint warnings to the`
+    + ` emitted LiteRT glue, once per build`);
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.9.1`,
+    `build = tsc declarations, webpack, banner, glue filter; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
 n(`tsconfig`, `tsconfig`, 1, `tsconfig.json`, `strict, ES2022, CommonJS`,
@@ -1183,6 +1200,7 @@ e(`entry.exports`, `chat.preloadModel`, `type`);
 e(`entry.exports`, `chat.clearModelCache`, `type`);
 e(`host.input`, `chat.createChatOn`, `type`);
 e(`host.preload`, `chat.createPreloadOn`, `type`);
+e(`host.describe`, `describe.createDescribeOn`, `type`);
 e(`host.cancel`, `chat.createChat`, `type`);
 
 // createChat wiring
@@ -1228,18 +1246,23 @@ e(`chat.cancel`, `types.call`, `type`);
 e(`entry.exports`, `describe.describeImages`, `type`);
 e(`describe.describeImages`, `describe.createDescribeOn`, `call`);
 e(`describe.describeImages`, `llm.runtime`, `call`);
+e(`describe.createDescribeOn`, `describe.report`, `inner`);
+e(`describe.createDescribeOn`, `describe.load`, `inner`);
+e(`describe.createDescribeOn`, `describe.generate`, `inner`);
 e(`describe.createDescribeOn`, `describe.imageNote`, `call`);
 e(`describe.createDescribeOn`, `describe.imageReplyTokens`, `call`);
+e(`describe.createDescribeOn`, `describe.cannotTranslate`, `call`);
 e(`describe.createDescribeOn`, `describe.needsTranslation`, `call`);
 e(`describe.createDescribeOn`, `describe.translatePrompt`, `call`);
 e(`describe.createDescribeOn`, `findLlmModel`, `call`);
 e(`describe.createDescribeOn`, `gpuAdapter`, `call`);
 e(`describe.createDescribeOn`, `resolveLimits`, `call`);
-e(`describe.createDescribeOn`, `llm.load`, `call`);
-e(`describe.createDescribeOn`, `llm.chat`, `call`);
-e(`describe.createDescribeOn`, `llm.error`, `call`);
 e(`describe.createDescribeOn`, `types.describe`, `type`);
 e(`describe.createDescribeOn`, `types.records`, `type`);
+e(`describe.report`, `chat.statusSnapshot`, `call`);
+e(`describe.load`, `llm.load`, `call`);
+e(`describe.load`, `llm.error`, `call`);
+e(`describe.generate`, `llm.chat`, `call`);
 
 // runtime relations
 e(`createRuntime`, `probes`, `inner`);
@@ -1576,6 +1599,7 @@ e(`package`, `browserConfig`, `call`);
 e(`package`, `nodeConfig`, `call`);
 e(`package`, `nodeEsmConfig`, `call`);
 e(`package`, `banner`, `call`);
+e(`package`, `patchLitert`, `call`);
 e(`browserConfig`, `commonConfig`, `type`);
 e(`nodeBase`, `commonConfig`, `type`);
 e(`nodeConfig`, `nodeBase`, `type`);

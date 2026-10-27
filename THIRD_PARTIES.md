@@ -21,6 +21,10 @@ MIT License. See [LICENSE](LICENSE).
 - License: Apache License 2.0
 - Source: https://github.com/google-ai-edge/LiteRT-LM
 - Contents: the WebGPU JavaScript API, its wasm glue and wasm binary.
+- Note: the shipped glue,
+  `dist/assets/litert/litertlm_wasm_internal.js`, is modified by DegreeSign. A
+  console filter drops the two benign encoder-hint loader warnings when a host
+  runs the module without sinks.
 
 ## Model weights
 

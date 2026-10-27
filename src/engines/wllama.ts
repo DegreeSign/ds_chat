@@ -27,8 +27,6 @@ import type {
 const
     /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
-    /** CPU threads for a vision projector, more threads stall the Qwen-VL encoder */
-    visionThreads = 2,
     /** Resumable file store of the CPU engine */
     store = createModelStore(`wllama-store`);
 
@@ -246,9 +244,7 @@ const
         assetsKey = key;
         const threads = cpuThreads(
             (typeof navigator != `undefined` && navigator.hardwareConcurrency) || 4,
-            cpu.mmproj
-                ? Math.min(limits.maxThreads, visionThreads)
-                : limits.maxThreads,
+            limits.maxThreads,
         );
         const
             instance = await getWllama(),
