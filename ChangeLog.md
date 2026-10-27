@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0
+
+- Add `describeImages`, which describes every image in English with
+  `qwen3_vl_2b_instruct` and translates each description on a WebGPU device
+  with `gemma4_e2b_limited`.
+- Add `DescribeImagesInput` and `ImageDescription`, the batch request and one
+  English plus translated description.
+- Add `ChatModelId.qwen3_vl_2b_instruct`, the Unsloth Qwen3-VL 2B Instruct
+  build used by `describeImages`.
+
 ## 0.8.0
 
 - Add `clearModelCache`, which releases the loaded model and deletes every

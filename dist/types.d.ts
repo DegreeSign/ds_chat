@@ -252,6 +252,26 @@ interface ChatInput {
 type ChatPreloadInput = Pick<ChatInput, `model` | `limits` | `logging` | `onStatus`>;
 /** Stop the current request, its model load, or free the loaded model */
 type CancelChat = () => void;
+/** One image described in English and in the requested language */
+interface ImageDescription {
+    /** Description produced by the vision model */
+    descriptionEN: string;
+    /** Translation of the English description, English itself without a GPU */
+    description: string;
+}
+/** One batch image description request */
+interface DescribeImagesInput {
+    /** Language the description is translated into, English skips translation */
+    targetLanguage: string;
+    /** Image data URLs or URLs, described one by one in this order */
+    images: string[];
+    /** Index of the image being processed and each description once ready */
+    currentIndex?: (index: number, descriptionEN?: string, description?: string) => void;
+    /** Override any token, prompt or thread budget */
+    limits?: Partial<LlmLimits>;
+    /** Whether package and engine logs reach the console, defaults to off */
+    logging?: boolean;
+}
 /** wllama wasm assets used by the CPU engine */
 interface WllamaAssets {
     /** URL of the wllama wasm binary */
@@ -605,4 +625,4 @@ interface EngineRunParams {
     /** Called when a slow stream keeps the text already delivered */
     onStall?: () => void;
 }
-export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, WllamaAssets, LitertAssets, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, ImageDescription, DescribeImagesInput, WllamaAssets, LitertAssets, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };

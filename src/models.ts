@@ -24,6 +24,17 @@ const
             },
         },
         {
+            id: ChatModelId.qwen3_vl_2b_instruct,
+            reasoning: false,
+            cpu: {
+                repo: `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
+                file: `Qwen3-VL-2B-Instruct-Q4_K_M.gguf`,
+                mmproj: {
+                    file: `mmproj-F16.gguf`,
+                },
+            },
+        },
+        {
             id: ChatModelId.gemma4_e2b,
             reasoning: true,
             litert: {

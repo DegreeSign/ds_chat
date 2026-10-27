@@ -1,4 +1,5 @@
 export { clearModelCache, createChat, preloadModel } from './chat';
+export { describeImages } from './describe';
 export {
     builtinTools,
     calculateTool,
@@ -22,6 +23,8 @@ export type {
     ChatInput,
     ChatPreloadInput,
     CancelChat,
+    DescribeImagesInput,
+    ImageDescription,
     WllamaAssets,
     ChatTool,
     ChatToolCall,

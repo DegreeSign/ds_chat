@@ -295,6 +295,32 @@ type ChatPreloadInput = Pick<ChatInput, `model` | `limits` | `logging` | `onStat
 /** Stop the current request, its model load, or free the loaded model */
 type CancelChat = () => void;
 
+/** One image described in English and in the requested language */
+interface ImageDescription {
+    /** Description produced by the vision model */
+    descriptionEN: string,
+    /** Translation of the English description, English itself without a GPU */
+    description: string,
+}
+
+/** One batch image description request */
+interface DescribeImagesInput {
+    /** Language the description is translated into, English skips translation */
+    targetLanguage: string,
+    /** Image data URLs or URLs, described one by one in this order */
+    images: string[],
+    /** Index of the image being processed and each description once ready */
+    currentIndex?: (
+        index: number,
+        descriptionEN?: string,
+        description?: string,
+    ) => void,
+    /** Override any token, prompt or thread budget */
+    limits?: Partial<LlmLimits>,
+    /** Whether package and engine logs reach the console, defaults to off */
+    logging?: boolean,
+}
+
 /** wllama wasm assets used by the CPU engine */
 interface WllamaAssets {
     /** URL of the wllama wasm binary */
@@ -684,6 +710,8 @@ export type {
     ChatPreloadInput,
     ChatState,
     CancelChat,
+    ImageDescription,
+    DescribeImagesInput,
     WllamaAssets,
     LitertAssets,
     GpuNavigator,

@@ -4,6 +4,7 @@ const {
     clearModelCache,
     createChat,
     preloadModel,
+    describeImages,
     builtinTools,
     calculateTool,
     currencyTool,
@@ -134,6 +135,13 @@ const main = async () => {
         `gpu preload unsupported`,
     );
 
+    assertEqual(typeof describeImages, `function`, `describe images`);
+    const descriptions = await describeImages({
+        targetLanguage: `en`,
+        images: [],
+    });
+    assertEqual(descriptions.length, 0, `empty description batch`);
+
     createChat({
         model: ChatModelId.qwen3_vl_2b,
         messages: [user(`hello`)],
@@ -144,6 +152,7 @@ const main = async () => {
     assertEqual(typeof esm.createChat, `function`, `esm createChat`);
     assertEqual(typeof esm.preloadModel, `function`, `esm preloadModel`);
     assertEqual(typeof esm.clearModelCache, `function`, `esm clearModelCache`);
+    assertEqual(typeof esm.describeImages, `function`, `esm describeImages`);
     assertEqual(esm.ChatStatus.offline, ChatStatus.offline, `esm enum`);
     assertEqual(esm.LlmRole.user, LlmRole.user, `esm named export`);
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);

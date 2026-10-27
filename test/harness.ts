@@ -5,6 +5,7 @@ import {
     createChat,
     preloadModel,
 } from "../src/index";import { createChatOn, createPreloadOn } from "../src/chat";
+import { createDescribeOn, describeImages } from "../src/describe";
 import { createRuntime } from "../src/service";
 import {
     buildMessages,
@@ -255,7 +256,33 @@ const
         description: `${name} tool`,
         parameters: { type: `object`, properties: {} },
         execute: execute ?? (() => `ok`),
-    });
+    }),
+    /** Run one test with a stubbed WebGPU adapter, null removes it. */
+    withGpu = async (
+        run: () => Promise<void>,
+        adapter: unknown = {},
+    ): Promise<void> => {
+        const
+            nav = navigator as Navigator & {
+                gpu?: { requestAdapter: () => Promise<unknown> },
+            },
+            hadGpu = Object.prototype.hasOwnProperty.call(nav, `gpu`),
+            original = nav.gpu;
+        Object.defineProperty(nav, `gpu`, {
+            configurable: true,
+            value: adapter === null
+                ? undefined
+                : { requestAdapter: async () => adapter },
+        });
+        try { await run(); } finally {
+            if (hadGpu)
+                Object.defineProperty(nav, `gpu`, {
+                    configurable: true,
+                    value: original,
+                });
+            else delete nav.gpu;
+        };
+    };
 
 const definitions: Array<{
     name: string;
@@ -267,6 +294,7 @@ const definitions: Array<{
                 assertEqual(typeof createChat, `function`, `createChat`);
                 assertEqual(typeof preloadModel, `function`, `preloadModel`);
                 assertEqual(typeof clearModelCache, `function`, `clearModelCache`);
+                assertEqual(typeof describeImages, `function`, `describeImages`);
                 assertEqual(typeof createChatOn, `function`, `createChatOn`);
                 assertEqual(typeof createPreloadOn, `function`, `createPreloadOn`);
                 assertEqual(typeof createRuntime, `function`, `createRuntime`);
@@ -287,6 +315,7 @@ const definitions: Array<{
                         `clearModelCache`,
                         `createChat`,
                         `currencyTool`,
+                        `describeImages`,
                         `preloadModel`,
                         `webSearchTool`,
                     ].join(`,`),
@@ -302,6 +331,11 @@ const definitions: Array<{
                 assertEqual(LlmPhase.download, `download`, `download phase`);
                 assertEqual(LlmRole.assistant, `assistant`, `assistant role`);
                 assertEqual(ChatModelId.qwen3_vl_2b, `qwen3-vl-2b`, `qwen id`);
+                assertEqual(
+                    ChatModelId.qwen3_vl_2b_instruct,
+                    `qwen3-vl-2b-instruct`,
+                    `qwen instruct id`,
+                );
                 assertEqual(ChatModelId.gemma4_e2b, `gemma4-e2b`, `gemma id`);
                 assertEqual(
                     ChatModelId.gemma4_e2b_limited,
@@ -326,7 +360,7 @@ const definitions: Array<{
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 3, `catalog size`);
+                assertEqual(llmModels.length, 4, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
                 assertEqual(litertContextWindow, 4096, `gpu window`);
                 assertEqual(
@@ -349,6 +383,24 @@ const definitions: Array<{
                     false,
                     `cpu no audio`,
                 );
+                const instruct = modelOf(ChatModelId.qwen3_vl_2b_instruct);
+                assertEqual(instruct.reasoning, false, `instruct no thinking`);
+                assertEqual(
+                    instruct.cpu?.repo,
+                    `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
+                    `instruct repo`,
+                );
+                assertEqual(
+                    instruct.cpu?.file,
+                    `Qwen3-VL-2B-Instruct-Q4_K_M.gguf`,
+                    `instruct file`,
+                );
+                assertEqual(
+                    instruct.cpu?.mmproj?.file,
+                    `mmproj-F16.gguf`,
+                    `instruct projector`,
+                );
+                assertEqual(supportsImages(instruct), true, `instruct images`);
                 const gemma = modelOf(ChatModelId.gemma4_e2b);
                 assertEqual(gemma.reasoning, true, `gemma reasoning`);
                 assertEqual(
@@ -1873,6 +1925,212 @@ const definitions: Array<{
                 assertEqual(loaded, false, `public preload`);
                 assertEqual(statuses.length, 1, `one status`);
                 assertEqual(statuses[0].error, `Unknown model`, `error`);
+            },
+        },
+        {
+            name: `describe/english`,
+            run: async () => {
+                const
+                    imageNote = [
+                        `Describe image elements present with very high objectivity and `
+                            + `name actions with specificity.`,
+                        `If unsure still sound confident.`,
+                        `Describe in order of significance in one very concise paragraph `
+                            + `(3 sentences).`,
+                        `Ensure accuracy so a blind person can know exactly what is in the image.`,
+                        `Reply in English.`,
+                    ].join(` `),
+                    events: Array<[number, string?, string?]> = [];
+                let described = 0;
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () => `A red square ${++described}`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    results = await createDescribeOn(runtime)({
+                        targetLanguage: `en`,
+                        images: [`one`, `two`],
+                        currentIndex: (index, descriptionEN, description) =>
+                            events.push([index, descriptionEN, description]),
+                    });
+                assertEqual(cpu.calls.start, 1, `describer load`);
+                assertEqual(cpu.calls.chat, 2, `one chat per image`);
+                assertEqual(cpu.requests[0].limits.maxReplyTokens, 1024, `budget`);
+                assertEqual(results.length, 2, `two results`);
+                assertEqual(results[0].descriptionEN, `A red square 1`, `first english`);
+                assertEqual(results[1].descriptionEN, `A red square 2`, `second english`);
+                assertEqual(results[0].description, results[0].descriptionEN, `english kept`);
+                assertEqual(events.length, 6, `three events per image`);
+                assertEqual(events[0][0], 0, `first index`);
+                assertEqual(events[0][1], undefined, `first pending`);
+                assertEqual(events[1][1], `A red square 1`, `first english event`);
+                assertEqual(events[1][2], undefined, `first awaiting translation`);
+                assertEqual(events[2][0], 1, `second index`);
+                assertEqual(events[3][1], `A red square 2`, `second english event`);
+                assertEqual(events[4][2], `A red square 1`, `first final`);
+                assertEqual(events[5][2], `A red square 2`, `second final`);
+                assertEqual(cpu.requests[0].messages[0].images?.[0], `one`, `first image`);
+                assertEqual(cpu.requests[1].messages[0].images?.[0], `two`, `second image`);
+                assertEqual(
+                    cpu.requests[0].messages[0].content,
+                    imageNote,
+                    `image note`,
+                );
+            },
+        },
+        {
+            name: `describe/translation`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        events: Array<[number, string?, string?]> = [],
+                        prompts: string[] = [];
+                    let described = 0;
+                    const
+                        cpu = createFakeEngine({
+                            backend: LlmBackend.cpu,
+                            chatImpl: async () => `description ${++described}`,
+                        }),
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            chatImpl: async params => {
+                                prompts.push(`${params.messages[0].content}`);
+                                return `translated ${prompts.length}`;
+                            },
+                        }),
+                        runtime = createRuntime({
+                            engines: { cpu: cpu.engine, litert: gpu.engine },
+                        }),
+                        results = await createDescribeOn(runtime)({
+                            targetLanguage: `German`,
+                            images: [`one`, `two`],
+                            currentIndex: (index, descriptionEN, description) =>
+                                events.push([index, descriptionEN, description]),
+                        });
+                    assertEqual(
+                        cpu.models[0].id,
+                        ChatModelId.qwen3_vl_2b_instruct,
+                        `describer model`,
+                    );
+                    assertEqual(
+                        gpu.models[0].id,
+                        ChatModelId.gemma4_e2b_limited,
+                        `translator model`,
+                    );
+                    assertEqual(cpu.calls.start, 1, `describer start`);
+                    assertEqual(gpu.calls.start, 1, `translator start`);
+                    assertEqual(results[0].descriptionEN, `description 1`, `first english`);
+                    assertEqual(results[0].description, `translated 1`, `first translation`);
+                    assertEqual(results[1].description, `translated 2`, `second translation`);
+                    assert(prompts[0].includes(`German`), `target language`);
+                    assert(prompts[0].includes(`description 1`), `source text`);
+                    assertEqual(events.length, 6, `four events per image`);
+                    assertEqual(events[4][2], `translated 1`, `first final`);
+                    assertEqual(events[5][2], `translated 2`, `second final`);
+                });
+            },
+        },
+        {
+            name: `describe/no gpu`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        events: Array<[number, string?, string?]> = [],
+                        cpu = createFakeEngine({
+                            backend: LlmBackend.cpu,
+                            chatImpl: async () => `plain english`,
+                        }),
+                        runtime = createRuntime({
+                            engines: { cpu: cpu.engine },
+                            backend: LlmBackend.cpu,
+                        }),
+                        results = await createDescribeOn(runtime)({
+                            targetLanguage: `fr`,
+                            images: [`one`],
+                            currentIndex: (index, descriptionEN, description) =>
+                                events.push([index, descriptionEN, description]),
+                        });
+                    assertEqual(cpu.calls.start, 1, `describer load`);
+                    assertEqual(results[0].description, `plain english`, `english fallback`);
+                    assertEqual(events.length, 3, `three events`);
+                    assertEqual(events[2][2], `plain english`, `fallback event`);
+                }, null);
+            },
+        },
+        {
+            name: `describe/translation failure`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        events: Array<[number, string?, string?]> = [],
+                        cpu = createFakeEngine({
+                            backend: LlmBackend.cpu,
+                            chatImpl: async () => `plain english`,
+                        }),
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            failStart: true,
+                        }),
+                        runtime = createRuntime({
+                            engines: { cpu: cpu.engine, litert: gpu.engine },
+                        }),
+                        results = await createDescribeOn(runtime)({
+                            targetLanguage: `de`,
+                            images: [`one`],
+                            currentIndex: (index, descriptionEN, description) =>
+                                events.push([index, descriptionEN, description]),
+                        });
+                    assertEqual(gpu.calls.start, 1, `translator attempted`);
+                    assertEqual(results[0].description, `plain english`, `english kept`);
+                    assertEqual(events[2][2], `plain english`, `fallback event`);
+                });
+            },
+        },
+        {
+            name: `describe/empty and failures`,
+            run: async () => {
+                const
+                    idle = createFakeEngine({ backend: LlmBackend.cpu }),
+                    idleRuntime = createRuntime({
+                        engines: { cpu: idle.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    empty = await createDescribeOn(idleRuntime)({
+                        targetLanguage: `de`,
+                        images: [],
+                    }),
+                    failed = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        failStart: true,
+                    }),
+                    failedRuntime = createRuntime({
+                        engines: { cpu: failed.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    loadError = await errorOf(() => createDescribeOn(failedRuntime)({
+                        targetLanguage: `en`,
+                        images: [`one`],
+                    })),
+                    silent = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () => ``,
+                    }),
+                    silentRuntime = createRuntime({
+                        engines: { cpu: silent.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    replyError = await errorOf(() => createDescribeOn(silentRuntime)({
+                        targetLanguage: `en`,
+                        images: [`one`],
+                    }));
+                assertEqual(empty.length, 0, `no results`);
+                assertEqual(idle.calls.start, 0, `empty skips load`);
+                assertEqual(loadError, `start failed`, `load error`);
+                assertEqual(replyError, `No description`, `empty reply`);
             },
         },
         {

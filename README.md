@@ -229,6 +229,7 @@ starts the vision or audio encoder.
 ```ts
 createChat(input: ChatInput): CancelChat
 preloadModel(input?: ChatPreloadInput): Promise<boolean>
+describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 clearModelCache(): Promise<void>
 ```
 
@@ -295,6 +296,43 @@ running.
 The final snapshot reports `ready: true`, `phase: LlmPhase.load` and
 `percent: 100` on success, or an `error` with `availability: ChatStatus.offline`
 on failure. A preload owns no cancel function; a new load replaces it.
+
+### Describe images
+
+```ts
+describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
+```
+
+Describe every image in English with `qwen3_vl_2b_instruct`, the Unsloth
+Qwen3-VL 2B Instruct build, one image at a time. When a WebGPU adapter exists
+and `targetLanguage` is not English, the English descriptions are then
+translated one by one with `gemma4_e2b_limited`. Without a GPU, or when the
+translation model cannot load, `description` stays equal to `descriptionEN`.
+The description call uses a 1024-token reply budget unless
+`limits.maxReplyTokens` overrides it.
+
+`DescribeImagesInput`:
+
+| Field | Description |
+| ----- | ----------- |
+| `targetLanguage` | Language of `description`; `en`, `English` or a tag such as `en-US` skips translation. |
+| `images` | Image data URLs or URLs, described in this order. |
+| `currentIndex?` | Receives `index`, then `index` and `descriptionEN`, then `index`, `descriptionEN` and `description`. |
+| `limits?` | Partial `LlmLimits` for both the description and translation calls. |
+| `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
+
+The promise resolves one `ImageDescription` per image, in input order:
+
+| Field | Description |
+| ----- | ----------- |
+| `descriptionEN` | The English description from the vision model. |
+| `description` | The translated description, or `descriptionEN` without a GPU. |
+
+`currentIndex` fires once per image at the start of its description, once when
+the English text is ready, and once when the final description is ready. The
+first call carries the index alone, the second adds `descriptionEN`, and the
+third adds `description`. The function uses the shared runtime, so it loads the
+describer and then the translator, replacing whichever model was loaded before.
 
 ## Tools
 
@@ -364,6 +402,7 @@ without it goes quiet again.
 | `ChatModelId` | Name | Reasoning | Images | Audio | CPU | WebGPU |
 | ------------- | ---- | --------- | ------ | ----- | --- | ------ |
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
+| `qwen3_vl_2b_instruct` | Qwen3-VL 2B Instruct | No | Yes | No | Yes | No |
 | `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | Yes | No | Yes |
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 
@@ -384,6 +423,11 @@ total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
 context on a phone and 8192 on a desktop. Its projector runs on two CPU threads
 because more threads stall the encoder, so its image turns are slower than the
 Gemma 4 WebGPU path. Use the GPU model when images need to be fast.
+
+`qwen3_vl_2b_instruct` is the Unsloth Qwen3-VL 2B Instruct build that
+`describeImages` loads for the English pass. Its Q4_K_M file and F16 projector
+total about 1.9 GB on the CPU engine. It has no reasoning pass, so it answers an
+image prompt directly.
 
 Gemma 4 E2B downloads `gemma-4-E2B-it.litertlm`, about 2.6 GB, on a desktop. It
 runs on the WebGPU engine with its vision and audio encoders in the same file,
@@ -572,6 +616,8 @@ const useReply = () => {
 | ---- | ----------- |
 | `ChatInput` | One request: model, messages, budgets, reasoning and callbacks. |
 | `ChatPreloadInput` | Model, limits, logging and status, the subset `preloadModel` needs. |
+| `DescribeImagesInput` | Target language, images, progress callback, limits and logging. |
+| `ImageDescription` | `descriptionEN` and the translated `description`. |
 | `CancelChat` | The function returned by `createChat`. |
 | `ChatMessage` | One prompt turn, `role`, `content` and optional `images` and `audio`. |
 | `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |
