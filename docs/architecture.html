@@ -516,7 +516,7 @@ f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 66);
 f(`types`, `entry`, `types.ts`, `src/types.ts`, 727);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 280);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 283);
-f(`models`, `runtime`, `models.ts`, `src/models.ts`, 131);
+f(`models`, `runtime`, `models.ts`, `src/models.ts`, 129);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 393);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 507);
@@ -535,7 +535,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 3816);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 3887);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 183);
@@ -726,26 +726,26 @@ n(`models`, `mobileDevice`, 55, `mobileDevice`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
 n(`models`, `deviceModelId`, 67, `deviceModelId`,
     `(id?, mobile?) => ChatModelId | undefined`,
-    `Swap gemma4_e2b and gemma4_e2b_limited to the build this device loads`);
-n(`models`, `findLlmModel`, 78, `findLlmModel`,
+    `Downgrade a gemma4_e2b request on a phone to the text-only build`);
+n(`models`, `findLlmModel`, 76, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
-n(`models`, `gpuAdapter`, 81, `gpuAdapter`,
+n(`models`, `gpuAdapter`, 79, `gpuAdapter`,
     `() => Promise<boolean>`,
     `True when the browser hands out a WebGPU adapter within the timeout,`
     + ` false in Node`);
-n(`models`, `defaultLlmModel`, 101, `defaultLlmModel`,
+n(`models`, `defaultLlmModel`, 99, `defaultLlmModel`,
     `() => Promise<ChatModelId | undefined>`,
     `The Gemma build of this device when an adapter exists, else the CPU`
     + ` model, memoized`);
-n(`models`, `resolveLlmModel`, 109, `resolveLlmModel`,
+n(`models`, `resolveLlmModel`, 107, `resolveLlmModel`,
     `(id?) => Promise<ChatModel | undefined>`,
-    `The requested model swapped to this device, or the device default`);
-n(`models`, `supportsImages`, 112, `supportsImages`,
+    `The requested model after the mobile downgrade, or the device default`);
+n(`models`, `supportsImages`, 110, `supportsImages`,
     `(model) => boolean`,
     `The CPU projector or the LiteRT file of that catalog entry decides`
     + ` vision`);
-n(`models`, `supportsAudio`, 115, `supportsAudio`,
+n(`models`, `supportsAudio`, 113, `supportsAudio`,
     `(model) => boolean`,
     `The projector audio flag or the LiteRT file of that catalog entry`
     + ` decides audio`);
@@ -1078,10 +1078,10 @@ n(`harness`, `streamOf`, 181, `streamOf`, `(...chunks) => AsyncIterable`,
     `One scripted engine stream`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 257, `definitions`, `79 deferred cases`,
+n(`harness`, `definitions`, 257, `definitions`, `80 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, chat, speed,`
     + ` threads, square`);
-n(`harness`, `main`, 3803, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 3874, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 32, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat and preloadModel run without a DOM`);
@@ -1122,7 +1122,7 @@ n(`webpack`, `nodeEsmConfig`, 133, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.7.1`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.7.2`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1549,9 +1549,9 @@ const FLOWS = {
                 ` Bump the call token, abort the previous stream, emit the`
                 + ` first snapshot synchronously.`),
             step([`resolveLlmModel`, `deviceModelId`, `chat.run`],
-                ` Pick the requested model or the device default, swap a`
-                + ` Gemma id to the build this device loads and report that`
-                + ` build in the snapshot, reject an unknown model, an empty`
+                ` Pick the requested model or the device default, downgrade a`
+                + ` Gemma request on a phone and report the build that runs in`
+                + ` the snapshot, reject an unknown model, an empty`
                 + ` prompt with a reported error, or a media turn the`
                 + ` selected file cannot take, then resolve the budgets.`),
             step([`llm.load`],

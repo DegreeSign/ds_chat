@@ -148,11 +148,14 @@ A request without `model` picks Gemma when the browser exposes a WebGPU adapter
 and `qwen3_vl_2b` when it does not. A phone or tablet asking for Gemma gets
 `gemma4_e2b_limited`, the 2.0 GB text-only browser build
 (`gemma-4-E2B-it-gpu.litertlm`); a desktop gets `gemma4_e2b`, the 2.6 GB
-multimodal build with vision and audio. Once a model is requested or resolved,
-every status snapshot reports the build that runs in `model`, so a host that
-asks for `gemma4_e2b` on a phone reads `gemma4-e2b-limited` back. Hosts that
-need images on mobile pass `qwen3_vl_2b`; audio is desktop only. The GPU engine
-is far faster on a desktop, so check the browser before blaming the package:
+multimodal build with vision and audio. The downgrade applies to `gemma4_e2b`
+alone: an explicit `gemma4_e2b_limited` loads the smaller build on every
+device, so a desktop can keep the text-only file too. Once a model is requested
+or resolved, every status snapshot reports the build that runs in `model`, so a
+host that asks for `gemma4_e2b` on a phone reads `gemma4-e2b-limited` back.
+Hosts that need images on mobile pass `qwen3_vl_2b`; audio is desktop only. The
+GPU engine is far faster on a desktop, so check the browser before blaming the
+package:
 
 ```js
 // Run in the console of the page that loads the package
@@ -356,11 +359,11 @@ without it goes quiet again.
 | ------------- | ---- | --------- | ------ | ----- | --- | ------ |
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
 | `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | Yes | No | Yes |
-| `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Mobile |
+| `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 
-A phone or tablet asking for any Gemma id gets `gemma4_e2b_limited`,
-`gemma-4-E2B-it-gpu.litertlm`, which is text only. A desktop asking for the
-limited id gets the full `gemma4_e2b` build instead. The build that actually
+A phone or tablet asking for `gemma4_e2b` gets `gemma4_e2b_limited`,
+`gemma-4-E2B-it-gpu.litertlm`, which is text only. An explicit
+`gemma4_e2b_limited` loads that same file on a desktop. The build that actually
 runs is always the one in `ChatStatusSnapshot.model`. The limited build has no
 vision or audio encoder, so `supportsImages` and `supportsAudio` report `false`
 there. Use `qwen3_vl_2b` for images on mobile.
@@ -381,7 +384,8 @@ runs on the WebGPU engine with its vision and audio encoders in the same file,
 so an image or audio prompt does not download a projector. `gemma4_e2b_limited`
 instead downloads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm`, the precompiled
 GPU_ARTISAN build Google ships for browsers. The smaller file is what keeps a
-mobile tab alive at the end of the model load.
+mobile tab alive at the end of the model load, and a desktop can ask for it
+too, trading vision and audio for 600 MB less download.
 
 The WebGPU engine keeps one LiteRT conversation for consecutive turns. When the
 next prompt continues that history, only the new user turn is sent. A changed

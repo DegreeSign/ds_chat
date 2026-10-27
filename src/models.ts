@@ -68,10 +68,8 @@ const
         id?: ChatModelId,
         mobile: boolean = mobileDevice(),
     ): ChatModelId | undefined => {
-        if (id == ChatModelId.gemma4_e2b)
-            return mobile ? ChatModelId.gemma4_e2b_limited : id;
-        if (id == ChatModelId.gemma4_e2b_limited)
-            return mobile ? id : ChatModelId.gemma4_e2b;
+        if (id == ChatModelId.gemma4_e2b && mobile)
+            return ChatModelId.gemma4_e2b_limited;
         return id;
     },
     /** Look up a catalog entry by id */

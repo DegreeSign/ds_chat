@@ -451,6 +451,11 @@ const definitions: Array<{
                     `asked gemma`,
                 );
                 assertEqual(
+                    (await resolveLlmModel(ChatModelId.gemma4_e2b_limited))?.id,
+                    ChatModelId.gemma4_e2b_limited,
+                    `asked limited gemma`,
+                );
+                assertEqual(
                     await resolveLlmModel(`missing` as ChatModelId),
                     undefined,
                     `unknown model`,
@@ -528,8 +533,8 @@ const definitions: Array<{
                 );
                 assertEqual(
                     deviceModelId(ChatModelId.gemma4_e2b_limited),
-                    ChatModelId.gemma4_e2b,
-                    `desktop limited swap`,
+                    ChatModelId.gemma4_e2b_limited,
+                    `desktop limited build`,
                 );
                 assertEqual(
                     deviceModelId(ChatModelId.gemma4_e2b, true),
@@ -1975,6 +1980,72 @@ const definitions: Array<{
                     );
                     assertEqual(statuses[0].supportsImages, false, `mobile no images`);
                     assertEqual(statuses[0].supportsAudio, false, `mobile no audio`);
+                } finally {
+                    if (hadAgent)
+                        Object.defineProperty(nav, `userAgent`, {
+                            configurable: true,
+                            value: agent,
+                        });
+                    else delete (nav as unknown as Record<string, unknown>).userAgent;
+                    if (hadHints)
+                        Object.defineProperty(nav, `userAgentData`, {
+                            configurable: true,
+                            value: hints,
+                        });
+                    else delete (nav as unknown as Record<string, unknown>).userAgentData;
+                };
+            },
+        },
+        {
+            name: `chat/desktop limited build`,
+            run: async () => {
+                const
+                    nav = navigator as Navigator & {
+                        userAgentData?: { mobile?: boolean },
+                    },
+                    hadAgent = Object.prototype.hasOwnProperty.call(nav, `userAgent`),
+                    agent = nav.userAgent,
+                    hadHints = Object.prototype.hasOwnProperty.call(nav, `userAgentData`),
+                    hints = nav.userAgentData;
+                Object.defineProperty(nav, `userAgent`, {
+                    configurable: true,
+                    value: `Mozilla/5.0 (X11; Linux x86_64)`,
+                });
+                Object.defineProperty(nav, `userAgentData`, {
+                    configurable: true,
+                    value: { mobile: false },
+                });
+                try {
+                    const
+                        statuses: ChatStatusSnapshot[] = [],
+                        { chat, models, requests } = chatWith({
+                            backend: LlmBackend.gpu,
+                            chatText: `seen`,
+                        });
+                    chat({
+                        model: ChatModelId.gemma4_e2b_limited,
+                        messages: [userMessage(`hi`)],
+                        onResponse: () => { },
+                        onStatus: value => statuses.push(value),
+                    });
+                    await waitFor(() => requests.length == 1, `limited chat`);
+                    assertEqual(
+                        models[0].id,
+                        ChatModelId.gemma4_e2b_limited,
+                        `desktop limited loaded`,
+                    );
+                    assertEqual(
+                        statuses[0].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `limited build start`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `limited build end`,
+                    );
+                    assertEqual(statuses[0].supportsImages, false, `limited no images`);
+                    assertEqual(statuses[0].supportsAudio, false, `limited no audio`);
                 } finally {
                     if (hadAgent)
                         Object.defineProperty(nav, `userAgent`, {
