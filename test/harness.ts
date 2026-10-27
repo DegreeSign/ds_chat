@@ -1,7 +1,10 @@
 // Browser test harness for @degreesign/chat.
 import * as entry from "../src/index";
-import { createChat, preloadModel } from "../src/index";
-import { createChatOn, createPreloadOn } from "../src/chat";
+import {
+    clearModelCache,
+    createChat,
+    preloadModel,
+} from "../src/index";import { createChatOn, createPreloadOn } from "../src/chat";
 import { createRuntime } from "../src/service";
 import {
     buildMessages,
@@ -263,6 +266,7 @@ const definitions: Array<{
             run: () => {
                 assertEqual(typeof createChat, `function`, `createChat`);
                 assertEqual(typeof preloadModel, `function`, `preloadModel`);
+                assertEqual(typeof clearModelCache, `function`, `clearModelCache`);
                 assertEqual(typeof createChatOn, `function`, `createChatOn`);
                 assertEqual(typeof createPreloadOn, `function`, `createPreloadOn`);
                 assertEqual(typeof createRuntime, `function`, `createRuntime`);
@@ -280,6 +284,7 @@ const definitions: Array<{
                         `WebSearchProvider`,
                         `builtinTools`,
                         `calculateTool`,
+                        `clearModelCache`,
                         `createChat`,
                         `currencyTool`,
                         `preloadModel`,
@@ -1379,7 +1384,7 @@ const definitions: Array<{
             },
         },
         {
-            name: `runtime/gemma builds evict`,
+            name: `runtime/switch keeps caches`,
             run: async () => {
                 const
                     { runtime, calls, models } = runtimeWith({
@@ -1400,9 +1405,77 @@ const definitions: Array<{
                     true,
                     `limited loaded`,
                 );
-                assertEqual(calls.start, 2, `two builds started`);
-                assertEqual(calls.remove, 1, `desktop build removed`);
-                assertEqual(models[1].id, ChatModelId.gemma4_e2b_limited, `limited build`);
+                assertEqual(
+                    await load(ChatModelId.gemma4_e2b),
+                    true,
+                    `desktop reloaded`,
+                );
+                assertEqual(calls.start, 3, `three builds started`);
+                assertEqual(calls.unload, 2, `previous builds released`);
+                assertEqual(calls.purge, 0, `no cache deleted`);
+                assertEqual(
+                    models[2].id,
+                    ChatModelId.gemma4_e2b,
+                    `desktop build`,
+                );
+                assertEqual(
+                    runtime.model()?.id,
+                    ChatModelId.gemma4_e2b,
+                    `active build`,
+                );
+            },
+        },
+        {
+            name: `runtime/clear purges every cache`,
+            run: async () => {
+                const
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        backend: LlmBackend.cpu,
+                    });
+                await runtime.load({
+                    model: modelOf(ChatModelId.qwen3_vl_2b),
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                await runtime.clear();
+                assertEqual(cpu.calls.unload, 1, `loaded model released`);
+                assertEqual(cpu.calls.purge, 1, `cpu cache purged`);
+                assertEqual(gpu.calls.purge, 1, `gpu cache purged`);
+                assertEqual(runtime.status(), LlmStatus.idle, `idle status`);
+                assertEqual(runtime.model(), undefined, `no active model`);
+                assertEqual(runtime.ready(), false, `not ready`);
+            },
+        },
+        {
+            name: `runtime/clear stops a load`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        loadGate: gate.promise,
+                    }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    loading = runtime.load({
+                        model: modelOf(ChatModelId.qwen3_vl_2b),
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                await waitFor(() => cpu.calls.start == 1, `load started`);
+                const clearing = runtime.clear();
+                gate.resolve();
+                assertEqual(await loading, false, `load stopped`);
+                await clearing;
+                assertEqual(cpu.calls.purge, 1, `cpu cache purged`);
+                assertEqual(gpu.calls.purge, 1, `gpu cache purged`);
+                assertEqual(runtime.status(), LlmStatus.idle, `idle status`);
             },
         },
         {

@@ -87,7 +87,7 @@ call returns one cancel function and starts the model behind the status
 callback.
 
 ```ts
-import { LlmRole, createChat, preloadModel } from "@degreesign/chat";
+import { LlmRole, clearModelCache, createChat, preloadModel } from "@degreesign/chat";
 
 const messages = [
   { role: LlmRole.system, content: "Answer in two sentences." },
@@ -107,6 +107,8 @@ const cancel = createChat({
 
 // Later, stop the reply, cancel the load, or free the model.
 cancel();
+// Delete every cached model file when the device needs the space.
+await clearModelCache();
 ```
 
 Without `model` the package picks the GPU model when the browser provides a
@@ -227,10 +229,14 @@ starts the vision or audio encoder.
 ```ts
 createChat(input: ChatInput): CancelChat
 preloadModel(input?: ChatPreloadInput): Promise<boolean>
+clearModelCache(): Promise<void>
 ```
 
 Call it once per response. A new call aborts the previous stream. When the
-requested model is already loaded, no download or load happens.
+requested model is already loaded, no download or load happens. Switching to a
+different model unloads the previous runtime and keeps its files on disk.
+`clearModelCache` releases the loaded model and deletes every cached model file
+from this device.
 
 `ChatInput`:
 
@@ -466,12 +472,13 @@ changed. A page inside an iframe is isolated only when every ancestor sets the
 same headers.
 
 Each engine keeps its own cache. Loading a model unloads the previous runtime
-and removes the previous model's cache. Both engines store model files in the
-origin private file system as numbered parts, under `wllama-store` for the CPU
-engine and `litert-store` for the GPU engine. The GPU engine also reads a Cache
-Storage entry under `litertlm-models` when an older version stored the file. A
-quota failure keeps the parts already stored, so freeing disk lets the next
-attempt resume.
+and keeps the previous model's files, so a switch back skips the download.
+`clearModelCache()` deletes them all and frees the storage. Both engines store
+model files in the origin private file system as numbered parts, under
+`wllama-store` for the CPU engine and `litert-store` for the GPU engine. The GPU
+engine also reads a Cache Storage entry under `litertlm-models` when an older
+version stored the file. A quota failure keeps the parts already stored, so
+freeing disk lets the next attempt resume.
 
 Both engines store the files before they load them, and one download serves
 every caller. A failed load, a cancelled call or a repeated `createChat` reads

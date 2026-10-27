@@ -10,7 +10,6 @@ import type {
 export interface FakeEngineOptions {
     backend?: LlmBackend;
     cached?: boolean;
-    hasCache?: boolean;
     loadGate?: Promise<void>;
     chatGate?: Promise<void>;
     chatText?: string;
@@ -30,7 +29,6 @@ export interface FakeEngine {
         start: number;
         chat: number;
         unload: number;
-        remove: number;
         purge: number;
         cached: number;
     };

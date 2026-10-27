@@ -1,7 +1,7 @@
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
-import { litertContextWindow, llmModels } from '../models';
+import { litertContextWindow } from '../models';
 import {
     contentLength,
     hasAudio,
@@ -464,30 +464,6 @@ const litertEngine: LlmEngine = {
     backend: LlmBackend.gpu,
     startLLM,
     cached: modelCached,
-    hasCache: async () => {
-        try {
-            for (const model of llmModels) {
-                const litert = model.litert;
-                if (!litert) continue;
-                const stored = await store.stored(
-                    modelUrl(litert.repo, litert.file));
-                if (stored) return true;
-            };
-            const cache = await cacheOpen();
-            return cache ? (await cache.keys()).length > 0 : false;
-        } catch { return false; };
-    },
-    remove: async model => {
-        try {
-            const litert = model.litert;
-            if (!litert) return;
-            const
-                url = modelUrl(litert.repo, litert.file),
-                cache = await cacheOpen();
-            await store.remove(url);
-            if (cache) await cache.delete(url);
-        } catch { };
-    },
     purge: async () => {
         try {
             await store.purge();

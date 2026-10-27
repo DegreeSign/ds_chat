@@ -422,9 +422,10 @@
                 <b>ChatInput</b> or a smaller <b>ChatPreloadInput</b>,
                 <b>createChat</b> binds its callbacks to the shared runtime, the
                 runtime lazily imports an engine, and the engine streams the
-                reply back. Hover brightens one function and its neighbours,
-                click pins it, and the panel lists every caller and every callee
-                plus the shortest path back to the public entry.
+                reply back. <b>clearModelCache</b> releases the model and
+                deletes every stored file. Hover brightens one function and its
+                neighbours, click pins it, and the panel lists every caller and
+                every callee plus the shortest path back to the public entry.
             </div>
         </aside>
     </div>
@@ -438,9 +439,9 @@ const MAP = {
     flow: `send`,
     intro: `Bands run top to bottom in dependency order: the host passes one`
         + ` ChatInput or a smaller ChatPreloadInput, createChat binds the`
-        + ` callbacks to the shared runtime, the built-in tools run on the`
-        + ` host, the runtime lazily imports an engine, and the engine streams`
-        + ` the reply.`,
+        + ` callbacks to the shared runtime, clearModelCache deletes every`
+        + ` stored model, the built-in tools run on the host, the runtime`
+        + ` lazily imports an engine, and the engine streams the reply.`,
     ignore: [],
 };
 
@@ -454,7 +455,7 @@ const BANDS = [
     {
         id: `entry`,
         title: `2 · public entry, enums and types`,
-        hint: `createChat and preloadModel are the runtime exports`,
+        hint: `createChat, preloadModel and clearModelCache are the runtime exports`,
         color: `#274b6b`,
     },
     {
@@ -513,13 +514,13 @@ const step = (ids, text) => ({ ids, text });
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 33);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 66);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 727);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 280);
-f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 283);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 725);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 291);
+f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 271);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 129);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 393);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 507);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 374);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 483);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
@@ -535,10 +536,10 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 3887);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 3960);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
-f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 76);
-f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 183);
+f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
+f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 186);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 206);
 f(`vwebpack`, `test`, `webpack.config.cjs`, `test/webpack.config.cjs`, 42);
 f(`vassets`, `test`, `assets.ts`, `test/assets.ts`, 16);
@@ -560,9 +561,10 @@ n(`host`, `cancel`, 0, `CancelChat`, `() => void`,
 
 // entry, enums and types
 n(`entry`, `exports`, 1, `public exports`,
-    `createChat · preloadModel · builtinTools · 3 tools + 8 enums`,
-    `Only createChat, preloadModel, the tool descriptors and the public`
-    + ` types leave the package; no tool reaches an engine`);
+    `createChat · preloadModel · clearModelCache · builtinTools · 3 tools`
+    + ` + 8 enums`,
+    `Only createChat, preloadModel, clearModelCache, the tool descriptors and`
+    + ` the public types leave the package; no tool reaches an engine`);
 n(`chat`, `createChat`, 276, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
 n(`chat`, `createChatOn`, 59, `createChatOn`,
@@ -585,6 +587,8 @@ n(`chat`, `createPreloadOn`, 227, `createPreloadOn`,
 n(`chat`, `preloadModel`, 278, `preloadModel`,
     `(input?: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
+n(`chat`, `clearModelCache`, 281, `clearModelCache`, `() => Promise<void>`,
+    `Release the loaded model and delete every cached model file`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
     `LlmRole, ChatStatus, LlmStatus, LlmBackend (cpu, gpu, none), LlmPhase,`
     + ` ChatModelId (qwen, gemma, gemma limited), BuiltinTool and`
@@ -626,7 +630,7 @@ n(`types`, `preload`, 293, `ChatPreloadInput`,
     `The model preload subset a host may call before the first chat`);
 n(`types`, `call`, 333, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · cancelled · model · requesting · phase`
-    + ` · percent · load · chat · unload · error() · model()`,
+    + ` · percent · load · chat · unload · clear · error() · model()`,
     `One request state, one live call and the runtime it drives`);
 n(`types`, `load`, 360, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
@@ -643,9 +647,11 @@ n(`types`, `params`, 472, `EngineChatParams · StartLlmParams`
     `messages · limits · reasoning · logging · onReason · onText · onSpeed`
     + ` · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
     `Per-call budgets, accumulated text and speed callbacks`);
-n(`types`, `runtimeContract`, 518, `LlmRuntime · LlmEngine`,
-    `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`,
-    `The engine returns model, backend, contextSize, chat and unload`);
+n(`types`, `runtimeContract`, 520, `LlmRuntime · LlmEngine`,
+    `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`
+    + ` · purge`,
+    `The engine returns model, backend, contextSize, chat and unload, and can`
+    + ` delete its whole cache`);
 n(`types`, `contentParts`, 533, `EngineContentPart`,
     `text | image | audio`,
     `One segment of a user turn before an engine maps it`);
@@ -662,45 +668,46 @@ n(`types`, `litertParams`, 584, `LitertSession · LitertChatParams`
     `The reused conversation, one LiteRT chat call and one stream over it`);
 
 // model runtime
-n(`llm`, `createRuntime`, 17, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
+n(`llm`, `createRuntime`, 16, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
     `One module singleton, fake engines in tests`);
-n(`llm`, `probes`, 40, `probes`,
+n(`llm`, `probes`, 38, `probes`,
     `wasmSupported · webgpuSupported · persistStorage`,
     `Capability and storage checks, guarded`);
-n(`llm`, `engineFor`, 51, `engineFor`,
+n(`llm`, `engineFor`, 49, `engineFor`,
     `(model: ChatModel) => LlmEngine | undefined`,
     `Test override, then the model artifact and WebGPU or wasm capability`);
-n(`llm`, `evictPrevious`, 69, `evictPrevious`,
-    `(model, engine) => Promise<void>`,
-    `Unload the previous model, remove its cache, keep the loaded engine only`);
-n(`llm`, `reportProgress`, 88, `reportProgress`, `(value, phase?) => void`,
+n(`llm`, `release`, 67, `release`, `() => Promise<void>`,
+    `Drop the loaded runtime, keeping every stored model file`);
+n(`llm`, `reportProgress`, 74, `reportProgress`, `(value, phase?) => void`,
     `Clamp 0..1 and report to every caller waiting on the load`);
-n(`llm`, `setStatus`, 97, `setStatus`, `(next: LlmStatus) => void`,
+n(`llm`, `setStatus`, 83, `setStatus`, `(next: LlmStatus) => void`,
     `Store the engine status for the next snapshot`);
-n(`llm`, `abortLoad`, 101, `abortLoad`, `() => void`,
+n(`llm`, `abortLoad`, 87, `abortLoad`, `() => void`,
     `Bump the load token, abort the engine call and return to idle`);
-n(`llm`, `releaseWaiter`, 109, `releaseWaiter`, `(waiter) => void`,
+n(`llm`, `releaseWaiter`, 95, `releaseWaiter`, `(waiter) => void`,
     `Drop one caller, then abort in a microtask once nobody waits`);
-n(`llm`, `followLoad`, 117, `followLoad`, `(onProgress, signal?) => Promise<boolean>`,
+n(`llm`, `followLoad`, 103, `followLoad`, `(onProgress, signal?) => Promise<boolean>`,
     `Follow the shared load, leave on abort, never restart the download`);
-n(`llm`, `ready`, 146, `ready`, `() => boolean`,
+n(`llm`, `ready`, 132, `ready`, `() => boolean`,
     `Ready status plus a runtime and an active model`);
-n(`llm`, `load`, 149, `load`,
+n(`llm`, `load`, 135, `load`,
     `({ model, limits, assets, logging, signal, onProgress }) => Promise<boolean>`,
     `Join the same load, abandon the wait on abort, abort a different model,`
-    + ` pick the engine, evict, cache check, startLLM, keep one runtime and`
-    + ` store the load error for the next snapshot`);
-n(`llm`, `unload`, 240, `unload`, `() => Promise<void>`,
+    + ` pick the engine, release the previous runtime, cache check, startLLM,`
+    + ` keep one runtime and store the load error for the next snapshot`);
+n(`llm`, `unload`, 224, `unload`, `() => Promise<void>`,
     `Abort the load, release the engine, keep the cache`);
-n(`llm`, `chat`, 250, `chat`, `(params) => Promise<string | undefined>`,
+n(`llm`, `clear`, 230, `clear`, `() => Promise<void>`,
+    `Release the model, wait out an aborted load, purge both engine caches`);
+n(`llm`, `chat`, 237, `chat`, `(params) => Promise<string | undefined>`,
     `Serialize one engine turn, then stream on the loaded runtime`);
-n(`llm`, `isLoading`, 264, `isLoading`, `() => boolean`,
+n(`llm`, `isLoading`, 251, `isLoading`, `() => boolean`,
     `Not ready and downloading`);
-n(`llm`, `error`, 276, `runtime.error`, `() => string | undefined`,
+n(`llm`, `error`, 264, `runtime.error`, `() => string | undefined`,
     `Last model load error, cleared when a load starts`);
-n(`llm`, `model`, 277, `runtime.model`, `() => ChatModel | undefined`,
+n(`llm`, `model`, 265, `runtime.model`, `() => ChatModel | undefined`,
     `The model currently loaded on the runtime`);
-n(`llm`, `runtime`, 281, `runtime`, `createRuntime()`,
+n(`llm`, `runtime`, 269, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
@@ -814,7 +821,7 @@ n(`engine`, `runEngineChat`, 461, `runEngineChat`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
 n(`wllama`, `wllamaEngine`, 348, `wllamaEngine`, `LlmEngine`,
-    `backend cpu, startLLM, cached, hasCache, remove, purge`);
+    `backend cpu, startLLM, cached, purge`);
 n(`wllama`, `resolveAssets`, 54, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
 n(`wllama`, `cpuLogger`, 63, `cpuLogger`, `(base) => WllamaLogger`,
@@ -852,20 +859,16 @@ n(`wllama`, `startLLM`, 226, `startLLM`, `(params) => Promise<LlmRuntime>`,
     + ` vision projector, abortable`);
 n(`wllama`, `cached`, 351, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `hasCache`, 358, `hasCache`, `() => Promise<boolean>`,
-    `Any stored CPU file or any entry in the wllama cache manager`);
 n(`wllama`, `chat`, 198, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
 n(`wllama`, `unload`, 342, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `remove`, 366, `remove`, `(model) => Promise<void>`,
-    `Delete the stored files and the cache entries, including the projector`);
-n(`wllama`, `purge`, 377, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 358, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
 n(`litert`, `litertEngine`, 463, `litertEngine`, `LlmEngine`,
-    `backend gpu, startLLM, cached, hasCache, remove, purge`);
+    `backend gpu, startLLM, cached, purge`);
 n(`litert`, `cache`, 35, `cacheName · store · backendConfig`,
     `litertlm-models · ModelStore · GPU executor settings`,
     `Cache Storage bucket, the resumable store and the GPU config tuned by`
@@ -913,11 +916,7 @@ n(`litert`, `startLLM`, 381, `startLLM`, `(params) => Promise<LlmRuntime>`,
     + ` conversation`);
 n(`litert`, `unload`, 455, `runtime.unload`, `() => Promise<void>`,
     `Clear the conversation and delete the wasm engine, keeping the cache`);
-n(`litert`, `hasCache`, 467, `hasCache`, `() => Promise<boolean>`,
-    `A stored file of any catalog model or any Cache Storage entry`);
-n(`litert`, `remove`, 480, `remove`, `(model) => Promise<void>`,
-    `Delete the model file from the store and from Cache Storage`);
-n(`litert`, `purge`, 491, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 467, `purge`, `() => Promise<void>`,
     `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
@@ -1078,13 +1077,14 @@ n(`harness`, `streamOf`, 181, `streamOf`, `(...chunks) => AsyncIterable`,
     `One scripted engine stream`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 257, `definitions`, `80 deferred cases`,
+n(`harness`, `definitions`, 260, `definitions`, `82 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, chat, speed,`
     + ` threads, square`);
-n(`harness`, `main`, 3874, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 3947, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 32, `main`, `() => Promise<void>`,
-    `Requires both node entries, proves createChat and preloadModel run without a DOM`);
+    `Requires both node entries, proves createChat, preloadModel and`
+    + ` clearModelCache run without a DOM`);
 n(`drive`, `getJson`, 54, `getJson`, `(url) => Promise<unknown>`,
     `Reads CDP targets from the debug port`);
 n(`drive`, `serve`, 71, `serve`, `() => Promise<Server>`,
@@ -1122,7 +1122,7 @@ n(`webpack`, `nodeEsmConfig`, 133, `nodeEsmConfig`, `webpack.Configuration`,
     `nodeBase plus ESM output, aliases ../assets/browser to nodeEsm.js`);
 n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
     `Prepends the compat license banner and copies the licence file`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.7.2`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.8.0`,
     `build = tsc declarations, webpack, banner; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1132,6 +1132,7 @@ n(`tsconfig`, `tsconfig`, 1, `tsconfig.json`, `strict, ES2022, CommonJS`,
 // host to entry
 e(`entry.exports`, `chat.createChat`, `type`);
 e(`entry.exports`, `chat.preloadModel`, `type`);
+e(`entry.exports`, `chat.clearModelCache`, `type`);
 e(`host.input`, `chat.createChatOn`, `type`);
 e(`host.preload`, `chat.createPreloadOn`, `type`);
 e(`host.cancel`, `chat.createChat`, `type`);
@@ -1139,6 +1140,7 @@ e(`host.cancel`, `chat.createChat`, `type`);
 // createChat wiring
 e(`chat.createChat`, `llm.runtime`, `call`);
 e(`chat.preloadModel`, `llm.runtime`, `call`);
+e(`chat.clearModelCache`, `llm.runtime`, `call`);
 e(`chat.createChatOn`, `emitStatus`, `inner`);
 e(`chat.createChatOn`, `chat.run`, `inner`);
 e(`chat.createChatOn`, `chat.cancel`, `inner`);
@@ -1177,7 +1179,7 @@ e(`chat.cancel`, `types.call`, `type`);
 // runtime relations
 e(`createRuntime`, `probes`, `inner`);
 e(`createRuntime`, `engineFor`, `inner`);
-e(`createRuntime`, `evictPrevious`, `inner`);
+e(`createRuntime`, `release`, `inner`);
 e(`createRuntime`, `reportProgress`, `inner`);
 e(`createRuntime`, `setStatus`, `inner`);
 e(`createRuntime`, `abortLoad`, `inner`);
@@ -1186,6 +1188,7 @@ e(`createRuntime`, `followLoad`, `inner`);
 e(`createRuntime`, `ready`, `inner`);
 e(`llm.createRuntime`, `llm.load`, `inner`);
 e(`llm.createRuntime`, `llm.unload`, `inner`);
+e(`llm.createRuntime`, `llm.clear`, `inner`);
 e(`llm.createRuntime`, `llm.chat`, `inner`);
 e(`createRuntime`, `isLoading`, `inner`);
 e(`llm.createRuntime`, `llm.error`, `inner`);
@@ -1195,10 +1198,8 @@ e(`llm.createRuntime`, `types.load`, `type`);
 e(`llm.createRuntime`, `types.runtimeContract`, `type`);
 e(`llm.runtime`, `llm.createRuntime`, `call`);
 e(`llm.load`, `engineFor`, `call`);
-e(`llm.load`, `evictPrevious`, `call`);
+e(`llm.load`, `release`, `call`);
 e(`llm.load`, `probes`, `call`);
-e(`llm.load`, `wllama.purge`, `call`);
-e(`llm.load`, `litert.purge`, `call`);
 e(`llm.load`, `reportProgress`, `call`);
 e(`llm.load`, `setStatus`, `call`);
 e(`llm.load`, `abortLoad`, `call`);
@@ -1209,14 +1210,12 @@ e(`followLoad`, `releaseWaiter`, `call`);
 e(`releaseWaiter`, `abortLoad`, `call`);
 e(`llm.load`, `types.load`, `type`);
 e(`llm.load`, `types.runtimeContract`, `build`);
-e(`evictPrevious`, `llmModels`, `call`);
-e(`evictPrevious`, `engineFor`, `call`);
-e(`evictPrevious`, `wllama.hasCache`, `call`);
-e(`evictPrevious`, `wllama.remove`, `call`);
-e(`evictPrevious`, `litert.hasCache`, `call`);
-e(`evictPrevious`, `litert.remove`, `call`);
-e(`llm.unload`, `wllama.unload`, `call`);
-e(`llm.unload`, `litert.unload`, `call`);
+e(`llm.release`, `wllama.unload`, `call`);
+e(`llm.release`, `litert.unload`, `call`);
+e(`llm.unload`, `release`, `call`);
+e(`llm.clear`, `llm.unload`, `call`);
+e(`llm.clear`, `wllama.purge`, `call`);
+e(`llm.clear`, `litert.purge`, `call`);
 e(`llm.chat`, `wllama.chat`, `call`);
 e(`llm.chat`, `litert.chat`, `call`);
 e(`llm.chat`, `types.runtimeContract`, `type`);
@@ -1286,8 +1285,6 @@ e(`types.call`, `types.input`, `type`);
 // wllama relations
 e(`wllamaEngine`, `wllama.startLLM`, `inner`);
 e(`wllamaEngine`, `wllama.cached`, `inner`);
-e(`wllamaEngine`, `wllama.hasCache`, `inner`);
-e(`wllamaEngine`, `wllama.remove`, `inner`);
 e(`wllamaEngine`, `wllama.purge`, `inner`);
 e(`wllama.startLLM`, `resolveAssets`, `call`);
 e(`wllama.startLLM`, `getWllama`, `call`);
@@ -1320,14 +1317,6 @@ e(`wllama.storedBlobs`, `store.download`, `call`);
 e(`wllama.cached`, `wllama.filesStored`, `call`);
 e(`wllama.cached`, `wllama.filesCached`, `call`);
 e(`wllama.cached`, `getWllama`, `call`);
-e(`wllama.hasCache`, `wllama.cpuFiles`, `call`);
-e(`wllama.hasCache`, `store.stored`, `call`);
-e(`wllama.hasCache`, `models.llmModels`, `call`);
-e(`wllama.hasCache`, `getWllama`, `call`);
-e(`wllama.remove`, `wllama.cpuFiles`, `call`);
-e(`wllama.remove`, `store.remove`, `call`);
-e(`wllama.remove`, `getWllama`, `call`);
-e(`wllama.remove`, `entryOf`, `call`);
 e(`wllama.purge`, `store.purge`, `call`);
 e(`wllama.purge`, `getWllama`, `call`);
 e(`wllama.chat`, `replyOptions`, `call`);
@@ -1343,8 +1332,6 @@ e(`wllama.unload`, `dropWllama`, `call`);
 // LiteRT relations
 e(`litertEngine`, `litert.startLLM`, `inner`);
 e(`litertEngine`, `litert.modelCached`, `inner`);
-e(`litertEngine`, `litert.hasCache`, `inner`);
-e(`litertEngine`, `litert.remove`, `inner`);
 e(`litertEngine`, `litert.purge`, `inner`);
 e(`litert.startLLM`, `loadLitert`, `call`);
 e(`litert.startLLM`, `litert.wasmLog`, `call`);
@@ -1386,12 +1373,7 @@ e(`litert.toLitertMessages`, `types.litertRuntime`, `type`);
 e(`litert.modelCached`, `litert.cacheOpen`, `call`);
 e(`litert.modelCached`, `store.stored`, `call`);
 e(`litert.modelCached`, `engine.modelUrl`, `call`);
-e(`litert.remove`, `litert.cacheOpen`, `call`);
-e(`litert.remove`, `engine.modelUrl`, `call`);
-e(`litert.remove`, `store.remove`, `call`);
 e(`litert.purge`, `store.purge`, `call`);
-e(`litert.hasCache`, `litert.cacheOpen`, `call`);
-e(`litert.hasCache`, `store.stored`, `call`);
 e(`loadLitert`, `litertWeights`, `store`);
 e(`assets.defaultLitertAssets`, `types.litert`, `type`);
 e(`assetsNode.defaultLitertAssets`, `assetsNodePaths.litertAssetsAt`, `call`);
@@ -1560,9 +1542,9 @@ const FLOWS = {
             step([`llm.probes`, `llm.engineFor`],
                 ` Persist storage, detect wasm and WebGPU, pick the engine`
                 + ` named by the model artifact.`),
-            step([`llm.evictPrevious`],
-                ` Keep one model in memory, unload the previous runtime and`
-                + ` remove its cache.`),
+            step([`llm.release`],
+                ` Keep one model in memory: unload the previous runtime and`
+                + ` keep its files for a later switch back.`),
             step([`wllama.startLLM`, `litert.startLLM`, `litert.settings`],
                 ` The selected engine downloads or reads its cache and its`
                 + ` stored file, resuming a cut download, then loads and`

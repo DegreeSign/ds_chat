@@ -1,4 +1,3 @@
-import { llmModels } from './models';
 import { litertEngine } from './engines/litert';
 import { wllamaEngine } from './engines/wllama';
 import { LlmBackend, LlmPhase, LlmStatus } from './enums';
@@ -23,7 +22,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
     let
         runtime: LlmRuntime | undefined,
         activeModel: ChatModel | undefined,
-        activeEngine: LlmEngine | undefined,
         backend: LlmBackend = LlmBackend.none,
         status: LlmStatus = LlmStatus.idle,
         loading: Promise<boolean> | undefined,
@@ -65,24 +63,12 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 await navigator.storage?.persist?.();
             } catch { };
         },
-        /** Remove every model except the one being loaded */
-        evictPrevious = async (model: ChatModel, engine: LlmEngine) => {
-            if (activeModel && activeModel.id != model.id) {
-                const
-                    previous = activeModel,
-                    previousEngine = activeEngine,
-                    current = runtime;
-                runtime = undefined;
-                activeModel = undefined;
-                activeEngine = undefined;
-                await current?.unload();
-                await previousEngine?.remove(previous);
-            };
-            // skip a cold engine
-            if (!await engine.hasCache()) return;
-            for (const other of llmModels)
-                if (other.id != model.id && engineFor(other) == engine)
-                    await engine.remove(other);
+        /** Drop the loaded runtime, keeping its files */
+        release = async () => {
+            const current = runtime;
+            runtime = undefined;
+            activeModel = undefined;
+            await current?.unload();
         },
         /** Report load progress to every waiting caller */
         reportProgress = (value: number, phase?: LlmPhase) => {
@@ -176,7 +162,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     setStatus(LlmStatus.unsupported);
                     return false;
                 };
-                await evictPrevious(model, engine);
+                await release();
                 if (token != loadToken) return false;
                 const cached = await engine.cached(model);
                 if (token != loadToken) return false;
@@ -205,7 +191,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     };
                     runtime = started;
                     activeModel = model;
-                    activeEngine = engine;
                     backend = engine.backend;
                     lastError = undefined;
                     setStatus(LlmStatus.ready);
@@ -216,7 +201,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                     // Reset partial engine
                     runtime = undefined;
                     activeModel = undefined;
-                    activeEngine = undefined;
                     lastError = `${(error as Error)?.message || `${error}`}`;
                     if (logging) console.log(`Local model failed`, error);
                     setStatus(LlmStatus.error);
@@ -238,13 +222,16 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         },
         /** Release the local model from memory, keeping its cache */
         unload = async () => {
-            const current = runtime;
             abortLoad();
-            runtime = undefined;
-            activeModel = undefined;
-            activeEngine = undefined;
             setStatus(LlmStatus.idle);
-            await current?.unload();
+            await release();
+        },
+        /** Release the model, then delete every cached model file */
+        clear = async () => {
+            const pending = loading;
+            await unload();
+            await pending?.catch(() => undefined);
+            await Promise.all([cpuEngine.purge(), gpuEngine.purge()]);
         },
         /** Run one chat completion on the loaded runtime */
         chat = async (params: RuntimeChatParams): Promise<string | undefined> => {
@@ -268,6 +255,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         load,
         chat,
         unload,
+        clear,
         ready,
         loading: isLoading,
         status: () => status,

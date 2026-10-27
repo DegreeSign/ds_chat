@@ -277,4 +277,15 @@ const createChat = createChatOn(runtime);
 
 const preloadModel = createPreloadOn(runtime);
 
-export { createChat, createChatOn, createPreloadOn, preloadModel };
+/** Delete every model file cached on this device */
+const clearModelCache = async (): Promise<void> => {
+    await runtime.clear();
+};
+
+export {
+    clearModelCache,
+    createChat,
+    createChatOn,
+    createPreloadOn,
+    preloadModel,
+};

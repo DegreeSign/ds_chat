@@ -1,7 +1,7 @@
 import type { CacheEntry, Wllama, WllamaLogger } from '@wllama/wllama/esm/index.js';
 import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
-import { cpuContextWindow, llmModels, mobileCpuContextWindow, mobileDevice } from '../models';
+import { cpuContextWindow, mobileCpuContextWindow, mobileDevice } from '../models';
 import {
     hasAudio,
     hasImages,
@@ -354,25 +354,6 @@ const
                 if (await filesStored(model)) return true;
                 return await filesCached(await getWllama(), model);
             } catch { return false; };
-        },
-        hasCache: async () => {
-            try {
-                for (const file of llmModels.flatMap(model => cpuFiles(model)))
-                    if (await store.stored(file.url)) return true;
-                const instance = await getWllama();
-                return (await instance.cacheManager.list()).length > 0;
-            } catch { return false; };
-        },
-        remove: async (model: ChatModel) => {
-            const files = cpuFiles(model);
-            try {
-                for (const file of files) await store.remove(file.url);
-            } catch { };
-            try {
-                const instance = await getWllama();
-                await instance.cacheManager.deleteMany(entry =>
-                    files.some(file => entryOf(entry, file.name)));
-            } catch { };
         },
         purge: async () => {
             try { await store.purge(); } catch { };

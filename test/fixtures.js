@@ -4,7 +4,7 @@
 const createFakeEngine = (options = {}) => {
     const
         backend = options.backend ?? `cpu`,
-        calls = { start: 0, chat: 0, unload: 0, remove: 0, purge: 0, cached: 0 },
+        calls = { start: 0, chat: 0, unload: 0, purge: 0, cached: 0 },
         models = [],
         limits = [],
         requests = [],
@@ -66,8 +66,6 @@ const createFakeEngine = (options = {}) => {
                 calls.cached += 1;
                 return options.cached ?? true;
             },
-            hasCache: async () => options.hasCache ?? false,
-            remove: async () => { calls.remove += 1; },
             purge: async () => { calls.purge += 1; },
         };
     return { engine, calls, models, limits, requests, loggings };

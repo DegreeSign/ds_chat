@@ -1,4 +1,4 @@
-export { createChat, preloadModel } from './chat';
+export { clearModelCache, createChat, preloadModel } from './chat';
 export {
     builtinTools,
     calculateTool,

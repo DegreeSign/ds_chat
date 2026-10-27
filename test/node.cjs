@@ -1,6 +1,7 @@
 // Node verification for the built package, no DOM and no model download.
 // Usage: yarn build && node test/node.cjs
 const {
+    clearModelCache,
     createChat,
     preloadModel,
     builtinTools,
@@ -44,6 +45,7 @@ const main = async () => {
         onStatus: snapshot => statuses.push(snapshot),
     });
     assertEqual(typeof cancel, `function`, `cancel handle`);
+    assertEqual(typeof clearModelCache, `function`, `clear cache handle`);
     await sleep(20);
     assertEqual(replies.length, 0, `no reply without an engine`);
     assertEqual(thoughts.length, 0, `no thinking without an engine`);
@@ -141,6 +143,7 @@ const main = async () => {
     const esm = await import(`../dist/node/chat.node.min.mjs`);
     assertEqual(typeof esm.createChat, `function`, `esm createChat`);
     assertEqual(typeof esm.preloadModel, `function`, `esm preloadModel`);
+    assertEqual(typeof esm.clearModelCache, `function`, `esm clearModelCache`);
     assertEqual(esm.ChatStatus.offline, ChatStatus.offline, `esm enum`);
     assertEqual(esm.LlmRole.user, LlmRole.user, `esm named export`);
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);

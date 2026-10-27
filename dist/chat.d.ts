@@ -5,4 +5,6 @@ declare const createChatOn: (service: Runtime) => ((input: ChatInput) => CancelC
 declare const createPreloadOn: (service: Runtime) => (input?: ChatPreloadInput) => Promise<boolean>;
 declare const createChat: (input: ChatInput) => CancelChat;
 declare const preloadModel: (input?: ChatPreloadInput) => Promise<boolean>;
-export { createChat, createChatOn, createPreloadOn, preloadModel };
+/** Delete every model file cached on this device */
+declare const clearModelCache: () => Promise<void>;
+export { clearModelCache, createChat, createChatOn, createPreloadOn, preloadModel, };

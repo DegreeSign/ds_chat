@@ -403,6 +403,8 @@ interface Runtime {
     load: (params: RuntimeLoadParams) => Promise<boolean>;
     chat: (params: RuntimeChatParams) => Promise<string | undefined>;
     unload: () => Promise<void>;
+    /** Release the model and delete every cached model file */
+    clear: () => Promise<void>;
     ready: () => boolean;
     loading: () => boolean;
     status: () => LlmStatus;
@@ -462,10 +464,6 @@ interface LlmEngine {
     startLLM: (params: StartLlmParams) => Promise<LlmRuntime>;
     /** Whether the model files are already fully stored on this device */
     cached: (model: ChatModel) => Promise<boolean>;
-    /** Whether this engine holds any cache, checked before loading the engine */
-    hasCache: () => Promise<boolean>;
-    /** Delete the model's on-device cache */
-    remove: (model: ChatModel) => Promise<void>;
     /** Delete every on-device artifact this engine keeps, including orphans */
     purge: () => Promise<void>;
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- Add `clearModelCache`, which releases the loaded model and deletes every
+  cached model file.
+- Switching models keeps the previous model on disk, so a switch back skips
+  the download.
+
 ## 0.7.1
 
 - Add `ChatModelId.gemma4_e2b_limited`, the text-only build a phone or tablet
