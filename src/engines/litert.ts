@@ -60,6 +60,13 @@ const
     /** Wasm stderr, quiet unless logging is on */
     wasmErr = (...args: unknown[]) => { if (loggingOn) console.error(...args); };
 
+/** Drop the device the module cached, a deleted engine leaves it unusable */
+const releaseDevice = (mod: Awaited<ReturnType<typeof loadLitert>>) => {
+    try {
+        mod.getGlobalLiteRtLm().liteRtLmWasm.preinitializedWebGPUDevice = undefined;
+    } catch { };
+};
+
 /** Open the model cache, absent in Node */
 const cacheOpen = async (): Promise<Cache | undefined> => {
     try {
@@ -440,6 +447,7 @@ const startLLM = async ({
         litertSettings({ model, limits, source, mod }));
     if (signal?.aborted) {
         await engine.delete();
+        releaseDevice(mod);
         throw new Error(`Cancelled`);
     };
     const session: LitertSession = {
@@ -453,9 +461,12 @@ const startLLM = async ({
         contextSize: litertContextWindow,
         chat: params => chatOn({ engine, model, mod, params, session }),
         unload: async () => {
+            const conversation = session.conversation;
             session.conversation = undefined;
             session.sent = [];
+            try { await conversation?.delete(); } catch { };
             await engine.delete();
+            releaseDevice(mod);
         },
     };
 };

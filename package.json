@@ -1,6 +1,6 @@
 {
     "name": "@degreesign/chat",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "description": "Headless on-device AI chat for browsers and Node with wllama CPU and LiteRT WebGPU engines",
     "main": "dist/node/chat.node.min.js",
     "module": "dist/browser/chat.min.mjs",
