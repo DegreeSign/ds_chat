@@ -28,7 +28,6 @@ import {
     resolveLlmModel,
     supportsAudio,
     supportsImages,
-    supportsTools,
 } from "../src/models";
 import {
     cpuFiles,
@@ -38,14 +37,10 @@ import {
 } from "../src/engines/wllama";
 import {
     cacheModel,
-    chatOn,
     continuesHistory,
-    engineTool,
     litertSettings,
-    sameTools,
     streamLitert,
     toLitertMessages,
-    toolRounds,
     visionTokens,
 } from "../src/engines/litert";
 import {
@@ -72,18 +67,18 @@ import {
 } from "../src/enums";
 import {
     builtinTools,
-    resolveChatTools,
+    calculateTool,
+    currencyTool,
+    webSearchTool,
 } from "../src/tools";
 import {
     calculate,
-    calculateTool,
     evaluateExpression,
     normalizeExpression,
 } from "../src/tools/calculator";
 import {
     duckDuckGoResults,
     searchSettings,
-    webSearchTool,
     wikipediaResults,
 } from "../src/tools/search";
 import {
@@ -101,15 +96,11 @@ import type {
     ChatModel,
     ChatStatusSnapshot,
     ChatTool,
-    ChatToolCall,
-    ChatToolResult,
     EngineChatParams,
     EngineMessage,
     LitertEngine,
-    LitertGpu,
     LitertModule,
     LitertSession,
-    LitertSettings,
     PriceSnapshot,
 } from "../src/types";
 import type { FakeEngineOptions } from "./fixtures.js";
@@ -255,7 +246,7 @@ const
     clearPriceStorage = () => {
         try { localStorage.removeItem(priceStorageKey); } catch { };
     },
-    /** One tool for the resolution tests. */
+    /** One tool for the registry tests. */
     toolNamed = (name: string, execute?: ChatTool[`execute`]): ChatTool => ({
         name,
         description: `${name} tool`,
@@ -287,8 +278,12 @@ const definitions: Array<{
                         `LlmRole`,
                         `LlmStatus`,
                         `WebSearchProvider`,
+                        `builtinTools`,
+                        `calculateTool`,
                         `createChat`,
+                        `currencyTool`,
                         `preloadModel`,
+                        `webSearchTool`,
                     ].join(`,`),
                     `public names`,
                 );
@@ -353,14 +348,6 @@ const definitions: Array<{
                 );
                 assertEqual(gemma.litert?.vision, true, `gemma vision`);
                 assertEqual(gemma.litert?.audio, true, `gemma audio`);
-                assertEqual(gemma.litert?.tools, true, `gemma tools`);
-                assertEqual(supportsTools(modelOf(ChatModelId.gemma4_e2b)), true, `gpu tools`);
-                assertEqual(supportsTools(modelOf(ChatModelId.qwen3_vl_2b)), false, `cpu tools`);
-                assertEqual(
-                    supportsTools(modelOf(ChatModelId.gemma4_e2b), true),
-                    true,
-                    `mobile tools`,
-                );
                 assertEqual(
                     gemma.litert?.web?.file,
                     `gemma-4-E2B-it-gpu.litertlm`,
@@ -401,7 +388,6 @@ const definitions: Array<{
                         file: `text-only.litertlm`,
                         vision: false,
                         audio: false,
-                        tools: false,
                     },
                 };
                 assertEqual(
@@ -418,7 +404,6 @@ const definitions: Array<{
                         file: `audio.litertlm`,
                         vision: false,
                         audio: true,
-                        tools: false,
                     },
                 };
                 assertEqual(supportsImages(audioGpu), false, `gpu audio images`);
@@ -1031,175 +1016,6 @@ const definitions: Array<{
             },
         },
         {
-            name: `litert/lost device`,
-            run: async () => {
-                let
-                    deletes = 0,
-                    adapters = 0,
-                    restarts = 0,
-                    loses = 0,
-                    wasmLoads = 0;
-                const
-                    model = modelOf(ChatModelId.gemma4_e2b),
-                    stream = (text: string) => new ReadableStream({
-                        start(controller) {
-                            controller.enqueue({
-                                role: `assistant`,
-                                content: [{ type: `text`, text }],
-                            });
-                            controller.close();
-                        },
-                    }),
-                    engineWith = (fail: boolean) => ({
-                        createConversation: async () => ({
-                            sendMessageStreaming: () => {
-                                if (fail) {
-                                    loses += 1;
-                                    throw new Error(
-                                        `A WebGPU device was lost`);
-                                };
-                                return stream(`recovered`);
-                            },
-                        }),
-                        delete: async () => { deletes += 1; },
-                    }) as unknown as LitertEngine,
-                    wasm = {
-                        preinitializedWebGPUDevice: { lost: new Promise(() => { }) },
-                    },
-                    lm = {
-                        liteRtLmWasm: wasm,
-                        setupDefaultWebGpuDevice: async () => {
-                            adapters += 1;
-                            wasm.preinitializedWebGPUDevice = {
-                                lost: new Promise(() => { }),
-                            };
-                        },
-                    },
-                    settingsSeen: LitertSettings[] = [],
-                    mod = {
-                        Backend: { GPU: 3, CPU: 1 },
-                        SamplerType: { TOP_K: 0 },
-                        Engine: {
-                            create: async (settings: LitertSettings) => {
-                                settingsSeen.push(settings);
-                                return engineWith(false);
-                            },
-                        },
-                        getOrLoadGlobalLiteRtLm: async () => {
-                            wasmLoads += 1;
-                        },
-                        unloadLiteRtLm: () => { },
-                        getGlobalLiteRtLm: () => lm,
-                    } as unknown as LitertModule,
-                    gpu: LitertGpu = {
-                        engine: engineWith(true),
-                        mod,
-                        lost: false,
-                        contextStep: 0,
-                        reopen: async () => new ReadableStream<Uint8Array>(),
-                    },
-                    session: LitertSession = {
-                        sent: [],
-                        reasoning: false,
-                        maxTokens: 0,
-                    },
-                    params: EngineChatParams = {
-                        messages: [userMessage(`hi`)],
-                        limits: defaultLlmLimits,
-                        reasoning: false,
-                        onReason: () => { },
-                        onText: () => { },
-                        onRestart: () => { restarts += 1; },
-                    },
-                    reply = await chatOn({ gpu, model, params, session });
-                assertEqual(loses, 1, `device lost once`);
-                assertEqual(deletes, 1, `old engine deleted`);
-                assertEqual(wasmLoads, 1, `wasm reloaded`);
-                assertEqual(adapters, 1, `fresh adapter`);
-                assertEqual(restarts, 1, `restart signalled`);
-                assertEqual(reply, `recovered`, `retried reply`);
-                assertEqual(gpu.contextStep, 1, `window lowered`);
-                assertEqual(gpu.lost, false, `device healed`);
-                assertEqual(
-                    settingsSeen[0]?.mainExecutorSettings?.maxNumTokens,
-                    2048,
-                    `smaller window`,
-                );
-            },
-        },
-        {
-            name: `litert/lost device gone`,
-            run: async () => {
-                let restarts = 0;
-                const
-                    model = modelOf(ChatModelId.gemma4_e2b),
-                    broken = () => { throw new Error(`No GPU adapter found.`); },
-                    mod = {
-                        Backend: { GPU: 3, CPU: 1 },
-                        SamplerType: { TOP_K: 0 },
-                        Engine: { create: async () => broken() },
-                        getOrLoadGlobalLiteRtLm: async () => { },
-                        unloadLiteRtLm: () => { },
-                        getGlobalLiteRtLm: () => ({
-                            liteRtLmWasm: { preinitializedWebGPUDevice: {} },
-                            setupDefaultWebGpuDevice: async () => broken(),
-                        }),
-                    } as unknown as LitertModule,
-                    engine = {
-                        createConversation: async () => ({
-                            sendMessageStreaming: () => {
-                                throw new Error(`vkQueueSubmit failed`);
-                            },
-                        }),
-                        delete: async () => { },
-                    } as unknown as LitertEngine,
-                    params: EngineChatParams = {
-                        messages: [userMessage(`hi`)],
-                        limits: defaultLlmLimits,
-                        reasoning: false,
-                        onReason: () => { },
-                        onText: () => { },
-                        onRestart: () => { restarts += 1; },
-                    },
-                    gpu: LitertGpu = {
-                        engine,
-                        mod,
-                        lost: false,
-                        contextStep: 0,
-                        reopen: async () => new ReadableStream<Uint8Array>(),
-                    },
-                    error = await errorOf(() => chatOn({
-                        gpu,
-                        model,
-                        params,
-                        session: {
-                            sent: [],
-                            reasoning: false,
-                            maxTokens: 0,
-                        },
-                    }));
-                assertEqual(error, `No GPU adapter found.`, `rebuild failed`);
-                assertEqual(restarts, 1, `restart signalled`);
-                assertEqual(gpu.lost, true, `engine stays dead`);
-                const floor = await errorOf(() => chatOn({
-                    gpu: {
-                        ...gpu,
-                        engine,
-                        lost: false,
-                        contextStep: 2,
-                    },
-                    model,
-                    params,
-                    session: {
-                        sent: [],
-                        reasoning: false,
-                        maxTokens: 0,
-                    },
-                }));
-                assertEqual(floor, `The graphics device was lost`, `last window`);
-            },
-        },
-        {
             name: `litert/vision budget`,
             run: () => {
                 const
@@ -1221,7 +1037,6 @@ const definitions: Array<{
                                 file: `text-only.litertlm`,
                                 vision: false,
                                 audio: false,
-                                tools: false,
                             },
                         },
                         limits: defaultLlmLimits,
@@ -1237,7 +1052,6 @@ const definitions: Array<{
                                 file: `audio-only.litertlm`,
                                 vision: false,
                                 audio: true,
-                                tools: false,
                             },
                         },
                         limits: defaultLlmLimits,
@@ -1379,23 +1193,14 @@ const definitions: Array<{
                     stopped: () => true,
                 });
                 assertEqual(stopped, undefined, `stopped reply`);
-                const
-                    failed = await errorOf(() => streamReply({
-                        model,
-                        onReason: () => { },
-                        onText: () => { },
-                        start: async () => { throw new Error(`boom`); },
-                        stopped: () => false,
-                    })),
-                    halted = await streamReply({
-                        model,
-                        onReason: () => { },
-                        onText: () => { },
-                        start: async () => { throw new Error(`boom`); },
-                        stopped: () => true,
-                    });
-                assertEqual(failed, `boom`, `failed reply`);
-                assertEqual(halted, undefined, `stopped failure`);
+                const failed = await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    start: async () => { throw new Error(`boom`); },
+                    stopped: () => false,
+                });
+                assertEqual(failed, undefined, `failed reply`);
                 const
                     sent: EngineMessage[] = [],
                     built = await runEngineChat({
@@ -1751,36 +1556,6 @@ const definitions: Array<{
             },
         },
         {
-            name: `runtime/fatal engine`,
-            run: async () => {
-                const
-                    { runtime, calls } = runtimeWith({
-                        backend: LlmBackend.gpu,
-                        failChat: true,
-                        fatal: true,
-                    }),
-                    limits = resolveLlmLimits();
-                await runtime.load({
-                    model: modelOf(ChatModelId.gemma4_e2b),
-                    limits,
-                    onProgress: () => { },
-                });
-                const failure = await errorOf(() => runtime.chat({
-                    messages: [userMessage(`hi`)],
-                    limits,
-                    reasoning: false,
-                    onReason: () => { },
-                    onText: () => { },
-                }));
-                assertEqual(failure, `chat failed`, `chat error`);
-                assertEqual(runtime.status(), LlmStatus.error, `error status`);
-                assertEqual(runtime.backend(), LlmBackend.none, `no backend`);
-                assertEqual(runtime.ready(), false, `runtime dropped`);
-                assertEqual(runtime.error(), `chat failed`, `kept error`);
-                assertEqual(calls.unload, 1, `engine unloaded`);
-            },
-        },
-        {
             name: `runtime/unload`,
             run: async () => {
                 const { runtime, calls } = runtimeWith();
@@ -1991,21 +1766,6 @@ const definitions: Array<{
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
                 assertEqual(replies[replies.length - 1], `hello`, `accumulated reply`);
                 assertEqual(reasoned[reasoned.length - 1], `why`, `accumulated thinking`);
-            },
-        },
-        {
-            name: `chat/restart resets text`,
-            run: async () => {
-                const
-                    replies: string[] = [],
-                    { chat } = chatWith({ restartText: `ok` });
-                chat({
-                    model: ChatModelId.qwen3_vl_2b,
-                    messages: [userMessage(`hi`)],
-                    onResponse: value => replies.push(value),
-                });
-                await waitFor(() => replies.length >= 3, `restart stream`);
-                assertEqual(replies.join(`|`), `ok||ok`, `restart resets text`);
             },
         },
         {
@@ -2472,19 +2232,19 @@ const definitions: Array<{
                     const logged = captured[0]?.[2] as Array<{ content: string }>;
                     assertEqual(logged[0].content, `****`, `censored messages`);
                     captured.length = 0;
-                    await errorOf(() => runEngineChat({
+                    await runEngineChat({
                         model,
                         params,
                         start: async () => { throw new Error(`boom`); },
                         stopped: () => false,
-                    }));
+                    });
                     assertEqual(captured.length, 0, `failure silent`);
-                    await errorOf(() => runEngineChat({
+                    await runEngineChat({
                         model,
                         params: { ...params, logging: true },
                         start: async () => { throw new Error(`boom`); },
                         stopped: () => false,
-                    }));
+                    });
                     assertEqual(
                         captured.some(args => args[0] == `Local chat failed`),
                         true,
@@ -3864,469 +3624,38 @@ const definitions: Array<{
             },
         },
         {
-            name: `tools/resolution`,
+            name: `tools/registry`,
             run: () => {
+                assertEqual(builtinTools([]).length, 0, `no tools`);
                 const
-                    quiet = {
-                        messages: [userMessage(`hi`)],
-                        onResponse: () => { },
-                    },
-                    names = (tools: ChatTool[]) => tools.map(tool => tool.name).join(`,`),
-                    defaults = resolveChatTools(quiet);
-                assertEqual(defaults.explicit, false, `no host tools`);
+                    all = builtinTools([
+                        BuiltinTool.websearch,
+                        BuiltinTool.calculate,
+                        BuiltinTool.currency,
+                    ]),
+                    names = all.map(tool => tool.name).join(`,`);
+                assertEqual(names, `websearch,calculate,currency`, `registry order`);
                 assertEqual(
-                    names(defaults.tools),
-                    `websearch,calculate,currency`,
-                    `default built-ins`,
-                );
-                assertEqual(
-                    names(builtinTools([BuiltinTool.currency, BuiltinTool.websearch])),
+                    builtinTools([BuiltinTool.currency, BuiltinTool.websearch])
+                        .map(tool => tool.name).join(`,`),
                     `currency,websearch`,
-                    `builtin order`,
+                    `registry selection`,
                 );
-                const none = resolveChatTools({ ...quiet, builtins: false });
-                assertEqual(none.tools.length, 0, `builtins off`);
-                const picked = resolveChatTools({
-                    ...quiet,
-                    builtins: [BuiltinTool.calculate],
-                });
-                assertEqual(names(picked.tools), `calculate`, `picked builtins`);
-                const mine = toolNamed(`websearch`);
-                const override = resolveChatTools({ ...quiet, tools: [mine] });
-                assertEqual(override.explicit, true, `host tools present`);
+                assertEqual(all[1], calculateTool, `calculate kept`);
+                assertEqual(all[2], currencyTool, `currency kept`);
+                assertEqual(all[0].name, `websearch`, `websearch name`);
+                assertEqual(webSearchTool().name, `websearch`, `search tool name`);
                 assertEqual(
-                    names(override.tools),
-                    `calculate,currency,websearch`,
-                    `host override`,
-                );
-                assertEqual(
-                    override.tools[override.tools.length - 1],
-                    mine,
-                    `host tool kept`,
-                );
-                const extra = toolNamed(`lookup`);
-                const host = resolveChatTools({ ...quiet, tools: [extra] });
-                assertEqual(
-                    names(host.tools),
-                    `websearch,calculate,currency,lookup`,
-                    `host tools appended`,
-                );
-                let duplicate = ``;
-                try {
-                    resolveChatTools({
-                        ...quiet,
-                        tools: [toolNamed(`lookup`), toolNamed(`lookup`)],
-                    });
-                } catch (error) { duplicate = (error as Error).message; };
-                assertEqual(duplicate, `Duplicate tool name lookup`, `duplicate`);
-                const configured = resolveChatTools({
-                    ...quiet,
-                    websearch: { provider: WebSearchProvider.duckduckgo },
-                });
-                assertEqual(
-                    configured.tools[0].description,
+                    webSearchTool({
+                        provider: WebSearchProvider.duckduckgo,
+                    }).description,
                     `Search DuckDuckGo for an instant answer and related topics.`,
                     `search config`,
                 );
-            },
-        },
-        {
-            name: `chat/tools on the gpu model`,
-            run: async () => {
-                const
-                    calls: ChatToolCall[] = [],
-                    results: ChatToolResult[] = [],
-                    statuses: ChatStatusSnapshot[] = [],
-                    { chat, requests } = chatWith({
-                        backend: LlmBackend.gpu,
-                        chatImpl: async params => {
-                            const args = { expression: `2+2` };
-                            params.onToolCall?.({
-                                id: 1,
-                                name: `calculate`,
-                                arguments: args,
-                            });
-                            params.onToolResult?.({
-                                id: 1,
-                                name: `calculate`,
-                                arguments: args,
-                                result: { expression: `2+2`, result: 4 },
-                            });
-                            params.onText(`ok`);
-                            return `ok`;
-                        },
-                    }),
-                    cancel = chat({
-                        model: ChatModelId.gemma4_e2b,
-                        messages: [userMessage(`hi`)],
-                        maxToolRounds: 9,
-                        onToolCall: value => calls.push(value),
-                        onToolResult: value => results.push(value),
-                        onResponse: () => { },
-                        onStatus: value => statuses.push(value),
-                    });
-                assertEqual(typeof cancel, `function`, `cancel handle`);
-                await waitFor(() => results.length == 1, `tool result`);
-                const request = requests[0];
-                assertEqual(request.tools?.length, 3, `default built-ins`);
                 assertEqual(
-                    request.tools?.map(tool => tool.name).join(`,`),
-                    `websearch,calculate,currency`,
-                    `tool order`,
-                );
-                assertEqual(request.maxToolRounds, 9, `round budget`);
-                assertEqual(calls[0].name, `calculate`, `call name`);
-                assertEqual(calls[0].arguments.expression, `2+2`, `call arguments`);
-                assertEqual(results[0].id, 1, `result id`);
-                assertEqual(
-                    (results[0].result as { result: number }).result,
-                    4,
-                    `result value`,
-                );
-                const last = statuses[statuses.length - 1];
-                assertEqual(last.supportsTools, true, `gpu supports tools`);
-                assertEqual(last.error, undefined, `gpu tool error`);
-            },
-        },
-        {
-            name: `chat/tools on the cpu model`,
-            run: async () => {
-                const
-                    host = chatWith(),
-                    hostStatuses: ChatStatusSnapshot[] = [];
-                host.chat({
-                    model: ChatModelId.qwen3_vl_2b,
-                    messages: [userMessage(`hi`)],
-                    tools: [toolNamed(`lookup`)],
-                    onResponse: () => { },
-                    onStatus: value => hostStatuses.push(value),
-                });
-                await waitFor(
-                    () => hostStatuses.some(value => !!value.error),
-                    `host tools rejected`,
-                );
-                assertEqual(
-                    hostStatuses[hostStatuses.length - 1].error,
-                    `Model does not accept tools`,
-                    `host tool error`,
-                );
-                assertEqual(host.calls.start, 0, `host tools never load`);
-                const
-                    builtin = chatWith({ chatText: `answer` }),
-                    builtinStatuses: ChatStatusSnapshot[] = [],
-                    replies: string[] = [];
-                builtin.chat({
-                    model: ChatModelId.qwen3_vl_2b,
-                    messages: [userMessage(`hi`)],
-                    onResponse: value => replies.push(value),
-                    onStatus: value => builtinStatuses.push(value),
-                });
-                await waitFor(
-                    () => replies[replies.length - 1] == `answer`,
-                    `builtin dropped reply`,
-                );
-                assertEqual(replies[replies.length - 1], `answer`, `chat still works`);
-                assertEqual(
-                    builtin.requests[0].tools,
-                    undefined,
-                    `built-ins dropped`,
-                );
-                assertEqual(
-                    builtinStatuses[builtinStatuses.length - 1].supportsTools,
-                    false,
-                    `cpu supports tools`,
-                );
-                const
-                    off = chatWith({ chatText: `answer` }),
-                    offReplies: string[] = [];
-                off.chat({
-                    model: ChatModelId.qwen3_vl_2b,
-                    messages: [userMessage(`hi`)],
-                    builtins: false,
-                    onResponse: value => offReplies.push(value),
-                });
-                await waitFor(
-                    () => offReplies[offReplies.length - 1] == `answer`,
-                    `builtins off reply`,
-                );
-                assertEqual(off.requests[0].tools, undefined, `builtins off`);
-            },
-        },
-        {
-            name: `chat/tool errors and cancel`,
-            run: async () => {
-                const
-                    duplicate = chatWith(),
-                    duplicateStatuses: ChatStatusSnapshot[] = [];
-                duplicate.chat({
-                    model: ChatModelId.gemma4_e2b,
-                    messages: [userMessage(`hi`)],
-                    tools: [toolNamed(`lookup`), toolNamed(`lookup`)],
-                    onResponse: () => { },
-                    onStatus: value => duplicateStatuses.push(value),
-                });
-                await waitFor(
-                    () => duplicateStatuses.some(value => !!value.error),
-                    `duplicate reported`,
-                );
-                assertEqual(
-                    duplicateStatuses[duplicateStatuses.length - 1].error,
-                    `Duplicate tool name lookup`,
-                    `duplicate error`,
-                );
-                assertEqual(duplicate.calls.start, 0, `duplicate never loads`);
-                const
-                    calls: ChatToolCall[] = [],
-                    results: ChatToolResult[] = [],
-                    { chat, requests } = chatWith({
-                        backend: LlmBackend.gpu,
-                        chatImpl: async params => {
-                            params.onToolCall?.({
-                                id: 2,
-                                name: `calculate`,
-                                arguments: {},
-                            });
-                            await new Promise<void>(resolve =>
-                                params.signal?.addEventListener(
-                                    `abort`,
-                                    () => resolve(),
-                                    { once: true },
-                                ));
-                            // a late tool result never reaches a cancelled call
-                            params.onToolResult?.({
-                                id: 2,
-                                name: `calculate`,
-                                arguments: {},
-                                result: `late`,
-                            });
-                            return undefined;
-                        },
-                    }),
-                    cancel = chat({
-                        model: ChatModelId.gemma4_e2b,
-                        messages: [userMessage(`hi`)],
-                        builtins: [BuiltinTool.calculate],
-                        onToolCall: value => calls.push(value),
-                        onToolResult: value => results.push(value),
-                        onResponse: () => { },
-                    });
-                await waitFor(() => calls.length == 1, `tool started`);
-                cancel();
-                await sleep(10);
-                assertEqual(results.length, 0, `late result dropped`);
-                assertEqual(requests.length, 1, `one generation`);
-            },
-        },
-        {
-            name: `litert/tools`,
-            run: async () => {
-                interface FakeConversation {
-                    config?: unknown,
-                    prompts: unknown[],
-                }
-                interface FakeToolEvent {
-                    id: number,
-                    name: string,
-                    arguments: Record<string, unknown>,
-                    status: `started` | `completed` | `error`,
-                    result?: unknown,
-                    error?: string,
-                }
-                interface FakeToolOptions {
-                    engine: {
-                        createConversation: (
-                            config?: unknown,
-                        ) => Promise<FakeConversation>,
-                    },
-                    config?: unknown,
-                    tools?: Array<{
-                        function: { name: string, description?: string },
-                        execute: (args: Record<string, unknown>) => unknown,
-                    }>,
-                    recurringToolCallLimit?: number,
-                    onToolProgress?: (event: FakeToolEvent) => void,
-                }
-                const
-                    conversations: FakeConversation[] = [],
-                    chats: FakeToolOptions[] = [],
-                    engine = {
-                        createConversation: async (config?: unknown) => {
-                            const record: FakeConversation = { config, prompts: [] };
-                            conversations.push(record);
-                            return record;
-                        },
-                    } as unknown as LitertEngine,
-                    FakeAutoToolChat = class {
-                        options: FakeToolOptions;
-                        conversation: Promise<FakeConversation>;
-                        constructor(options: FakeToolOptions) {
-                            this.options = options;
-                            chats.push(options);
-                            this.conversation = options.engine.createConversation(
-                                options.config);
-                        }
-                        sendMessageStreaming(message: unknown) {
-                            const options = this.options;
-                            return new ReadableStream({
-                                start: async controller => {
-                                    const conversation = await this.conversation;
-                                    conversation.prompts.push(message);
-                                    const tool = options.tools?.[0];
-                                    if (tool) {
-                                        const
-                                            args = { expression: `2+2` },
-                                            event = {
-                                                id: 7,
-                                                name: tool.function.name,
-                                                arguments: args,
-                                            };
-                                        options.onToolProgress?.({
-                                            ...event,
-                                            status: `started`,
-                                        });
-                                        try {
-                                            const result = await tool.execute(args);
-                                            options.onToolProgress?.({
-                                                ...event,
-                                                status: `completed`,
-                                                result,
-                                            });
-                                        } catch (error) {
-                                            options.onToolProgress?.({
-                                                ...event,
-                                                status: `error`,
-                                                error: `${(error as Error).message}`,
-                                            });
-                                        };
-                                    };
-                                    controller.enqueue({
-                                        role: `assistant`,
-                                        content: [{ type: `text`, text: `answer` }],
-                                    });
-                                    controller.close();
-                                },
-                            });
-                        }
-                        cancel() { }
-                    },
-                    mod = {
-                        SamplerType: { TOP_K: 0 },
-                        AutoToolChat: FakeAutoToolChat,
-                    } as unknown as LitertModule,
-                    session: LitertSession = {
-                        sent: [],
-                        reasoning: false,
-                        maxTokens: 0,
-                    },
-                    calls: ChatToolCall[] = [],
-                    results: ChatToolResult[] = [],
-                    execute = (args: Record<string, unknown>) => ({
-                        expression: args.expression,
-                        result: 4,
-                    }),
-                    math: ChatTool = {
-                        name: `calculate`,
-                        description: `math`,
-                        parameters: { type: `object` },
-                        execute: execute as ChatTool[`execute`],
-                    },
-                    params = (tools: ChatTool[], extra: Partial<EngineChatParams> = {}) => ({
-                        messages: [] as ChatMessage[],
-                        limits: defaultLlmLimits,
-                        reasoning: false,
-                        tools,
-                        maxToolRounds: 9,
-                        onToolCall: (value: ChatToolCall) => calls.push(value),
-                        onToolResult: (value: ChatToolResult) => results.push(value),
-                        onReason: () => { },
-                        onText: () => { },
-                        ...extra,
-                    } as EngineChatParams),
-                    run = async (
-                        messages: EngineMessage[],
-                        options: EngineChatParams,
-                    ) => {
-                        let text = ``;
-                        for await (const chunk of streamLitert({
-                            engine,
-                            mod,
-                            params: options,
-                            messages,
-                            session,
-                        }))
-                            text += chunk.choices?.[0]?.delta?.content || ``;
-                        return text;
-                    },
-                    user = (text: string): EngineMessage => ({
-                        role: LlmRole.user,
-                        content: text,
-                    }),
-                    assistant = (text: string): EngineMessage => ({
-                        role: LlmRole.assistant,
-                        content: text,
-                    });
-                assertEqual(await run([user(`one`)], params([math])), `answer`, `reply`);
-                assertEqual(conversations.length, 1, `tool conversation`);
-                assertEqual(chats.length, 1, `auto tool chat`);
-                assertEqual(chats[0].recurringToolCallLimit, 9, `round budget`);
-                assertEqual(chats[0].tools?.[0].function.name, `calculate`, `tool name`);
-                assertEqual(chats[0].tools?.[0].function.description, `math`, `tool text`);
-                assertEqual(calls[0].id, 7, `call id`);
-                assertEqual(calls[0].name, `calculate`, `call name`);
-                assertEqual(calls[0].arguments.expression, `2+2`, `call arguments`);
-                assertEqual(
-                    (results[0].result as { result: number }).result,
-                    4,
-                    `tool result`,
-                );
-                // the same tools keep the conversation
-                await run(
-                    [user(`one`), assistant(`answer`), user(`two`)],
-                    params([{ ...math }]),
-                );
-                assertEqual(conversations.length, 1, `reused tool chat`);
-                // a changed declaration opens a new conversation
-                await run(
-                    [user(`one`), assistant(`answer`), user(`two`), assistant(`answer`),
-                        user(`three`)],
-                    params([{ ...math, description: `changed` }]),
-                );
-                assertEqual(conversations.length, 2, `changed declaration`);
-                // a changed function opens a new conversation
-                await run(
-                    [user(`one`), assistant(`answer`), user(`two`), assistant(`answer`),
-                        user(`three`), assistant(`answer`), user(`four`)],
-                    params([{ ...math, execute: (() => 5) as ChatTool[`execute`] }]),
-                );
-                assertEqual(conversations.length, 3, `changed function`);
-                // a tool error reaches the result callback
-                results.length = 0;
-                await run([user(`five`)], params([{
-                    ...math,
-                    execute: (() => {
-                        throw new Error(`boom`);
-                    }) as ChatTool[`execute`],
-                }]));
-                assertEqual(results[0].error, `boom`, `tool error`);
-                assertEqual(
-                    (engineTool(math) as { function: { name: string } }).function.name,
-                    `calculate`,
-                    `engine tool`,
-                );
-                assertEqual(toolRounds(undefined), 4, `default rounds`);
-                assertEqual(toolRounds(0), 1, `minimum rounds`);
-                assertEqual(toolRounds(99), 25, `maximum rounds`);
-                assertEqual(sameTools([], []), true, `empty tools`);
-                assertEqual(sameTools([math], [math]), true, `same tools`);
-                assertEqual(
-                    sameTools([math], [{ ...math, description: `other` }]),
-                    false,
-                    `changed text`,
-                );
-                assertEqual(
-                    sameTools([math], [{ ...math, execute: () => `no` }]),
-                    false,
-                    `changed function`,
+                    toolNamed(`lookup`, () => 42).execute({}),
+                    42,
+                    `host tool runs`,
                 );
             },
         },

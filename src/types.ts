@@ -1,5 +1,4 @@
 import type {
-    BuiltinTool,
     ChatModelId,
     ChatStatus,
     LlmBackend,
@@ -39,11 +38,11 @@ interface ChatToolSchema {
     enum?: string[],
 }
 
-/** One tool the model may call, run by the package or by the host */
+/** One tool a host may run itself, never handed to the model */
 interface ChatTool {
-    /** Unique tool name, the model calls it by this */
+    /** Unique tool name */
     name: string,
-    /** What the tool does, read by the model before a call */
+    /** What the tool does */
     description?: string,
     parameters?: ChatToolSchema,
     execute: (
@@ -51,7 +50,7 @@ interface ChatTool {
     ) => ChatToolValue | Promise<ChatToolValue>,
 }
 
-/** One call the model made, with its parsed arguments */
+/** One tool call, with its parsed arguments */
 interface ChatToolCall {
     id: number,
     name: string,
@@ -64,7 +63,7 @@ interface ChatToolResult extends ChatToolCall {
     error?: string,
 }
 
-/** Search provider settings of the built-in websearch tool */
+/** Search provider settings of the websearch tool */
 interface WebSearchConfig {
     provider?: WebSearchProvider,
     /** Wikipedia language edition, two or three letters plus an optional region */
@@ -77,7 +76,7 @@ interface WebSearchConfig {
     timeout?: number,
 }
 
-/** One search hit returned to the model */
+/** One search hit returned by the websearch tool */
 interface WebSearchResult {
     title: string,
     url: string,
@@ -123,7 +122,7 @@ interface PriceSections {
     crypto: boolean,
 }
 
-/** One conversion returned to the model */
+/** One conversion returned by the currency tool */
 interface CurrencyResult {
     from: string,
     to: string,
@@ -135,26 +134,6 @@ interface CurrencyResult {
     result: number,
     updatedAt: string,
     stale: boolean,
-}
-
-/** Tool fields shared by the host input and one generation */
-interface ChatToolParams {
-    /** Extra host tools, appended after the built-ins */
-    tools?: ChatTool[],
-    /** Called before a host or built-in tool runs */
-    onToolCall?: (call: ChatToolCall) => void,
-    /** Called when a tool returns or throws */
-    onToolResult?: (result: ChatToolResult) => void,
-    /** Max tool rounds in one reply, defaults to 4 */
-    maxToolRounds?: number,
-}
-
-/** Host tools resolved against the built-ins for one request */
-interface ResolvedTools {
-    /** Tools offered to the model, host tools replacing a built-in */
-    tools: ChatTool[],
-    /** Whether the host passed tools of its own */
-    explicit: boolean,
 }
 
 /** One evaluated arithmetic expression */
@@ -224,8 +203,6 @@ interface LitertArtifact {
     vision: boolean,
     /** Whether the build accepts audio */
     audio: boolean,
-    /** Whether the build accepts tool declarations */
-    tools: boolean,
 }
 
 /** One on-device model */
@@ -283,8 +260,6 @@ interface ChatStatusSnapshot {
     supportsImages: boolean,
     /** Whether the requested model accepts audio on this backend */
     supportsAudio: boolean,
-    /** Whether the requested model accepts tool declarations on this backend */
-    supportsTools: boolean,
     ready: boolean,
     loading: boolean,
     /** Whether a reply is streaming right now */
@@ -297,7 +272,7 @@ interface ChatStatusSnapshot {
 }
 
 /** One chat request, invoked for every response */
-interface ChatInput extends ChatToolParams {
+interface ChatInput {
     /** Model that answers, the GPU model when WebGPU is available, else the CPU one */
     model?: ChatModelId,
     /** Complete prompt, including the system and user turns */
@@ -308,10 +283,6 @@ interface ChatInput extends ChatToolParams {
     reasoning?: boolean,
     /** Whether package and engine logs reach the console, defaults to off */
     logging?: boolean,
-    /** Built-in tools to attach, all three by default */
-    builtins?: BuiltinTool[] | false,
-    /** Search provider settings */
-    websearch?: WebSearchConfig,
     /** Accumulated reasoning text, streamed while the model thinks */
     onThinking?: (text: string) => void,
     /** Accumulated reply text, streamed while the model answers */
@@ -472,7 +443,7 @@ interface ModelStore {
 }
 
 /** One generation request */
-interface RuntimeChatParams extends ChatToolParams {
+interface RuntimeChatParams {
     messages: ChatMessage[],
     limits: LlmLimits,
     reasoning: boolean,
@@ -480,8 +451,6 @@ interface RuntimeChatParams extends ChatToolParams {
     logging?: boolean,
     onReason: (text: string) => void,
     onText: (text: string) => void,
-    /** Called before a rebuilt engine restarts the reply */
-    onRestart?: () => void,
     /** Current generation speed in tokens per second */
     onSpeed?: (tokensPerSecond: number) => void,
     signal?: AbortSignal,
@@ -504,7 +473,7 @@ interface Runtime {
 }
 
 /** Params for a single on-device chat generation */
-interface EngineChatParams extends ChatToolParams {
+interface EngineChatParams {
     messages: ChatMessage[],
     limits: LlmLimits,
     /** User preference, off unless explicitly turned on */
@@ -515,8 +484,6 @@ interface EngineChatParams extends ChatToolParams {
     onReason: (text: string) => void,
     /** Streamed reply delta */
     onText: (text: string) => void,
-    /** Called before a rebuilt engine restarts the reply */
-    onRestart?: () => void,
     /** Current generation speed in tokens per second */
     onSpeed?: (tokensPerSecond: number) => void,
     signal?: AbortSignal,
@@ -547,8 +514,6 @@ interface LlmRuntime {
     contextSize: number,
     /** Stream one reply, returning the final text or undefined when stopped */
     chat: (params: EngineChatParams) => Promise<string | undefined>,
-    /** Whether the runtime cannot serve another turn */
-    fatal?: () => boolean,
     /** Release the model from memory, keeping its cache */
     unload: () => Promise<void>,
 }
@@ -601,27 +566,6 @@ type LitertMessage = import('@litert-lm/core').Message;
 /** One LiteRT-LM engine */
 type LitertEngine = import('@litert-lm/core').Engine;
 
-/** WebGPU device the wasm module initialized */
-type LitertDevice = NonNullable<
-    import('@litert-lm/core').Wasm.LiteRtLmWasm[`preinitializedWebGPUDevice`]
->;
-
-/** One live LiteRT-LM engine and its device */
-interface LitertGpu {
-    /** Live engine, rebuilt after a device loss */
-    engine: LitertEngine,
-    /** Wasm module the engine belongs to */
-    mod: LitertModule,
-    /** Device the engine runs on */
-    device?: LitertDevice,
-    /** Whether the device was lost */
-    lost: boolean,
-    /** Context window step of this engine */
-    contextStep: number,
-    /** Model file stream of a rebuild */
-    reopen: () => Promise<ReadableStream<Uint8Array>>,
-}
-
 /** The LiteRT-LM module namespace */
 type LitertModule = typeof import('@litert-lm/core');
 
@@ -638,28 +582,25 @@ interface LitertSettingsParams {
     source: ReadableStream<Uint8Array>,
     /** Loaded LiteRT module */
     mod: LitertModule,
-    /** Context window of this engine */
-    contextTokens?: number,
 }
 
 /** One reused LiteRT-LM conversation and the turns it already holds */
 interface LitertSession {
-    /** Live conversation or tool chat, dropped when a turn cannot be continued */
-    conversation?: import('@litert-lm/core').ChatInterface,
+    /** Live conversation, dropped when a turn cannot be continued */
+    conversation?: import('@litert-lm/core').Conversation,
     /** Built turns already sent to the conversation */
     sent: EngineMessage[],
     /** Reasoning flag the conversation was created with */
     reasoning: boolean,
     /** Output token budget the conversation was created with */
     maxTokens: number,
-    /** Tools the conversation was created with */
-    tools?: ChatTool[],
 }
 
 /** Params of one LiteRT-LM chat call */
 interface LitertChatParams {
-    gpu: LitertGpu,
+    engine: LitertEngine,
     model: ChatModel,
+    mod: LitertModule,
     params: EngineChatParams,
     session: LitertSession,
 }
@@ -722,16 +663,11 @@ interface EngineRunParams {
 
 export type {
     ChatMessage,
-    ChatModel,
-    LitertArtifact,
     ChatTool,
     ChatToolCall,
     ChatToolResult,
     ChatToolSchema,
     ChatToolValue,
-    ChatToolParams,
-    ResolvedTools,
-    CalculationResult,
     WebSearchConfig,
     WebSearchResult,
     WebSearchSettings,
@@ -739,13 +675,16 @@ export type {
     CryptoSnapshot,
     PriceSnapshot,
     PriceSections,
+    PriceCoin,
+    PriceFeed,
     CurrencyResult,
+    CalculationResult,
     WikipediaPage,
     WikipediaResponse,
     DuckDuckGoTopic,
     DuckDuckGoResponse,
-    PriceCoin,
-    PriceFeed,
+    ChatModel,
+    LitertArtifact,
     LlmLimits,
     ChatStatusSnapshot,
     ChatInput,
@@ -781,8 +720,6 @@ export type {
     LitertMessage,
     LitertEngine,
     LitertModule,
-    LitertDevice,
-    LitertGpu,
     LitertSettings,
     LitertSettingsParams,
     LitertSession,

@@ -1,9 +1,4 @@
-import type {
-    ChatInterface,
-    GpuArtisanConfig,
-    ToolProgressEvent,
-    ToolWithImplementation,
-} from '@litert-lm/core';
+import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
 import { litertArtifact, litertContextWindow, llmModels } from '../models';
@@ -20,23 +15,16 @@ import { contentBuffer } from './images';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
-    ChatTool,
-    ChatToolCall,
-    ChatToolValue,
-    EngineChatParams,
     EngineChunk,
     EngineDelta,
     EngineMessage,
     LitertChatParams,
     LitertContentPart,
-    LitertGpu,
     LitertMessage,
-    LitertModule,
     LitertSession,
     LitertSettings,
     LitertSettingsParams,
     LlmEngine,
-    LlmLimits,
     LlmRuntime,
     StartLlmParams,
     StreamLitertParams,
@@ -47,8 +35,6 @@ const
     cacheName = `litertlm-models`,
     /** Smallest Gemma 4 vision budget in tokens */
     visionTokens = 70,
-    /** Context windows tried before the GPU is given up */
-    contextWindows = [litertContextWindow, 2048, 1024],
     /** Resumable file store of the GPU engine */
     store = createModelStore(`litert-store`),
     /** GPU executor settings tuned by the LiteRT web chat demo */
@@ -74,43 +60,12 @@ const
     /** Wasm stderr, quiet unless logging is on */
     wasmErr = (...args: unknown[]) => { if (loggingOn) console.error(...args); };
 
-/** Whether one failure names a lost device */
-const lostDeviceError = (error: unknown): boolean =>
-    /device.*lost|lost.*device|vkQueueSubmit|device.*destroyed|aborted/i
-        .test(`${(error as Error)?.message || error}`);
-
-/** Watch the live device, marking the engine dead when it is lost */
-const watchDevice = (gpu: LitertGpu) => {
-    const device = gpu.mod.getGlobalLiteRtLm()
-        .liteRtLmWasm.preinitializedWebGPUDevice;
-    gpu.device = device;
-    gpu.lost = false;
-    if (!device) return;
-    void device.lost.then(() => {
-        // a replaced device must not mark the new one
-        if (gpu.device == device) gpu.lost = true;
-    });
-};
-
 /** Open the model cache, absent in Node */
 const cacheOpen = async (): Promise<Cache | undefined> => {
     try {
         if (typeof caches == `undefined`) return undefined;
         return await caches.open(cacheName);
     } catch { return undefined; };
-};
-
-/** Load the wasm module, routing its output through the log flag */
-const loadModule = async (mod: LitertModule): Promise<void> => {
-    const
-        scope = globalThis as { Module?: unknown },
-        previous = scope.Module;
-    scope.Module = { print: wasmOut, printErr: wasmErr };
-    try {
-        await mod.getOrLoadGlobalLiteRtLm(defaultLitertAssets().script);
-    } finally {
-        scope.Module = previous;
-    };
 };
 
 /** Whether one model file is stored, in the cache or on disk */
@@ -187,52 +142,6 @@ const fetchModel = async (
     if (!response.ok || !response.body)
         throw new Error(`Model download failed`);
     return countStream(response.body, contentLength(response), onProgress);
-};
-
-/** Open the model file, from a store, the cache or the network */
-const openSource = async ({
-    url,
-    signal,
-    onProgress,
-}: {
-    url: string,
-    signal?: AbortSignal,
-    onProgress: StartLlmParams[`onProgress`],
-}): Promise<ReadableStream<Uint8Array>> => {
-    const cache = await cacheOpen();
-    let source: ReadableStream<Uint8Array> | undefined;
-    // a complete file in either store needs no network
-    const legacy = cache ? await cache.match(url) : undefined;
-    if (legacy?.body) source = legacy.body;
-    else {
-        const stored = await store.stored(url);
-        if (stored?.complete) source = stored.file.stream();
-    };
-    if (!source) {
-        // the file store keeps what it fetches, so a retry resumes it
-        const saved = await store.download({ url, signal, onProgress })
-            .catch(error => {
-                if (signal?.aborted) throw new Error(`Cancelled`);
-                // a store the browser cannot write still loads from the network
-                if (!isStoreError(error)) throw error;
-                if (loggingOn) console.log(`Local model store failed`, error);
-                return undefined;
-            });
-        if (saved) source = saved.file.stream();
-    };
-    if (!source && cache) {
-        try {
-            await cacheModel(url, cache, signal, onProgress);
-            const hit = await cache.match(url);
-            if (hit?.body) source = hit.body;
-        } catch (error) {
-            if (signal?.aborted) throw new Error(`Cancelled`);
-            if (loggingOn) console.log(`Local model cache failed`, error);
-        };
-    };
-    // a host without a file system still loads from the network
-    if (!source) source = await fetchModel(url, signal, onProgress);
-    return source;
 };
 
 /** Map built messages to LiteRT turns */
@@ -312,69 +221,6 @@ const continuesHistory = (
     return true;
 };
 
-/** Clamp the tool round budget of one reply */
-const toolRounds = (value?: number): number =>
-    typeof value == `number` && Number.isFinite(value)
-        ? Math.min(25, Math.max(1, Math.floor(value)))
-        : 4;
-
-/** Map one host or built-in tool to the engine tool shape */
-const engineTool = (tool: ChatTool): ToolWithImplementation => ({
-    type: `function`,
-    function: {
-        name: tool.name,
-        ...(tool.description === undefined ? {} : { description: tool.description }),
-        ...(tool.parameters === undefined ? {} : { parameters: tool.parameters }),
-    },
-    // a tool value is JSON-safe by contract
-    execute: tool.execute as unknown as ToolWithImplementation[`execute`],
-});
-
-/** Whether two lists declare the same tools and the same functions */
-const sameTools = (
-    first: ChatTool[] = [],
-    next: ChatTool[] = [],
-): boolean => {
-    if (first.length != next.length) return false;
-    for (let i = 0; i < first.length; i++) {
-        const
-            left = first[i],
-            right = next[i];
-        if (left.name != right.name) return false;
-        if (left.description != right.description) return false;
-        if (left.execute !== right.execute) return false;
-        if (JSON.stringify(left.parameters) != JSON.stringify(right.parameters))
-            return false;
-    };
-    return true;
-};
-
-/** Map one tool progress event to the host callbacks */
-const reportTool = (
-    params: EngineChatParams,
-    event: ToolProgressEvent,
-) => {
-    const call: ChatToolCall = {
-        id: event.id,
-        name: event.name,
-        arguments: event.arguments as Record<string, ChatToolValue>,
-    };
-    if (event.status == `started`) {
-        params.onToolCall?.(call);
-        return;
-    };
-    if (event.status == `completed`)
-        params.onToolResult?.({
-            ...call,
-            result: event.result as ChatToolValue,
-        });
-    else
-        params.onToolResult?.({
-            ...call,
-            error: event.error || `Tool failed`,
-        });
-};
-
 /** Stream one LiteRT reply as engine chunks */
 const streamLitert = async function* ({
     engine,
@@ -385,8 +231,7 @@ const streamLitert = async function* ({
 }: StreamLitertParams): AsyncGenerator<EngineChunk> {
     const
         last = messages[messages.length - 1],
-        options = replyOptions(params.limits, params.reasoning),
-        tools = params.tools ?? [];
+        options = replyOptions(params.limits, params.reasoning);
     if (last?.role != `user`) throw new Error(`No user turn`);
     const
         history = messages.slice(0, -1),
@@ -395,9 +240,8 @@ const streamLitert = async function* ({
     const reuse = !!session.conversation
         && session.reasoning == params.reasoning
         && session.maxTokens == options.max_tokens
-        && sameTools(session.tools, tools)
         && continuesHistory(session.sent, history);
-    let conversation: ChatInterface;
+    let conversation: import('@litert-lm/core').Conversation;
     if (reuse && session.conversation)
         conversation = session.conversation;
     else {
@@ -405,7 +249,7 @@ const streamLitert = async function* ({
         const previous = await toLitertMessages(history, false);
         session.conversation = undefined;
         session.sent = [];
-        const config = {
+        conversation = await engine.createConversation({
             sessionConfig: {
                 maxOutputTokens: options.max_tokens,
                 samplerParams: {
@@ -420,20 +264,10 @@ const streamLitert = async function* ({
                 extra_context: { enable_thinking: params.reasoning },
             },
             prefillPrefaceOnInit: previous.length > 0,
-        };
-        conversation = tools.length
-            ? new mod.AutoToolChat({
-                engine,
-                config,
-                tools: tools.map(engineTool),
-                recurringToolCallLimit: toolRounds(params.maxToolRounds),
-                onToolProgress: event => reportTool(params, event),
-            })
-            : await engine.createConversation(config);
+        });
         session.conversation = conversation;
         session.reasoning = params.reasoning;
         session.maxTokens = options.max_tokens;
-        session.tools = [...tools];
         session.sent = [...history];
     };
     session.sent.push(last);
@@ -482,64 +316,38 @@ const streamLitert = async function* ({
 
 /** Stream one reply on a started GPU runtime */
 const chatOn = async ({
-    gpu,
+    engine,
     model,
+    mod,
     params,
     session,
 }: LitertChatParams): Promise<string | undefined> => {
     loggingOn = params.logging === true;
-    const
-        stopped = () => !!params.signal?.aborted,
-        reset = () => {
-            try { session.conversation?.cancel(); } catch { };
-            session.conversation = undefined;
-            session.sent = [];
-            session.tools = undefined;
-        },
-        run = async (): Promise<string | undefined> => {
-            try {
-                return await runEngineChat({
-                    model,
-                    params,
-                    stopped,
-                    onStall: reset,
-                    start: async messages => {
-                        if (stopped()) throw new Error(`Cancelled`);
-                        const artifact = litertArtifact(model);
-                        if (hasImages(messages) && !artifact?.vision)
-                            throw new Error(`Model does not accept images`);
-                        if (hasAudio(messages) && !artifact?.audio)
-                            throw new Error(`Model does not accept audio`);
-                        if (params.tools?.length && !artifact?.tools)
-                            throw new Error(`Model does not accept tools`);
-                        return streamLitert({
-                            engine: gpu.engine,
-                            mod: gpu.mod,
-                            params,
-                            messages,
-                            session,
-                        });
-                    },
-                });
-            } catch (error) {
-                reset();
-                throw error;
-            };
-        };
-    let reply: string | undefined;
-    try {
-        reply = await run();
-    } catch (error) {
-        // only a lost device is rebuilt
-        if (!gpu.lost && !lostDeviceError(error)) throw error;
-        gpu.lost = true;
+    const reset = () => {
+        try { session.conversation?.cancel(); } catch { };
+        session.conversation = undefined;
+        session.sent = [];
     };
-    // a turn on a lost device is retried once
-    if (!gpu.lost || stopped()) return reply;
-    params.onRestart?.();
-    reset();
-    await rebuildGpu(gpu, model, params.limits);
-    return await run();
+    try {
+        return await runEngineChat({
+            model,
+            params,
+            stopped: () => !!params.signal?.aborted,
+            onStall: reset,
+            start: async messages => {
+                if (params.signal?.aborted) throw new Error(`Cancelled`);
+                const artifact = litertArtifact(model);
+                if (hasImages(messages) && !artifact?.vision)
+                    throw new Error(`Model does not accept images`);
+                if (hasAudio(messages) && !artifact?.audio)
+                    throw new Error(`Model does not accept audio`);
+                return streamLitert({ engine, mod, params, messages, session });
+            },
+        });
+    } catch (error) {
+        reset();
+        throw error;
+    };
 };
 
 /** Build one engine settings object with the small vision budget */
@@ -548,13 +356,12 @@ const litertSettings = ({
     limits,
     source,
     mod,
-    contextTokens = litertContextWindow,
 }: LitertSettingsParams): LitertSettings => {
     const artifact = litertArtifact(model);
     return {
         model: source,
         mainExecutorSettings: {
-            maxNumTokens: contextTokens,
+            maxNumTokens: litertContextWindow,
             ...(artifact?.vision
                 ? { maxNumImages: Math.max(1, limits.maxImages) }
                 : {}),
@@ -573,30 +380,6 @@ const litertSettings = ({
     };
 };
 
-/** Rebuild the engine on a fresh device after a loss */
-const rebuildGpu = async (
-    gpu: LitertGpu,
-    model: ChatModel,
-    limits: LlmLimits,
-) => {
-    if (gpu.contextStep >= contextWindows.length - 1)
-        throw new Error(`The graphics device was lost`);
-    try { await gpu.engine.delete(); } catch { };
-    // a lost device and an aborted wasm are never reused
-    gpu.mod.unloadLiteRtLm();
-    await loadModule(gpu.mod);
-    await gpu.mod.getGlobalLiteRtLm().setupDefaultWebGpuDevice();
-    gpu.contextStep += 1;
-    gpu.engine = await gpu.mod.Engine.create(litertSettings({
-        model,
-        limits,
-        source: await gpu.reopen(),
-        mod: gpu.mod,
-        contextTokens: contextWindows[gpu.contextStep],
-    }));
-    watchDevice(gpu);
-};
-
 /** Start the GPU runtime, the unified engine entry */
 const startLLM = async ({
     model,
@@ -611,29 +394,57 @@ const startLLM = async ({
         artifact = litertArtifact(model);
     if (!litert || !artifact) throw new Error(`Model has no LiteRT artifact`);
     const mod = await loadLitert();
-    await loadModule(mod);
+    const
+        scope = globalThis as { Module?: unknown },
+        previous = scope.Module;
+    scope.Module = { print: wasmOut, printErr: wasmErr };
+    try {
+        await mod.getOrLoadGlobalLiteRtLm(defaultLitertAssets().script);
+    } finally {
+        scope.Module = previous;
+    };
     if (signal?.aborted) throw new Error(`Cancelled`);
     const
         url = modelUrl(litert.repo, artifact.file),
-        source = await openSource({ url, signal, onProgress });
+        cache = await cacheOpen();
+    let source: ReadableStream<Uint8Array> | undefined;
+    // a complete file in either store needs no network
+    const legacy = cache ? await cache.match(url) : undefined;
+    if (legacy?.body) source = legacy.body;
+    else {
+        const stored = await store.stored(url);
+        if (stored?.complete) source = stored.file.stream();
+    };
+    if (!source) {
+        // the file store keeps what it fetches, so a retry resumes it
+        const saved = await store.download({ url, signal, onProgress })
+            .catch(error => {
+                if (signal?.aborted) throw new Error(`Cancelled`);
+                // a store the browser cannot write still loads from the network
+                if (!isStoreError(error)) throw error;
+                if (logging) console.log(`Local model store failed`, error);
+                return undefined;
+            });
+        if (saved) source = saved.file.stream();
+    };
+    if (!source && cache) {
+        try {
+            await cacheModel(url, cache, signal, onProgress);
+            const hit = await cache.match(url);
+            if (hit?.body) source = hit.body;
+        } catch (error) {
+            if (signal?.aborted) throw new Error(`Cancelled`);
+            if (logging) console.log(`Local model cache failed`, error);
+        };
+    };
+    // a host without a file system still loads from the network stream
+    if (!source) source = await fetchModel(url, signal, onProgress);
     if (signal?.aborted) throw new Error(`Cancelled`);
     onProgress(1, LlmPhase.load);
-    const
-        lm = mod.getGlobalLiteRtLm(),
-        wasm = lm.liteRtLmWasm;
-    // the device is created once and shared by every engine
-    if (!wasm.preinitializedWebGPUDevice) await lm.setupDefaultWebGpuDevice();
-    const gpu: LitertGpu = {
-        engine: await mod.Engine.create(
-            litertSettings({ model, limits, source, mod })),
-        mod,
-        lost: false,
-        contextStep: 0,
-        reopen: () => openSource({ url, onProgress: () => { } }),
-    };
-    watchDevice(gpu);
+    const engine = await mod.Engine.create(
+        litertSettings({ model, limits, source, mod }));
     if (signal?.aborted) {
-        await gpu.engine.delete();
+        await engine.delete();
         throw new Error(`Cancelled`);
     };
     const session: LitertSession = {
@@ -644,14 +455,12 @@ const startLLM = async ({
     return {
         model,
         backend: LlmBackend.gpu,
-        contextSize: contextWindows[gpu.contextStep],
-        chat: params => chatOn({ gpu, model, params, session }),
-        fatal: () => gpu.lost,
+        contextSize: litertContextWindow,
+        chat: params => chatOn({ engine, model, mod, params, session }),
         unload: async () => {
             session.conversation = undefined;
             session.sent = [];
-            session.tools = undefined;
-            try { await gpu.engine.delete(); } catch { };
+            await engine.delete();
         },
     };
 };
@@ -698,17 +507,10 @@ const litertEngine: LlmEngine = {
 
 export {
     cacheModel,
-    chatOn,
     continuesHistory,
-    engineTool,
     litertEngine,
     litertSettings,
-    openSource,
-    rebuildGpu,
-    sameTools,
     streamLitert,
     toLitertMessages,
-    toolRounds,
     visionTokens,
-    watchDevice,
 };

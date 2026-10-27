@@ -252,21 +252,10 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             // the engine takes one turn at a time
             while (streaming) await streaming.catch(() => undefined);
             if (!ready() || !runtime) return undefined;
-            const
-                active = runtime,
-                current = active.chat(params);
+            const current = runtime.chat(params);
             streaming = current;
             try {
                 return await current;
-            } catch (error) {
-                // a dead engine cannot serve another turn
-                if (active.fatal?.() && runtime == active) {
-                    await unload();
-                    backend = LlmBackend.none;
-                    lastError = `${(error as Error)?.message || `${error}`}`;
-                    setStatus(LlmStatus.error);
-                };
-                throw error;
             } finally {
                 if (streaming == current) streaming = undefined;
             };

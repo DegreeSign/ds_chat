@@ -1,13 +1,6 @@
-import {
-    findLlmModel,
-    resolveLlmModel,
-    supportsAudio,
-    supportsImages,
-    supportsTools,
-} from './models';
+import { findLlmModel, resolveLlmModel, supportsAudio, supportsImages } from './models';
 import { runtime } from './service';
 import { resolveLlmLimits } from './engines/engine';
-import { resolveChatTools } from './tools';
 import {
     ChatModelId,
     ChatStatus,
@@ -22,7 +15,6 @@ import type {
     ChatPreloadInput,
     ChatState,
     ChatStatusSnapshot,
-    ResolvedTools,
     Runtime,
 } from './types';
 
@@ -46,7 +38,6 @@ const statusSnapshot = (
         backend: service.backend(),
         supportsImages: catalog ? supportsImages(catalog) : false,
         supportsAudio: catalog ? supportsAudio(catalog) : false,
-        supportsTools: catalog ? supportsTools(catalog) : false,
         ready: service.ready(),
         loading: service.loading(),
         requesting: state.requesting,
@@ -114,23 +105,6 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 emitStatus(call);
                 return;
             };
-            let resolved: ResolvedTools;
-            try {
-                resolved = resolveChatTools(input);
-            } catch (error) {
-                // a duplicate name is a configuration error
-                call.error = `${(error as Error)?.message || `${error}`}`;
-                emitStatus(call);
-                return;
-            };
-            const acceptsTools = supportsTools(model);
-            if (!acceptsTools && resolved.explicit) {
-                call.error = `Model does not accept tools`;
-                emitStatus(call);
-                return;
-            };
-            // a model without tools keeps working without the built-ins
-            const tools = acceptsTools ? resolved.tools : [];
             const
                 limits = resolveLlmLimits(input.limits, !!model.litert),
                 loaded = await service.load({
@@ -182,18 +156,6 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     limits,
                     reasoning: input.reasoning === true,
                     logging,
-                    ...(tools.length ? { tools } : {}),
-                    ...(input.maxToolRounds === undefined
-                        ? {}
-                        : { maxToolRounds: input.maxToolRounds }),
-                    onToolCall: event => {
-                        if (call.token != token || call.cancelled) return;
-                        input.onToolCall?.(event);
-                    },
-                    onToolResult: event => {
-                        if (call.token != token || call.cancelled) return;
-                        input.onToolResult?.(event);
-                    },
                     onReason: delta => {
                         if (call.token != token || call.cancelled) return;
                         thinking += delta;
@@ -202,13 +164,6 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     onText: delta => {
                         if (call.token != token || call.cancelled) return;
                         reply += delta;
-                        input.onResponse?.(reply);
-                    },
-                    onRestart: () => {
-                        // a rebuilt engine restarts the text
-                        thinking = ``;
-                        reply = ``;
-                        input.onThinking?.(thinking);
                         input.onResponse?.(reply);
                     },
                     onSpeed: speed => {

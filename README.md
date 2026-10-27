@@ -40,8 +40,6 @@ package loads one model, streams one reply and reports status.
   capped by the prompt budgets.
 - Audio: a user turn can carry an audio URL, sent only to a model with audio
   support and capped by the prompt budgets.
-- Tools: the model may call Web search, arithmetic and currency built-ins, plus
-  any tool the host supplies, in the same reply.
 - Reusable: the loaded model stays in memory for the next call.
 - Typed: written in TypeScript with declarations for every export.
 - Portable: importing and calling works in browsers, workers, React and Node.
@@ -61,11 +59,11 @@ yarn add @degreesign/chat
 pnpm add @degreesign/chat
 ```
 
-`@wllama/wllama`, `@wllama/wllama-compat`, `@litert-lm/core` and
-`@degreesign/utils` are build-time dependencies. The engines are bundled into
-the published build as dynamic chunks and their wasm assets ship beside them,
-so a consumer installs nothing extra and resolves no engine import. Only the
-model weights are downloaded at runtime.
+`@wllama/wllama`, `@wllama/wllama-compat` and `@litert-lm/core` are build-time
+dependencies. The engines are bundled into the published build as dynamic
+chunks and their wasm assets ship beside them, so a consumer installs nothing
+extra and resolves no engine import. Only the model weights are downloaded at
+runtime.
 
 The build emits:
 
@@ -241,12 +239,6 @@ requested model is already loaded, no download or load happens.
 | `onResponse` | Receives the accumulated reply text as it streams. Required. |
 | `onSpeed?` | Receives the current generation speed in tokens per second. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every state change. |
-| `builtins?` | Built-in tools to attach, all three by default; `false` attaches none. |
-| `websearch?` | `WebSearchConfig` for the built-in search, provider, language and limits. |
-| `tools?` | Extra `ChatTool` entries, appended after the built-ins. |
-| `onToolCall?` | Receives a `ChatToolCall` before a tool runs. |
-| `onToolResult?` | Receives a `ChatToolResult` when a tool returns or throws. |
-| `maxToolRounds?` | Ceiling on tool rounds in one reply, default 4, clamped 1 to 25. |
 
 Without `model` the package picks the GPU build when the browser provides a
 WebGPU adapter and the CPU build when it does not. The budget defaults are 250
@@ -294,143 +286,33 @@ on failure. A preload owns no cancel function; a new load replaces it.
 
 ## Tools
 
-Gemma 4 E2B on the WebGPU engine can call tools. A reply may contain a tool
-call, the package runs it, feeds the result back and lets the model answer, all
-inside the one `createChat` call. Qwen3-VL 2B and the CPU engine never receive
-tools: `ChatStatusSnapshot.supportsTools` reports `false` there, the built-ins
-are dropped and a host tool ends the call with `Model does not accept tools`.
-
-Three built-ins ship and all three attach by default:
-
-| `BuiltinTool` | What it does |
-| ------------- | ------------ |
-| `websearch` | Searches Wikipedia by default, or DuckDuckGo, and returns a few hits. |
-| `calculate` | Evaluates an arithmetic expression with a safe parser. |
-| `currency` | Quotes and converts fiat, crypto and metals with the 24-hour change. |
+Three built-in tools ship as descriptors. They are not connected to the model:
+the package never declares a tool to an engine and never runs one by itself.
 
 ```ts
-import { BuiltinTool, WebSearchProvider, createChat } from "@degreesign/chat";
+import { builtinTools, BuiltinTool } from '@degreesign/chat';
 
-const cancel = createChat({
-  messages,
-  // all three by default; narrow or disable them here
-  builtins: [BuiltinTool.calculate, BuiltinTool.currency],
-  websearch: { provider: WebSearchProvider.wikipedia, language: "en", limit: 3 },
-  onToolCall: (call) => renderToolStart(call),
-  onToolResult: (result) => renderToolEnd(result),
-  onResponse: (text) => renderReply(text),
-});
+const [calculation] = builtinTools([BuiltinTool.calculate]);
+const answer = await calculation.execute({ expression: `6*7` });
 ```
 
-`builtins: false` disables every built-in. A tool is only offered to the model
-when the model accepts tools, so the default set costs nothing on the CPU
-engine.
+| Export | Description |
+| ------ | ----------- |
+| `builtinTools(names, config?)` | Returns the requested tools in the order given. |
+| `calculateTool` | Evaluates an arithmetic expression, fully local. |
+| `currencyTool` | Converts between fiat, metals and coins through the CoinExams feed. |
+| `webSearchTool(config?)` | Searches Wikipedia by default, or DuckDuckGo. |
+| `BuiltinTool` | `websearch`, `calculate` or `currency`. |
+| `WebSearchProvider` | `wikipedia` or `duckduckgo`. |
 
-### Custom tools
+Each tool has `name`, `description`, `parameters` (`ChatToolSchema`) and
+`execute(args)`, which returns a JSON-safe `ChatToolValue` or throws. `ChatTool`
+is that whole shape, and `ChatToolCall` / `ChatToolResult` describe a call and
+its outcome for a host that records them.
 
-`ChatInput.tools` is the extension point, with no registration and no global
-state. Each mention is appended after the built-ins and offered in the same
-conversation.
-
-```ts
-import { createChat } from "@degreesign/chat";
-
-const cancel = createChat({
-  messages,
-  tools: [
-    {
-      name: "lookup_order",
-      description: "Read one order from the shop.",
-      parameters: {
-        type: "object",
-        properties: {
-          id: { type: "string", description: "Order id" },
-        },
-        required: ["id"],
-      },
-      execute: async ({ id }) => await shop.order(String(id)),
-    },
-  ],
-  onToolCall: (call) => renderToolStart(call),
-  onToolResult: (result) => renderToolEnd(result),
-  onResponse: (text) => renderReply(text),
-});
-```
-
-- `name` is required and unique. A host tool named `websearch`, `calculate` or
-  `currency` replaces that built-in.
-- `description` and `parameters` reach the model as written.
-- `execute` receives the parsed arguments and may return a value or a promise.
-  A thrown error becomes a tool error the model reads, and `onToolResult`
-  receives `error`.
-- Tools and callbacks are captured when the conversation is created. Rebuilding
-  the array with the same functions and declarations reuses the conversation;
-  changing a declaration or a function opens a new one and pays one history
-  prefill.
-- The package cannot abort a running `execute`. A cancel stops generation and
-  discards its result.
-- The package neither clamps nor times out a host result. Keep it small: three
-  declarations already cost roughly 200 to 250 of the 4096 context tokens.
-
-### Search
-
-`websearch` sends one query and returns a short list of `title`, `url` and
-`snippet`.
-
-| `WebSearchConfig` | Default | Meaning |
-| ----------------- | ------- | ------- |
-| `provider` | Wikipedia | `WebSearchProvider.wikipedia` or `.duckduckgo`. |
-| `language` | `en` | Wikipedia edition, two or three letters plus an optional region. |
-| `limit` | 3 | Hits asked of the provider, clamped 1 to 20. |
-| `snippetLength` | 400 | Characters kept per snippet. |
-| `timeout` | 8000 | Request budget in milliseconds. |
-
-Wikipedia is the default because its REST search has CORS `*`, no key and a
-predictable result shape. DuckDuckGo returns an instant answer and related
-topics, and many queries have neither, so it can return an empty list. Both
-endpoints are public and keyless.
-
-### Calculator
-
-`calculate` accepts `+`, `-`, `*`, `/`, `%`, `^` and parentheses, and returns
-`{ expression, result }`.
-
-- `×`, `÷` and `−` are normalized, and thousands commas and spaces are removed.
-- No implicit multiplication: write `2*(3+4)`.
-- No functions: use `^0.5` for a square root.
-- `%` is a postfix division by 100, so `200*15%` is 30 and `200+10%` is 200.1.
-- Unbalanced parentheses, division by zero, an unknown character, an expression
-  over 200 characters and a non-finite result are errors.
-- The parser is hand written. The package never uses `eval` or `new Function`.
-
-### Currency
-
-`currency` reads one public price file published by [CoinExams](https://coinexams.com)
-and answers from it.
-
-- Every rate is quoted against `EUR`, which is always 1.
-- Fiat and metals come from the fiat section. Crypto comes from the coin
-  section, which wins when a symbol appears in both.
-- Metals are `XAU`, `XAG`, `XPT` and `XPD`, quoted per gram. A zero or missing
-  quote is unavailable.
-- Arguments are `from` (required), `to` (default `EUR`) and `amount` (default 1).
-- A result carries `from`, `to`, `amount`, `rate`, `result`, `updatedAt` and
-  `stale`, plus `previousRate`, `change` and `changePercent` when the feed has a
-  24-hour value for both symbols.
-
-The feed is cached on the device under `degreesign-chat-prices-v1` in
-`localStorage`. Fiat and metals refresh at most hourly, crypto at most every
-five minutes, and concurrent calls share one fetch. A failed refresh keeps the
-previous snapshot, serves it with `stale: true` and waits 30 seconds before the
-next attempt. `navigator.onLine === false` skips the fetch and serves the cache.
-With no cache and no network the tool reports `Prices unavailable offline`.
-
-### Privacy
-
-Search sends the model's query to the chosen provider, and currency fetches the
-public price file. Nothing else leaves the device, and no key is sent. To keep a
-call fully local, pass `builtins: [BuiltinTool.calculate]`, which computes on
-device.
+`webSearchTool` takes `WebSearchConfig`: `provider`, a Wikipedia `language`
+edition, `limit` results, `snippetLength` and a `timeout` in milliseconds. The
+search and currency tools fetch over the network; `calculate` does not.
 
 ## Status
 
@@ -443,7 +325,6 @@ device.
 | `backend` | `LlmBackend.cpu`, `.gpu` or `.none`. |
 | `supportsImages` | Whether the requested model accepts images. |
 | `supportsAudio` | Whether the requested model accepts audio. |
-| `supportsTools` | Whether the requested model accepts tool declarations. |
 | `ready` | Whether a model is loaded and accepts a reply. |
 | `loading` | Whether a download or load is in flight. |
 | `requesting` | Whether a reply is streaming right now. |
@@ -458,12 +339,6 @@ A stream that never produces its first chunk ends with an error after 180
 seconds instead of waiting forever. Once a chunk has arrived, 30 seconds of
 silence ends the stream and keeps the text already delivered.
 
-A lost WebGPU device is rebuilt once: the package drops the dead engine and its
-device, reloads the LiteRT wasm, retries the turn on the next smaller context
-window (4096, 2048, 1024) and reports the reply normally. When no rebuild is
-possible the runtime ends as `error` with `backend: none`, so the host can fall
-back to the CPU model.
-
 ## Logging
 
 Console output stays off by default. Pass `logging: true` in a call to receive
@@ -473,10 +348,10 @@ without it goes quiet again.
 
 ## Models
 
-| `ChatModelId` | Name | Reasoning | Images | Audio | Tools | CPU | WebGPU |
-| ------------- | ---- | --------- | ------ | ----- | ----- | --- | ------ |
-| `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | No | Yes | No |
-| `gemma4_e2b` | Gemma 4 E2B | Yes | Desktop | Desktop | Yes | No | Yes |
+| `ChatModelId` | Name | Reasoning | Images | Audio | CPU | WebGPU |
+| ------------- | ---- | --------- | ------ | ----- | --- | ------ |
+| `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
+| `gemma4_e2b` | Gemma 4 E2B | Yes | Desktop | Desktop | No | Yes |
 
 A phone or tablet asking for Gemma gets the browser build,
 `gemma-4-E2B-it-gpu.litertlm`, which is text only. It has no vision or audio
@@ -684,16 +559,9 @@ const useReply = () => {
 | `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |
 | `LlmLimits` | Token, prompt, image, audio and thread budgets, all overridable. |
 | `WllamaAssets` | Wasm, compat wasm and compat worker URLs. |
-| `ChatTool` | One tool: `name`, `description`, `parameters` and `execute`. |
-| `ChatToolSchema` | The JSON-schema subset a tool parameter declares. |
-| `ChatToolValue` | A JSON-safe argument or result value. |
-| `ChatToolCall` | One model call: `id`, `name` and parsed `arguments`. |
-| `ChatToolResult` | A finished call, with `result` or `error`. |
-| `WebSearchConfig` | Provider, language, limit, snippet length and timeout. |
-| `WebSearchResult` | One hit: `title`, `url` and `snippet`. |
 
 The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,
-`LlmBackend`, `LlmPhase`, `BuiltinTool` and `WebSearchProvider`.
+`LlmBackend` and `LlmPhase`.
 
 ## Architecture
 
@@ -741,11 +609,10 @@ includes no server component.
 
 ### Does it have runtime dependencies?
 
-No runtime dependencies. `@wllama/wllama`, `@wllama/wllama-compat`,
-`@litert-lm/core` and `@degreesign/utils` are build-time dependencies, bundled
-into the dynamic engine chunks, the chat bundle and their wasm assets, so
-consumers resolve no engine import and download no engine code beyond the chunk
-they use.
+No runtime dependencies. `@wllama/wllama`, `@wllama/wllama-compat` and
+`@litert-lm/core` are build-time dependencies, bundled into the dynamic engine
+chunks and their wasm assets, so consumers resolve no engine import and
+download no engine code beyond the chunk they use.
 
 ### Where are the models stored?
 

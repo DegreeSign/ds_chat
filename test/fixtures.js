@@ -31,7 +31,6 @@ const createFakeEngine = (options = {}) => {
                     model,
                     backend,
                     contextSize: 8192,
-                    fatal: () => options.fatal ?? false,
                     chat: async params => {
                         calls.chat += 1;
                         requests.push(params);
@@ -48,12 +47,6 @@ const createFakeEngine = (options = {}) => {
                             ]);
                         if (params.signal?.aborted) return undefined;
                         if (options.failChat) throw new Error(`chat failed`);
-                        if (options.restartText) {
-                            params.onText(options.restartText);
-                            params.onRestart?.();
-                            params.onText(options.restartText);
-                            return options.restartText;
-                        };
                         if (options.thinkingText) {
                             const text = options.thinkingText,
                                 half = Math.ceil(text.length / 2);

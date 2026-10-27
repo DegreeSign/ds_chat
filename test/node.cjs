@@ -3,6 +3,10 @@
 const {
     createChat,
     preloadModel,
+    builtinTools,
+    calculateTool,
+    currencyTool,
+    webSearchTool,
     BuiltinTool,
     ChatModelId,
     ChatStatus,
@@ -142,15 +146,30 @@ const main = async () => {
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);
     assertEqual(esm.ChatModelId.qwen3_vl_2b, ChatModelId.qwen3_vl_2b, `esm model id`);
     assertEqual(esm.ChatModelId.gemma4_e2b, ChatModelId.gemma4_e2b, `esm gemma id`);
-    assertEqual(esm.BuiltinTool.websearch, `websearch`, `esm tool`);
-    assertEqual(esm.BuiltinTool.currency, `currency`, `esm currency tool`);
-    assertEqual(
-        esm.WebSearchProvider.duckduckgo,
-        `duckduckgo`,
-        `esm search provider`,
-    );
-    assertEqual(BuiltinTool.calculate, `calculate`, `cjs tool`);
+    assertEqual(esm.ChatModelId.gemma4_e2b_web, undefined, `no web model`);
+
+    assertEqual(typeof builtinTools, `function`, `builtin tools`);
+    assertEqual(BuiltinTool.websearch, `websearch`, `cjs websearch tool`);
+    assertEqual(BuiltinTool.calculate, `calculate`, `cjs calculate tool`);
+    assertEqual(BuiltinTool.currency, `currency`, `cjs currency tool`);
     assertEqual(WebSearchProvider.wikipedia, `wikipedia`, `cjs provider`);
+    assertEqual(WebSearchProvider.duckduckgo, `duckduckgo`, `cjs search provider`);
+    const tools = builtinTools([BuiltinTool.calculate, BuiltinTool.currency]);
+    assertEqual(tools.length, 2, `tool count`);
+    assertEqual(tools[0].name, `calculate`, `first tool`);
+    assertEqual(tools[1].name, `currency`, `second tool`);
+    assertEqual(calculateTool.name, `calculate`, `calculate descriptor`);
+    assertEqual(currencyTool.name, `currency`, `currency descriptor`);
+    assertEqual(webSearchTool().name, `websearch`, `websearch descriptor`);
+    const answer = await calculateTool.execute({ expression: `6*7` });
+    assertEqual(answer.result, 42, `tool answer`);
+    assertEqual(esm.BuiltinTool.calculate, BuiltinTool.calculate, `esm tool enum`);
+    assertEqual(
+        esm.WebSearchProvider.wikipedia,
+        WebSearchProvider.wikipedia,
+        `esm provider enum`,
+    );
+    assertEqual(esm.builtinTools([BuiltinTool.calculate]).length, 1, `esm builtins`);
     console.log(`NODE_TESTS_OK`, statuses[statuses.length - 1].status);
 };
 

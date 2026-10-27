@@ -1,5 +1,11 @@
 export { createChat, preloadModel } from './chat';
 export {
+    builtinTools,
+    calculateTool,
+    currencyTool,
+    webSearchTool,
+} from './tools';
+export {
     LlmRole,
     ChatStatus,
     LlmStatus,
