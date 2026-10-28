@@ -38,6 +38,7 @@ import {
     cpuThreads,
     storedBlobs,
     toWllamaMessages,
+    visionLimits,
 } from "../src/engines/wllama";
 import {
     cacheModel,
@@ -54,7 +55,11 @@ import {
     resumePlan,
 } from "../src/engines/store";
 import {
-    imageSide,
+    gpuImageSize,
+    imageTokens,
+    tokenCell,
+    tokenSlack,
+    visionSize,
     contentBuffer,
     resizeImageUrl,
     resizeImages,
@@ -102,6 +107,7 @@ import type {
     ChatTool,
     EngineChatParams,
     EngineMessage,
+    ImageSize,
     LitertEngine,
     LitertModule,
     LitertSession,
@@ -626,10 +632,11 @@ const definitions: Array<{
             run: () => {
                 const defaults = resolveLlmLimits();
                 assertEqual(defaults.maxReplyTokens, defaultLlmLimits.maxReplyTokens, `reply`);
-                assertEqual(defaults.promptCharBudget, 10000, `budget`);
+                assertEqual(defaults.promptCharBudget, 10_000, `budget`);
                 assertEqual(defaults.maxImages, 2, `images`);
                 assertEqual(defaults.maxAudio, 1, `audio`);
                 assertEqual(defaults.maxThreads, 6, `threads`);
+                assertEqual(defaults.maxContentLength, 1_000, `content`);
                 assertEqual(
                     defaults.maxReasoningTokens,
                     defaultLlmLimits.maxReasoningTokens,
@@ -2746,8 +2753,8 @@ const definitions: Array<{
                 assert(image.url.startsWith(`data:image/jpeg`), `resized jpeg`);
                 const bitmap = await createImageBitmap(
                     await (await fetch(image.url)).blob());
-                assertEqual(bitmap.width, imageSide, `image width`);
-                assertEqual(bitmap.height, imageSide, `image height`);
+                assertEqual(bitmap.width, 512, `image width`);
+                assertEqual(bitmap.height, 256, `image height`);
                 bitmap.close();
                 assertEqual(replies[replies.length - 1], `seen`, `reply`);
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
@@ -3045,12 +3052,26 @@ const definitions: Array<{
             name: `threads/cap`,
             run: () => {
                 assertEqual(cpuThreads(8, 2), 2, `eight cores cap two`);
-                assertEqual(cpuThreads(8, 1), 1, `eight cores cap one`);
-                assertEqual(cpuThreads(8, 99), 7, `eight cores raw seven`);
-                assertEqual(cpuThreads(16, 99), 8, `sixteen cores raw eight`);
+                assertEqual(cpuThreads(8, 1), 2, `eight cores cap one`);
+                assertEqual(cpuThreads(8, 99), 2, `eight cores hard cap two`);
+                assertEqual(cpuThreads(16, 99), 2, `sixteen cores hard cap two`);
                 assertEqual(cpuThreads(1, 2), 2, `one core raw two`);
-                assertEqual(cpuThreads(8, 3), 3, `eight cores cap three`);
-                assertEqual(cpuThreads(8, 6), 6, `default budget six`);
+                assertEqual(cpuThreads(8, 3), 2, `eight cores cap three`);
+                assertEqual(cpuThreads(8, 6), 2, `default budget two`);
+            },
+        },
+        {
+            name: `wllama/vision limits`,
+            run: () => {
+                const
+                    instruct = visionLimits(
+                        modelOf(ChatModelId.qwen3_vl_2b_instruct)),
+                    thinking = visionLimits(modelOf(ChatModelId.qwen3_vl_2b)),
+                    text = visionLimits(modelOf(ChatModelId.gemma4_e2b));
+                assertEqual(instruct.image_min_tokens, 128, `instruct min`);
+                assertEqual(instruct.image_max_tokens, 256, `instruct max`);
+                assertEqual(Object.keys(thinking).length, 0, `thinking unset`);
+                assertEqual(Object.keys(text).length, 0, `text unset`);
             },
         },
         {
@@ -3720,9 +3741,9 @@ const definitions: Array<{
                         canvas = document.createElement(`canvas`),
                         context = canvas.getContext(`2d`);
                     if (!context) throw new Error(`canvas unavailable`);
-                    canvas.width = imageSide;
-                    canvas.height = imageSide;
-                    context.drawImage(bitmap, 0, 0, imageSide, imageSide);
+                    canvas.width = bitmap.width;
+                    canvas.height = bitmap.height;
+                    context.drawImage(bitmap, 0, 0);
                     bitmap.close();
                     return Array.from(context.getImageData(x, y, 1, 1).data);
                 };
@@ -3743,24 +3764,42 @@ const definitions: Array<{
                 const content = resized[0].content;
                 if (typeof content == `string`) throw new Error(`parts expected`);
                 const images = content.filter(part => part.type == `image`);
-                assertEqual(imageSide, 288, `square side`);
                 assertEqual(images.length, 3, `image parts`);
                 const [wideOut, tallOut, smallOut] = images;
                 if (wideOut.type != `image` || tallOut.type != `image`
                     || smallOut.type != `image`) throw new Error(`image parts expected`);
-                const [wideSize, tallSize, smallSize, center] = await Promise.all([
+                const [wideSize, tallSize, smallSize] = await Promise.all([
                     sizeOf(wideOut.url),
                     sizeOf(tallOut.url),
                     sizeOf(smallOut.url),
-                    pixelOf(wideOut.url, 10, imageSide / 2),
                 ]);
-                assertEqual(wideSize.width, 288, `wide width`);
-                assertEqual(wideSize.height, 288, `wide height`);
-                assertEqual(tallSize.width, 288, `tall width`);
-                assertEqual(tallSize.height, 288, `tall height`);
-                assertEqual(smallSize.width, 288, `small width`);
-                assertEqual(smallSize.height, 288, `small height`);
-                assert(center[1] > center[0], `center crop kept the green middle`);
+                assertEqual(wideSize.width, 512, `wide width`);
+                assertEqual(wideSize.height, 256, `wide height`);
+                assertEqual(tallSize.width, 224, `tall width`);
+                assertEqual(tallSize.height, 608, `tall height`);
+                assertEqual(smallSize.width, 352, `small width`);
+                assertEqual(smallSize.height, 384, `small height`);
+                const tokensOf = (size: ImageSize): number =>
+                    size.width / tokenCell * size.height / tokenCell;
+                assert(tokensOf(wideSize) >= imageTokens, `wide target`);
+                assert(tokensOf(wideSize) <= imageTokens + tokenSlack, `wide slack`);
+                assert(tokensOf(tallSize) >= imageTokens, `tall target`);
+                assert(tokensOf(tallSize) <= imageTokens + tokenSlack, `tall slack`);
+                const center = await pixelOf(
+                    wideOut.url,
+                    wideSize.width / 2,
+                    wideSize.height / 2,
+                );
+                assert(center[1] > center[0], `full frame kept the green middle`);
+                const
+                    big = visionSize(4032, 3024),
+                    bigTokens = big.width / tokenCell * big.height / tokenCell;
+                assertEqual(big.width % tokenCell, 0, `grid width`);
+                assertEqual(big.height % tokenCell, 0, `grid height`);
+                assert(bigTokens >= imageTokens, `big target`);
+                assert(bigTokens <= imageTokens + tokenSlack, `big slack`);
+                assertEqual(gpuImageSize.width, 384, `gpu width`);
+                assertEqual(gpuImageSize.height, 384, `gpu height`);
                 const textOnly = await resizeImages([
                     { role: LlmRole.user, content: `plain` },
                 ]);

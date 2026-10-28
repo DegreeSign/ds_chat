@@ -519,17 +519,17 @@ const step = (ids, text) => ({ ids, text });
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 36);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 67);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 758);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 765);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 292);
 f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 321);
 f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 271);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 140);
-f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 496);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 370);
+f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 505);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 376);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 494);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
-f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 120);
+f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 178);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
 f(`litertLoader`, `engines`, `litertLoader.js`,
     `src/engines/litertLoader.js`, 5);
@@ -543,7 +543,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4498);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4537);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 195);
@@ -727,6 +727,8 @@ n(`types`, `litertParams`, 613, `LitertSession · LitertChatParams`
     `conversation? · sent · reasoning · maxTokens · engine · model · mod`
     + ` · params · messages · session`,
     `The reused conversation, one LiteRT chat call and one stream over it`);
+n(`types`, `imageSize`, 690, `ImageSize`, `width · height`,
+    `Pixel size of one image sent to an engine`);
 
 // model runtime
 n(`llm`, `createRuntime`, 16, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
@@ -820,110 +822,114 @@ n(`models`, `supportsAudio`, 124, `supportsAudio`,
     + ` decides audio`);
 
 // prompt and streaming
-n(`engine`, `limits`, 15, `defaultLlmLimits`, `LlmLimits`,
+n(`engine`, `limits`, 16, `defaultLlmLimits`, `LlmLimits`,
     `Reply 250 tokens, thinking 128, reasoning total 320, 2 images,`
     + ` 1 audio clip, 1000 chars each, 10000 prompt chars, 6 CPU threads`);
-n(`engine`, `gpuReasoning`, 27, `gpuReasoningTokens`, `1200`,
+n(`engine`, `gpuReasoning`, 28, `gpuReasoningTokens`, `1200`,
     `Reasoning budget of the GPU engine, thought plus answer`);
-n(`engine`, `budgetLimit`, 30, `budgetLimit`,
+n(`engine`, `budgetLimit`, 31, `budgetLimit`,
     `(value, fallback, min) => number`,
     `Finite values at or above the floor are floored, anything else falls back`);
-n(`engine`, `resolveLimits`, 40, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
+n(`engine`, `resolveLimits`, 41, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
     `Clamp every budget, then fill every default, 1200 reasoning on the GPU`);
-n(`engine`, `replyOptions`, 90, `replyOptions`, `(limits, reasoning) => object`,
+n(`engine`, `replyOptions`, 91, `replyOptions`, `(limits, reasoning) => object`,
     `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
-n(`engine`, `modelUrl`, 102, `modelUrl`, `(repo, file) => string`,
+n(`engine`, `modelUrl`, 103, `modelUrl`, `(repo, file) => string`,
     `Resolve one model file on huggingface.co`);
-n(`engine`, `contentLength`, 105, `contentLength`, `(response) => number`,
+n(`engine`, `contentLength`, 106, `contentLength`, `(response) => number`,
     `Declared size of one download, zero when the host hides it`);
-n(`engine`, `hasPart`, 108, `hasPart`, `(messages, type) => boolean`,
+n(`engine`, `hasPart`, 109, `hasPart`, `(messages, type) => boolean`,
     `Whether any built turn carries an image or audio part`);
-n(`engine`, `hasImages`, 116, `hasImages`, `(messages) => boolean`,
+n(`engine`, `hasImages`, 117, `hasImages`, `(messages) => boolean`,
     `Whether any built turn carries an image part`);
-n(`engine`, `hasAudio`, 119, `hasAudio`, `(messages) => boolean`,
+n(`engine`, `hasAudio`, 120, `hasAudio`, `(messages) => boolean`,
     `Whether any built turn carries an audio part`);
-n(`engine`, `userContent`, 131, `userContent`, `(text, images, audio) => content`,
+n(`engine`, `userContent`, 132, `userContent`, `(text, images, audio) => content`,
     `Text first, then each image, then each audio clip, or plain text`);
-n(`engine`, `contentParts`, 144, `contentParts`, `(content) => EngineContentPart[]`,
+n(`engine`, `contentParts`, 145, `contentParts`, `(content) => EngineContentPart[]`,
     `Flatten string or part content for a merge`);
-n(`engine`, `mergeContent`, 151, `mergeContent`, `(first, next) => content`,
+n(`engine`, `mergeContent`, 152, `mergeContent`, `(first, next) => content`,
     `Join same-role turns and collapse adjacent text parts`);
-n(`engine`, `buildMessages`, 170, `buildMessages`,
+n(`engine`, `buildMessages`, 171, `buildMessages`,
     `(messages, limits?) => EngineMessage[]`,
     `Keep text and media, cap images and audio newest first, fold system,`
     + ` drop leading assistant, merge same roles`);
-n(`engine`, `createThinkSplitter`, 237, `createThinkSplitter`,
+n(`engine`, `createThinkSplitter`, 238, `createThinkSplitter`,
     `(onReason, onText) => { feed, flush }`,
     `Separates inline reasoning markers from the visible reply`);
-n(`engine`, `findTag`, 245, `findTag`, `(data, tags) => { at, tag }`,
+n(`engine`, `findTag`, 246, `findTag`, `(data, tags) => { at, tag }`,
     `Earliest occurrence of any marker`);
-n(`engine`, `holdPartial`, 257, `holdPartial`, `(data, tags) => string`,
+n(`engine`, `holdPartial`, 258, `holdPartial`, `(data, tags) => string`,
     `Holds back the longest suffix that may still become a marker`);
-n(`engine`, `feed`, 270, `feed`, `(text) => void`,
+n(`engine`, `feed`, 271, `feed`, `(text) => void`,
     `Consume a chunk, switch on the current in-reason state`);
-n(`engine`, `flush`, 302, `flush`, `() => void`, `Emit whatever was held back`);
-n(`engine`, `stall`, 312, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
+n(`engine`, `flush`, 303, `flush`, `() => void`, `Emit whatever was held back`);
+n(`engine`, `stall`, 313, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
     `180000 · 420000 · 30000`,
     `Budgets before a first chunk, a vision first chunk and between chunks`);
-n(`engine`, `stallError`, 319, `StallError`, `class Error`,
+n(`engine`, `stallError`, 320, `StallError`, `class Error`,
     `A stream that stopped producing chunks`);
-n(`engine`, `timeout`, 322, `withTimeout`, `(work, ms, message) => Promise`,
+n(`engine`, `timeout`, 323, `withTimeout`, `(work, ms, message) => Promise`,
     `Race one promise against a timeout`);
-n(`engine`, `close`, 341, `closeStream`, `(iterator) => void`,
+n(`engine`, `close`, 342, `closeStream`, `(iterator) => void`,
     `Close a stream without waiting for it`);
-n(`engine`, `logs`, 348, `logChatCall`, `(model, messages) => void`,
+n(`engine`, `logs`, 349, `logChatCall`, `(model, messages) => void`,
     `Message text and media data are censored, the caller checks the flag`);
-n(`engine`, `streamReply`, 364, `streamReply`, `(params) => Promise<string?>`,
+n(`engine`, `streamReply`, 365, `streamReply`, `(params) => Promise<string?>`,
     `Run the chunk loop, read inline or structured reasoning, collect reply`
     + ` and thought, measure the streamed token speed, stop a silent engine,`
     + ` log when enabled, honour stop`);
 
-n(`engine`, `runEngineChat`, 463, `runEngineChat`,
+n(`engine`, `runEngineChat`, 464, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
-n(`wllama`, `wllamaEngine`, 344, `wllamaEngine`, `LlmEngine`,
+n(`wllama`, `visionLimits`, 41, `visionLimits`,
+    `(model) => object`,
+    `Only the instruct model sets a 128 to 256 image token window`);
+n(`wllama`, `wllamaEngine`, 349, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, purge`);
-n(`wllama`, `resolveAssets`, 54, `resolveAssets`, `(overrides?) => WllamaAssets`,
+n(`wllama`, `resolveAssets`, 58, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
-n(`wllama`, `cpuLogger`, 63, `cpuLogger`, `(base) => WllamaLogger`,
+n(`wllama`, `cpuLogger`, 67, `cpuLogger`, `(base) => WllamaLogger`,
     `Follows the per-call logging flag and hides the GPU probe`);
-n(`wllama`, `getWllama`, 80, `getWllama`, `() => Promise<Wllama>`,
+n(`wllama`, `getWllama`, 84, `getWllama`, `() => Promise<Wllama>`,
     `Lazy singleton, default assets resolved and cached on first use`);
-n(`wllama`, `entryOf`, 107, `entryOf`, `(entry, file) => boolean`,
+n(`wllama`, `entryOf`, 111, `entryOf`, `(entry, file) => boolean`,
     `Cache entry matches by file name or original URL`);
-n(`wllama`, `cpuFiles`, 111, `cpuFiles`, `(model) => { name, url }[]`,
+n(`wllama`, `cpuFiles`, 115, `cpuFiles`, `(model) => { name, url }[]`,
     `The model file plus its vision projector, with remote URLs`);
-n(`wllama`, `filesStored`, 125, `filesStored`, `(model) => Promise<boolean>`,
+n(`wllama`, `filesStored`, 129, `filesStored`, `(model) => Promise<boolean>`,
     `Every CPU file including the projector is complete in the store`);
-n(`wllama`, `filesCached`, 135, `filesCached`,
+n(`wllama`, `filesCached`, 139, `filesCached`,
     `(instance, model) => Promise<boolean>`,
     `Every CPU file is complete in the wllama cache manager`);
-n(`wllama`, `storedBlobs`, 144, `storedBlobs`,
+n(`wllama`, `storedBlobs`, 148, `storedBlobs`,
     `({ model, signal, onProgress }) => Promise<Blob[]?>`,
     `Read every CPU file from the store, resuming the parts already stored`);
-n(`wllama`, `toWllamaMessages`, 171, `toWllamaMessages`,
+n(`wllama`, `toWllamaMessages`, 175, `toWllamaMessages`,
     `(messages) => Promise<WllamaMessage[]>`,
     `Map text, image and audio parts to wllama content segments`);
-n(`wllama`, `dropWllama`, 101, `dropWllama`, `() => Promise<void>`,
+n(`wllama`, `dropWllama`, 105, `dropWllama`, `() => Promise<void>`,
     `Drop the worker, a crashed or exited one cannot be reused`);
-n(`wllama`, `runtime`, 27, `runtime`,
+n(`wllama`, `runtime`, 46, `runtime`,
     `store · cpuThreads · gpuProbeLog · loggingOn`,
     `The resumable store, hardware threads capped by limits.maxThreads`
     + ` for every model, 0 GPU layers`);
 n(`wllama`, `cpuThreads`, 34, `cpuThreads`, `(cores, maxThreads) => number`,
     `Raw hardware maximum first, then the caller cap, minimum 1`);
-n(`wllama`, `startLLM`, 224, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`wllama`, `startLLM`, 230, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Pick 4k or 8k context, load the model and projector from stored blobs,`
     + ` fall back to the cache or network, cap CPU threads to the shared`
-    + ` budget, abortable`);
-n(`wllama`, `cached`, 347, `cached`, `(model) => Promise<boolean>`,
+    + ` budget, set no image limits except the instruct describer's`
+    + ` 128 to 256 window, abortable`);
+n(`wllama`, `cached`, 352, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `chat`, 196, `chatOn`, `(instance, model, params)`,
+n(`wllama`, `chat`, 202, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 338, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 343, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `purge`, 354, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 359, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
@@ -1045,16 +1051,26 @@ n(`store`, `purge`, 477, `store.purge`, `() => Promise<void>`,
     `Delete the whole engine store directory and every model file in it`);
 
 // image resizing
-n(`images`, `maxSide`, 4, `imageSide`, `288`,
-    `Square side sent to an engine, a multiple of 48`);
-n(`images`, `buffer`, 40, `contentBuffer`, `(url) => Promise<ArrayBuffer>`,
+n(`images`, `tokens`, 5, `imageTokens`, `128`,
+    `Vision token target of one CPU image`);
+n(`images`, `tokenCell`, 7, `tokenCell`, `32`,
+    `Pixels covered by one vision token`);
+n(`images`, `slack`, 9, `tokenSlack`, `8`,
+    `Tokens allowed above the target`);
+n(`images`, `gpuSize`, 12, `gpuImageSize`, `384 x 384`,
+    `Square size the WebGPU engine encodes`);
+n(`images`, `buffer`, 48, `contentBuffer`, `(url) => Promise<ArrayBuffer>`,
     `Decode a data URL or fetch an image or audio URL into bytes`);
-n(`images`, `resizeUrl`, 57, `resizeImageUrl`, `(url) => Promise<string>`,
-    `Decode an image, center-crop it to a square, resize to 288 x 288,`
+n(`images`, `visionSize`, 65, `visionSize`,
+    `(width, height) => ImageSize`,
+    `Closest 32 px grid from 128 to 136 tokens, aspect kept`);
+n(`images`, `resizeUrl`, 93, `resizeImageUrl`,
+    `(url, size?) => Promise<string>`,
+    `Decode an image, crop the sub-cell remainder, resize to the grid,`
     + ` encode JPEG`);
-n(`images`, `resizeImages`, 96, `resizeImages`,
-    `(messages) => Promise<EngineMessage[]>`,
-    `Center-crop and resize every image part before the engine starts`);
+n(`images`, `resizeImages`, 149, `resizeImages`,
+    `(messages, size?) => Promise<EngineMessage[]>`,
+    `Fit every image part before the engine starts`);
 
 // tools
 n(`tools`, `registry`, 8, `builtinTools`,
@@ -1199,7 +1215,7 @@ n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
 n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
     `Appends a console filter for the benign encoder-hint warnings to the`
     + ` emitted LiteRT glue, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.9.2`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.9.3`,
     `build = tsc declarations, webpack, banner, glue filter; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1686,9 +1702,9 @@ const FLOWS = {
                 + ` the limits window, drop a leading assistant, merge same`
                 + ` roles.`),
             step([`resizeImages`],
-                ` Center-crop every image part to a square, then resize it to`
-                + ` 288 x 288, before the engine starts. LiteRT then uses its`
-                + ` 70-token budget and never upscales past 384 x 384.`),
+                ` Target 128 to 136 vision tokens, snap both sides to the`
+                + ` 32 px grid and crop the remainder. LiteRT instead`
+                + ` center-crops to 384 x 384 for its 70-token budget.`),
             step([`wllama.toWllamaMessages`, `litert.toLitertMessages`],
                 ` The selected engine maps the built turns to its own message`
                 + ` shape, decoding image and audio parts into bytes. A`

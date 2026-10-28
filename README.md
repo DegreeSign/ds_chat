@@ -124,13 +124,13 @@ second, measured from the first token so prompt processing is excluded.
 `false` when it cannot load.
 
 Attach images to a user turn with `images: [dataUrl]`. The package sends them
-only to a model with vision support, center-crops each image to a square,
-resizes it to 288 x 288, and caps the number with `limits.maxImages`. The
-WebGPU engine asks LiteRT for the smallest Gemma 4 vision budget (70 tokens,
-630 patches), so it encodes the crop at 384 x 384 instead of upscaling it to
-768 x 768. The CPU engine uses the 288 crop directly. On a phone or tablet a
-Gemma request resolves to `gemma4_e2b_limited`, the text-only browser build, so
-images there go through `qwen3_vl_2b` instead.
+only to a model with vision support, fits each image to 128 to 136 vision
+tokens, snaps both sides to multiples of 32 px, crops the remainder, and caps
+the number with `limits.maxImages`. The WebGPU engine asks LiteRT for the
+smallest Gemma 4 vision budget (70 tokens, 630 patches), so it center-crops to a
+384 x 384 square instead. On a phone or tablet a Gemma request resolves to
+`gemma4_e2b_limited`, the text-only browser build, so images there go through
+`qwen3_vl_2b` instead.
 
 Attach a recording with `audio: [dataUrl]`. Gemma 4 E2B accepts WAV, MP3 and
 FLAC on the desktop WebGPU engine and loads its audio encoder on demand. A short
@@ -310,7 +310,8 @@ translated one by one with `gemma4_e2b_limited`. Without a GPU, when the
 translation model cannot load, or when the translator replies
 `CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. Both the
 description and translation calls use a 2048-token reply budget unless
-`limits.maxReplyTokens` overrides it.
+`limits.maxReplyTokens` overrides it. The describer sets an explicit 128 to
+256 vision-token window; other models leave the engine image limits unset.
 
 The describer and translator each receive a system message that puts accuracy
 first: the describer reports only visible detail and the translator preserves
@@ -485,10 +486,10 @@ user:      {next turn}
   vision or audio support.
 - Images are collected from the newest turns first and capped by `maxImages`
   (default 2). Older image parts are dropped and their text stays.
-- Every image part is center-cropped to a square, then resized to 288 x 288.
-  Non-square edges are discarded and smaller images are upscaled. The WebGPU
-  engine is told to use a 70-token vision budget, so it encodes the crop at
-  384 x 384, the smallest Gemma 4 encoder signature.
+- Every image part keeps its full frame and targets 128 vision tokens, with at
+  most 136. Both sides are snapped to multiples of 32 px and the remainder is
+  cropped. The WebGPU engine instead center-crops to a 384 x 384 square, the
+  smallest Gemma 4 encoder signature.
 - Audio is collected from the newest turns first and capped by `maxAudio`
   (default 1). Older audio parts are dropped and their text stays. WAV, MP3 and
   FLAC are accepted, and a short 16 kHz mono WAV is the best input.
@@ -512,7 +513,7 @@ onProgress })` contract and return the runtime object with `model`, `backend`,
 matches the requested model.
 
 The CPU engine derives a raw thread count from the device, then caps it at
-`limits.maxThreads`, default 6. The cap is applied after the raw maximum, so the
+`limits.maxThreads`, default 2. The cap is applied after the raw maximum, so the
 engine never exceeds the device or the caller budget. Every CPU model uses the
 same count, including the vision projector models.
 
@@ -672,9 +673,10 @@ Yes, on models with vision support. Put image URLs in a user turn's `images`
 array. Qwen3-VL 2B accepts images on the CPU engine and Gemma 4 E2B accepts
 images on the desktop WebGPU engine. On a phone or tablet Gemma resolves to
 `gemma4_e2b_limited`, the text-only browser build, so use `qwen3_vl_2b` for
-mobile images. Each image is center-cropped to a square and resized to 288 x 288
-before the engine sees it. The WebGPU engine encodes that crop at 384 x 384
-with the smallest Gemma 4 vision budget. A model without vision drops images
+mobile images. Each image keeps its full frame and targets 128 vision tokens,
+at most 136, with both sides snapped to multiples of 32 px and the remainder
+cropped. The WebGPU engine instead center-crops a 384 x 384 square with the
+smallest Gemma 4 vision budget. A model without vision drops images
 when the turn also has text; an image-only turn reports
 `Model does not accept images`.
 

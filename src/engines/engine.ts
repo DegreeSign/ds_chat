@@ -1,5 +1,5 @@
 import { LlmRole } from '../enums';
-import { resizeImages } from './images';
+import { gpuImageSize, resizeImages } from './images';
 import type {
     ChatMessage,
     ChatModel,
@@ -469,7 +469,9 @@ const
         onStall,
     }: EngineRunParams): Promise<string | undefined> => {
         const messages = await resizeImages(
-            buildMessages(params.messages, params.limits));
+            buildMessages(params.messages, params.limits),
+            model.litert ? gpuImageSize : undefined,
+        );
         if (params.logging) logChatCall(model, messages);
         return await streamReply({
             model,

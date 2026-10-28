@@ -1,6 +1,14 @@
 import type { ChatModel, EngineMessage, LlmEngine, LlmRuntime, StartLlmParams, WllamaMessage } from '../types';
 /** CPU threads after the hardware maximum and the caller cap */
 declare const cpuThreads: (cores: number, maxThreads: number) => number;
+/** Image limits of one model */
+declare const visionLimits: (model: ChatModel) => {
+    image_min_tokens: number;
+    image_max_tokens: number;
+} | {
+    image_min_tokens?: undefined;
+    image_max_tokens?: undefined;
+};
 declare const 
 /** Every CPU file of one model, its name and remote URL */
 cpuFiles: (model: ChatModel) => Array<{
@@ -17,4 +25,4 @@ storedBlobs: ({ model, signal, onProgress, }: {
 toWllamaMessages: (messages: EngineMessage[]) => Promise<WllamaMessage[]>, 
 /** Start the CPU runtime, the unified engine entry */
 startLLM: ({ model, limits, onProgress, signal, logging, assets: overrides, }: StartLlmParams) => Promise<LlmRuntime>, wllamaEngine: LlmEngine;
-export { cpuFiles, cpuThreads, startLLM, storedBlobs, toWllamaMessages, wllamaEngine, };
+export { cpuFiles, cpuThreads, startLLM, storedBlobs, toWllamaMessages, visionLimits, wllamaEngine, };

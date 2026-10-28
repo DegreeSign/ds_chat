@@ -10,8 +10,8 @@ import {
     runEngineChat,
 } from './engine';
 import { createModelStore, isStoreError } from './store';
-import { contentBuffer } from './images';
-import { LlmBackend, LlmPhase } from '../enums';
+import { contentBuffer, imageTokens } from './images';
+import { ChatModelId, LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
     EngineChatParams,
@@ -34,8 +34,14 @@ const
 const cpuThreads = (cores: number, maxThreads: number): number =>
     Math.max(1, Math.min(
         Math.max(2, Math.min(8, (cores || 4) - 1)),
-        2, //  maxThreads,
+        2, // wllama breaks above 2
     ));
+
+/** Image limits of one model */
+const visionLimits = (model: ChatModel) =>
+    model.cpu?.mmproj && model.id == ChatModelId.qwen3_vl_2b_instruct
+        ? { image_min_tokens: imageTokens, image_max_tokens: 256 }
+        : {};
 
 let
     wllama: Wllama | undefined,
@@ -270,11 +276,10 @@ const
         const loadParams = {
             n_ctx: contextSize,
             n_threads: threads,
-            // cap chain-of-thought tokens, long thinking makes replies slow
-            reasoning_budget_tokens: limits.maxThinkingTokens,
-            // this engine is the CPU fallback, never offload to a GPU
-            n_gpu_layers: 0,
+            reasoning_budget_tokens: limits.maxThinkingTokens, // cap chain-of-thought tokens, long thinking makes replies slow
+            n_gpu_layers: 0, // this engine is the CPU fallback, never offload to a GPU
             jinja: true,
+            ...visionLimits(model),
         };
         try {
             // a complete store or an older cache skips the network
@@ -366,5 +371,6 @@ export {
     startLLM,
     storedBlobs,
     toWllamaMessages,
+    visionLimits,
     wllamaEngine,
 };

@@ -686,6 +686,12 @@ interface EngineRunParams {
     onStall?: () => void,
 }
 
+/** Pixel size of one image sent to an engine */
+interface ImageSize {
+    width: number,
+    height: number,
+}
+
 export type {
     ChatMessage,
     ChatTool,
@@ -739,6 +745,7 @@ export type {
     LlmRuntime,
     LlmEngine,
     EngineMessage,
+    ImageSize,
     EngineContentPart,
     WllamaContentPart,
     WllamaMessage,

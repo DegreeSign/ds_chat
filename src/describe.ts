@@ -32,7 +32,7 @@ const imageNote = [
 ].join(` `);
 
 /** Reply budget of one description */
-const imageReplyTokens = 16_384;
+const imageReplyTokens = 2048;
 
 /** System message of the translator */
 const translateSystem = [

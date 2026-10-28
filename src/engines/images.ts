@@ -1,7 +1,15 @@
-import type { EngineContentPart, EngineMessage } from '../types';
+import type { EngineContentPart, EngineMessage, ImageSize } from '../types';
 
-/** Square image side sent to an engine, a multiple of 48 */
-const imageSide = 288;
+const
+    /** Vision token target */
+    imageTokens = 128,
+    /** Pixels per vision token */
+    tokenCell = 32,
+    /** Tokens allowed above the target */
+    tokenSlack = 8;
+
+/** Square size the WebGPU engine encodes */
+const gpuImageSize: ImageSize = { width: 384, height: 384 };
 
 /** Read a blob back as a data URL */
 const blobToDataUrl = (blob: Blob): Promise<string> =>
@@ -53,32 +61,77 @@ const contentBuffer = async (url: string): Promise<ArrayBuffer> => {
     return bytes.buffer;
 };
 
-/** Center-crop one image URL to a square and resize it for an engine */
-const resizeImageUrl = async (url: string): Promise<string> => {
+/** Full-frame size near the token target */
+const visionSize = (width: number, height: number): ImageSize => {
+    const aspect = width / Math.max(1, height);
+    let
+        bestWidth = tokenCell,
+        bestHeight = tokenCell,
+        bestError = Infinity,
+        bestTokens = Infinity;
+    for (let rows = 1; rows <= imageTokens; rows++) {
+        const
+            firstCols = Math.ceil(imageTokens / rows),
+            lastCols = Math.floor((imageTokens + tokenSlack) / rows);
+        for (let cols = firstCols; cols <= lastCols; cols++) {
+            const
+                tokens = cols * rows,
+                error = Math.abs(cols / rows - aspect);
+            if (error < bestError - 1e-9
+                || (Math.abs(error - bestError) <= 1e-9 && tokens < bestTokens)) {
+                bestWidth = cols * tokenCell;
+                bestHeight = rows * tokenCell;
+                bestError = error;
+                bestTokens = tokens;
+            }
+        }
+    }
+    return { width: bestWidth, height: bestHeight };
+};
+
+/** Fit one image URL to the token grid for an engine */
+const resizeImageUrl = async (
+    url: string,
+    size?: ImageSize,
+): Promise<string> => {
     if (!url || typeof fetch != `function` || typeof createImageBitmap != `function`)
         return url;
     try {
         const
             response = await fetch(url),
             bitmap = await createImageBitmap(await response.blob()),
-            side = Math.min(bitmap.width, bitmap.height),
-            sourceX = Math.floor((bitmap.width - side) / 2),
-            sourceY = Math.floor((bitmap.height - side) / 2),
-            canvas = createCanvas(imageSide, imageSide),
+            target = size ?? visionSize(bitmap.width, bitmap.height),
+            sourceAspect = bitmap.width / Math.max(1, bitmap.height),
+            targetAspect = target.width / target.height,
+            sourceWidth = Math.min(
+                bitmap.width,
+                sourceAspect > targetAspect
+                    ? bitmap.height * targetAspect
+                    : bitmap.width,
+            ),
+            sourceHeight = Math.min(
+                bitmap.height,
+                sourceAspect > targetAspect
+                    ? bitmap.height
+                    : bitmap.width / targetAspect,
+            ),
+            sourceX = (bitmap.width - sourceWidth) / 2,
+            sourceY = (bitmap.height - sourceHeight) / 2,
+            canvas = createCanvas(target.width, target.height),
             context = canvas
                 ? canvas.getContext(`2d`) as
                     | CanvasRenderingContext2D
                     | OffscreenCanvasRenderingContext2D
                     | null
                 : null;
-        if (!canvas || !context || side < 1) {
+        if (!canvas || !context || bitmap.width < 1 || bitmap.height < 1) {
             bitmap.close();
             return url;
         }
         context.drawImage(
             bitmap,
-            sourceX, sourceY, side, side,
-            0, 0, imageSide, imageSide,
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            0, 0, target.width, target.height,
         );
         bitmap.close();
         if (isOffscreen(canvas)) {
@@ -92,9 +145,10 @@ const resizeImageUrl = async (url: string): Promise<string> => {
     } catch { return url; }
 };
 
-/** Center-crop and resize every image part before an engine sees it */
+/** Fit every image part before an engine sees it */
 const resizeImages = async (
     messages: EngineMessage[],
+    size?: ImageSize,
 ): Promise<EngineMessage[]> => {
     const resized: EngineMessage[] = [];
     for (const message of messages) {
@@ -105,7 +159,7 @@ const resizeImages = async (
         const parts: EngineContentPart[] = [];
         for (const part of message.content)
             parts.push(part.type == `image`
-                ? { type: `image`, url: await resizeImageUrl(part.url) }
+                ? { type: `image`, url: await resizeImageUrl(part.url, size) }
                 : part);
         resized.push({ role: `user`, content: parts });
     }
@@ -113,7 +167,11 @@ const resizeImages = async (
 };
 
 export {
-    imageSide,
+    gpuImageSize,
+    imageTokens,
+    tokenCell,
+    tokenSlack,
+    visionSize,
     contentBuffer,
     resizeImageUrl,
     resizeImages,
