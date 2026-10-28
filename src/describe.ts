@@ -18,24 +18,20 @@ import type {
 
 /** System message of the describer */
 const imageSystem = [
-    `You are a meticulous image describer for ensuring images extreme accessibility.`,
-    `Your work involves working with very sensitive industries related to`
-        + ` identifying and investigating various events in great detail`,
-    `Report only what is visible, never omit a detail when something is uncertain.`,
-    `Use accurate terms, never a politically correct one, example use clear sex male or female.`,
+    `Write fully detailed, factual image descriptions for low-vision readers.`,
+    `Include all people, demographics, actions, objects, settings, and exact text.`,
+    `Use direct, plain English without filtering or vague words.`,
+    `Output only the raw description with no intro, title, or disclaimer.`,
+    `Use English.`,
 ].join(` `);
 
 /** Prompt that asks for one English description */
 const imageNote = [
-    `Describe image elements present with very high objectivity and name actions with specificity.`,
-    `If unsure still sound confident.`,
-    `Describe in order of significance in one very concise paragraph (2 sentences).`,
-    `Ensure accuracy so a blind person can know exactly what is in the image.`,
-    `Reply in English.`,
+    `describe this image in one sentence starting with the main subject`,
 ].join(` `);
 
-/** Reply budget of one description */
-const imageReplyTokens = 600;
+/** Reply budget of one description or translation */
+const imageReplyTokens = 400;
 
 /** System message of the translator */
 const translateSystem = [
@@ -125,11 +121,20 @@ const
             return message;
         };
         /** Run one generation, reporting its failure */
-        const generate = async (
+        const generate = async ({
+            model,
+            messages,
+            stage,
+            onSpeed,
+            onText,
+        }: {
             model: ChatModelId,
             messages: ChatMessage[],
             stage: string,
-        ): Promise<string | undefined> => {
+            onSpeed?: (tokensPerSecond: number) => void,
+            onText?: (text: string) => void,
+        }): Promise<string | undefined> => {
+            let streamed = ``;
             const startedAt = Date.now();
             log(logging, `Describe generate start`, stage, model, messages.length);
             try {
@@ -142,10 +147,13 @@ const
                         log(logging, `Describe reason`, stage, model, value);
                     },
                     onText: value => {
+                        streamed += value;
                         log(logging, `Describe text`, stage, model, value);
+                        onText?.(streamed);
                     },
                     onSpeed: value => {
                         log(logging, `Describe speed`, stage, model, value);
+                        onSpeed?.(value);
                     },
                 });
                 log(
@@ -178,34 +186,46 @@ const
         descriptions,
         language,
         currentIndex,
+        onSpeed,
+        onText,
     }: {
         translator: ChatModel,
-        generate: (
+        generate: (input: {
             model: ChatModelId,
             messages: ChatMessage[],
             stage: string,
-        ) => Promise<string | undefined>,
+            onSpeed?: (tokensPerSecond: number) => void,
+            onText?: (text: string) => void,
+        }) => Promise<string | undefined>,
         descriptions: string[],
         language: string,
         currentIndex?: DescribeTranslatedInput[`currentIndex`],
+        onSpeed?: DescribeTranslatedInput[`onSpeed`],
+        onText?: DescribeTranslatedInput[`onText`],
     }): Promise<string[]> => {
         const result = [...descriptions];
         for (let index = 0; index < descriptions.length; index++) {
             const
                 descriptionEN = descriptions[index],
-                text = await generate(translator.id, [{
-                    role: LlmRole.system,
-                    content: translateSystem,
-                }, {
-                    role: LlmRole.user,
-                    content: `[image] describe this image in English very accurately`,
-                }, {
-                    role: LlmRole.assistant,
-                    content: descriptionEN,
-                }, {
-                    role: LlmRole.user,
-                    content: translatePrompt(language),
-                }], `translate`),
+                text = await generate({
+                    model: translator.id,
+                    messages: [{
+                        role: LlmRole.system,
+                        content: translateSystem,
+                    }, {
+                        role: LlmRole.user,
+                        content: `[image] describe this image in English very accurately`,
+                    }, {
+                        role: LlmRole.assistant,
+                        content: descriptionEN,
+                    }, {
+                        role: LlmRole.user,
+                        content: translatePrompt(language),
+                    }],
+                    stage: `translate`,
+                    onSpeed: speed => onSpeed?.(index, speed),
+                    onText: value => onText?.(index, value, `translate`),
+                }),
                 description = (text || ``).trim(),
                 refused = description
                     .replace(/[^a-z]/gi, ``)
@@ -290,14 +310,20 @@ const createDescribeOn = (service: Runtime) => async (
         );
         currentIndex?.(index);
         const
-            text = await generate(describer.id, [{
-                role: LlmRole.system,
-                content: imageSystem,
-            }, {
-                role: LlmRole.user,
-                content: imageNote,
-                images: [source],
-            }], `describe`),
+            text = await generate({
+                model: describer.id,
+                messages: [{
+                    role: LlmRole.system,
+                    content: imageSystem,
+                }, {
+                    role: LlmRole.user,
+                    content: imageNote,
+                    images: [source],
+                }],
+                stage: `describe`,
+                onSpeed: speed => input.onSpeed?.(index, speed),
+                onText: value => input.onText?.(index, value, `describe`),
+            }),
             durationMs = Date.now() - startedAt,
             descriptionEN = (text || ``).trim();
         log(logging, `Describe english`, index, durationMs, descriptionEN);
@@ -337,6 +363,7 @@ const createDescribeOn = (service: Runtime) => async (
                 if (description) item.description = description;
                 currentIndex?.(index, descriptionEN, item.description, item.durationMs);
             },
+            onText: input.onText,
         });
         report(translator.id, {
             requesting: false,
@@ -409,6 +436,8 @@ const createTranslateOn = (service: Runtime) => async (
         descriptions,
         language,
         currentIndex: input.currentIndex,
+        onSpeed: input.onSpeed,
+        onText: input.onText,
     });
     report(translator.id, {
         requesting: false,

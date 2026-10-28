@@ -320,6 +320,14 @@ interface DescribeImagesInput {
         description?: string,
         durationMs?: number,
     ) => void,
+    /** Index of the image being described and its speed, tokens per second */
+    onSpeed?: (index: number, tokensPerSecond: number) => void,
+    /** Index of the image and its accumulated text while the model writes */
+    onText?: (
+        index: number,
+        text: string,
+        stage: `describe` | `translate`,
+    ) => void,
     /** Override any token, prompt or thread budget */
     limits?: Partial<LlmLimits>,
     /** Whether package and engine logs reach the console, defaults to off */
@@ -339,6 +347,14 @@ interface DescribeTranslatedInput {
         index: number,
         descriptionEN?: string,
         description?: string,
+    ) => void,
+    /** Index of the description being generated and its speed, tokens per second */
+    onSpeed?: (index: number, tokensPerSecond: number) => void,
+    /** Index of the description and its accumulated text while the model writes */
+    onText?: (
+        index: number,
+        text: string,
+        stage: `translate`,
     ) => void,
     /** Override any token, prompt or thread budget */
     limits?: Partial<LlmLimits>,

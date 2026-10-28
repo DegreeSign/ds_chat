@@ -519,13 +519,13 @@ const step = (ids, text) => ({ ids, text });
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 37);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 68);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 788);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 804);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 292);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 432);
+f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 472);
 f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 271);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 154);
-f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 505);
+f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 506);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 387);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 494);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
@@ -543,8 +543,8 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4684);
-f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4691);
+f(`live`, `test`, `live.cjs`, `test/live.cjs`, 504);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 195);
 f(`drive`, `test`, `drive.cjs`, `test/drive.cjs`, 206);
@@ -605,60 +605,61 @@ n(`chat`, `preloadModel`, 278, `preloadModel`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`chat`, `clearModelCache`, 281, `clearModelCache`, `() => Promise<void>`,
     `Release the loaded model and delete every cached model file`);
-n(`describe`, `describeImages`, 422, `describeImages`,
+n(`describe`, `describeImages`, 462, `describeImages`,
     `(input: DescribeImagesInput) => Promise<ImageDescription[]>`,
-    `Describe every image and report its duration, then translate each`
+    `Describe every image, stream its text and speed, then translate each`
     + ` description on a GPU, bound to the singleton runtime`);
-n(`describe`, `describeTranslated`, 425, `describeTranslated`,
+n(`describe`, `describeTranslated`, 465, `describeTranslated`,
     `(input: DescribeTranslatedInput) => Promise<string[]>`,
-    `Translate existing English descriptions on a GPU, bound to the singleton`
-    + ` runtime`);
-n(`describe`, `createDescribeOn`, 221, `createDescribeOn`,
+    `Translate existing English descriptions on a GPU, streaming their text,`
+    + ` bound to the singleton runtime`);
+n(`describe`, `createDescribeOn`, 252, `createDescribeOn`,
     `(service: Runtime) => (input) => Promise<ImageDescription[]>`,
     `Testable factory: load the describer, describe each image with a generous`
-    + ` reply budget and an accuracy system message, time every image, then load`
+    + ` reply budget and an accessibility system message, time every image, then load`
     + ` the translator when a GPU exists and the target is not English; a`
     + ` CANNOT_TRANSLATE reply keeps English and every model or request state`
     + ` reaches onStatus`);
-n(`describe`, `createTranslateOn`, 366, `createTranslateOn`,
+n(`describe`, `createTranslateOn`, 404, `createTranslateOn`,
     `(service: Runtime) => (input) => Promise<string[]>`,
     `Testable factory: load the translator when a GPU exists, translate each`
     + ` English description, and keep English when no model or refusal stops it`);
-n(`describe`, `describeTools`, 68, `describeTools`,
+n(`describe`, `describeTools`, 75, `describeTools`,
     `({ service, limits, logging, onStatus }) => tools`,
     `Build the shared load, generate and status helpers of describers and`
     + ` translators`);
-n(`describe`, `translateDescriptions`, 175, `translateDescriptions`,
-    `({ translator, generate, descriptions, language, currentIndex }) =>`
-    + ` Promise<string[]>`,
-    `Translate every English description, keep English on refusal and report`
-    + ` each finished entry`);
-n(`describe`, `report`, 80, `report`, `(model, state) => void`,
+n(`describe`, `translateDescriptions`, 194, `translateDescriptions`,
+    `({ translator, generate, descriptions, language, currentIndex, onSpeed,`
+    + ` onText }) => Promise<string[]>`,
+    `Translate every English description, stream its text, keep English on`
+    + ` refusal and report each finished entry and its speed`);
+n(`describe`, `report`, 87, `report`, `(model, state) => void`,
     `Publish one snapshot for the describer, translator or final state`);
-n(`describe`, `load`, 83, `load`, `(model) => Promise<string | undefined>`,
+n(`describe`, `load`, 90, `load`, `(model) => Promise<string | undefined>`,
     `Load one model, forward its progress, log the load and return its failure`
     + ` text`);
-n(`describe`, `generate`, 128, `generate`,
-    `(model, messages, stage) => Promise<string | undefined>`,
-    `Run one reply, log its stage, duration, streamed deltas and text, and`
-    + ` report the error before rethrowing it`);
+n(`describe`, `generate`, 135, `generate`,
+    `({ model, messages, stage, onSpeed?, onText? })`
+    + ` => Promise<string | undefined>`,
+    `Run one reply, log its stage, duration, streamed deltas and text, forward`
+    + ` its accumulated text and speed and report the error before rethrowing`);
 n(`log`, `log`, 2, `log`, `(logging, ...args) => void`,
     `Write one package log line only when the call enables logging`);
 n(`describe`, `imageSystem`, 20, `imageSystem`, `string`,
-    `The accuracy system message sent before every image`);
-n(`describe`, `imageNote`, 29, `imageNote`, `string`,
-    `The exact English note sent with every image`);
-n(`describe`, `imageReplyTokens`, 38, `imageReplyTokens`, `600`,
+    `The accessibility role and permission system message sent before every image`);
+n(`describe`, `imageNote`, 33, `imageNote`, `string`,
+    `The exact English coverage and output note sent with every image`);
+n(`describe`, `imageReplyTokens`, 45, `imageReplyTokens`, `400`,
     `Default reply budget of one description and translation, overridable by`
     + ` limits`);
-n(`describe`, `translateSystem`, 41, `translateSystem`, `string`,
+n(`describe`, `translateSystem`, 48, `translateSystem`, `string`,
     `The accuracy system message sent before every translation`);
-n(`describe`, `cannotTranslate`, 48, `cannotTranslate`, `CANNOT_TRANSLATE`,
+n(`describe`, `cannotTranslate`, 55, `cannotTranslate`, `CANNOT_TRANSLATE`,
     `The exact reply that makes the description fall back to English`);
-n(`describe`, `needsTranslation`, 51, `needsTranslation`,
+n(`describe`, `needsTranslation`, 58, `needsTranslation`,
     `(language: string) => boolean`,
     `English tags skip the translation pass`);
-n(`describe`, `translatePrompt`, 57, `translatePrompt`,
+n(`describe`, `translatePrompt`, 64, `translatePrompt`,
     `(language) => string`,
     `One translation request that asks for the translation alone`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
@@ -704,49 +705,50 @@ n(`types`, `preload`, 295, `ChatPreloadInput`,
 n(`types`, `describe`, 301,
     `ImageDescription · DescribeImagesInput · DescribeTranslatedInput`,
     `descriptionEN · description · durationMs · targetLanguage · images`
-    + ` · descriptions · currentIndex · limits · logging · onStatus`,
+    + ` · descriptions · currentIndex · onSpeed · onText · limits · logging`
+    + ` · onStatus`,
     `One English and translated description with its description time, the`
     + ` batch image request, and the English-description translation request,`
-    + ` including their status callbacks`);
-n(`types`, `call`, 386, `ChatState · ActiveCall · Runtime`,
+    + ` including their text, speed and status callbacks`);
+n(`types`, `call`, 402, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · cancelled · model · requesting · phase`
     + ` · percent · load · chat · unload · clear · error() · model()`,
     `One request state, one live call and the runtime it drives`);
-n(`types`, `load`, 413, `RuntimeLoadParams · RuntimeLoadWaiter`,
+n(`types`, `load`, 429, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
     + ` · report · settle`,
     `One load request and one caller waiting on the load it joined`);
-n(`types`, `store`, 433, `StoredPart · StoredFilePart · StoredModel`
+n(`types`, `store`, 449, `StoredPart · StoredFilePart · StoredModel`
     + ` · StoredModelMeta · ResumePlan · StoreDownloadParams · ModelStore`,
     `size · total · etag · start · complete · file · signal`
     + ` · stored · download · remove · purge`,
     `What the model file store keeps in its parts and metadata, where one`
     + ` response resumes, one download request and one engine store`);
-n(`types`, `params`, 527, `EngineChatParams · StartLlmParams`
+n(`types`, `params`, 543, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · onSpeed`
     + ` · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
     `Per-call budgets, accumulated text and speed callbacks`);
-n(`types`, `runtimeContract`, 559, `LlmRuntime · LlmEngine`,
+n(`types`, `runtimeContract`, 575, `LlmRuntime · LlmEngine`,
     `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`
     + ` · purge`,
     `The engine returns model, backend, contextSize, chat and unload, and can`
     + ` delete its whole cache`);
-n(`types`, `contentParts`, 584, `EngineContentPart`,
+n(`types`, `contentParts`, 600, `EngineContentPart`,
     `text | image | audio`,
     `One segment of a user turn before an engine maps it`);
-n(`types`, `messages`, 602, `EngineMessage`, `role + content`,
+n(`types`, `messages`, 618, `EngineMessage`, `role + content`,
     `One OpenAI-style turn, a user turn may carry media parts`);
-n(`types`, `litertRuntime`, 608, `LitertContentPart · LitertMessage`
+n(`types`, `litertRuntime`, 624, `LitertContentPart · LitertMessage`
     + ` · LitertEngine · LitertModule`,
     `text | image | audio · role + content + channels`,
     `The LiteRT content, turn, engine and module types, type only`);
-n(`types`, `litertParams`, 635, `LitertSession · LitertChatParams`
+n(`types`, `litertParams`, 651, `LitertSession · LitertChatParams`
     + ` · StreamLitertParams`,
     `conversation? · sent · reasoning · maxTokens · engine · model · mod`
     + ` · params · messages · session`,
     `The reused conversation, one LiteRT chat call and one stream over it`);
-n(`types`, `imageSize`, 712, `ImageSize`, `width · height`,
+n(`types`, `imageSize`, 728, `ImageSize`, `width · height`,
     `Pixel size of one image sent to an engine`);
 
 // model runtime
@@ -841,65 +843,66 @@ n(`models`, `supportsAudio`, 138, `supportsAudio`,
     + ` decides audio`);
 
 // prompt and streaming
-n(`engine`, `limits`, 16, `defaultLlmLimits`, `LlmLimits`,
+n(`engine`, `limits`, 17, `defaultLlmLimits`, `LlmLimits`,
     `Reply 250 tokens, thinking 128, reasoning total 320, 2 images,`
     + ` 1 audio clip, 1000 chars each, 10000 prompt chars, 6 CPU threads`);
-n(`engine`, `gpuReasoning`, 28, `gpuReasoningTokens`, `1200`,
+n(`engine`, `gpuReasoning`, 29, `gpuReasoningTokens`, `1200`,
     `Reasoning budget of the GPU engine, thought plus answer`);
-n(`engine`, `budgetLimit`, 31, `budgetLimit`,
+n(`engine`, `budgetLimit`, 32, `budgetLimit`,
     `(value, fallback, min) => number`,
     `Finite values at or above the floor are floored, anything else falls back`);
-n(`engine`, `resolveLimits`, 41, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
+n(`engine`, `resolveLimits`, 42, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
     `Clamp every budget, then fill every default, 1200 reasoning on the GPU`);
-n(`engine`, `replyOptions`, 91, `replyOptions`, `(limits, reasoning) => object`,
+n(`engine`, `replyOptions`, 92, `replyOptions`, `(limits, reasoning) => object`,
     `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
-n(`engine`, `modelUrl`, 103, `modelUrl`, `(repo, file) => string`,
+n(`engine`, `modelUrl`, 104, `modelUrl`, `(repo, file) => string`,
     `Resolve one model file on huggingface.co`);
-n(`engine`, `contentLength`, 106, `contentLength`, `(response) => number`,
+n(`engine`, `contentLength`, 107, `contentLength`, `(response) => number`,
     `Declared size of one download, zero when the host hides it`);
-n(`engine`, `hasPart`, 109, `hasPart`, `(messages, type) => boolean`,
+n(`engine`, `hasPart`, 110, `hasPart`, `(messages, type) => boolean`,
     `Whether any built turn carries an image or audio part`);
-n(`engine`, `hasImages`, 117, `hasImages`, `(messages) => boolean`,
+n(`engine`, `hasImages`, 118, `hasImages`, `(messages) => boolean`,
     `Whether any built turn carries an image part`);
-n(`engine`, `hasAudio`, 120, `hasAudio`, `(messages) => boolean`,
+n(`engine`, `hasAudio`, 121, `hasAudio`, `(messages) => boolean`,
     `Whether any built turn carries an audio part`);
-n(`engine`, `userContent`, 132, `userContent`, `(text, images, audio) => content`,
+n(`engine`, `userContent`, 133, `userContent`, `(text, images, audio) => content`,
     `Text first, then each image, then each audio clip, or plain text`);
-n(`engine`, `contentParts`, 145, `contentParts`, `(content) => EngineContentPart[]`,
+n(`engine`, `contentParts`, 146, `contentParts`, `(content) => EngineContentPart[]`,
     `Flatten string or part content for a merge`);
-n(`engine`, `mergeContent`, 152, `mergeContent`, `(first, next) => content`,
+n(`engine`, `mergeContent`, 153, `mergeContent`, `(first, next) => content`,
     `Join same-role turns and collapse adjacent text parts`);
-n(`engine`, `buildMessages`, 171, `buildMessages`,
+n(`engine`, `buildMessages`, 172, `buildMessages`,
     `(messages, limits?) => EngineMessage[]`,
     `Keep text and media, cap images and audio newest first, fold system,`
     + ` drop leading assistant, merge same roles`);
-n(`engine`, `createThinkSplitter`, 238, `createThinkSplitter`,
+n(`engine`, `createThinkSplitter`, 239, `createThinkSplitter`,
     `(onReason, onText) => { feed, flush }`,
     `Separates inline reasoning markers from the visible reply`);
-n(`engine`, `findTag`, 246, `findTag`, `(data, tags) => { at, tag }`,
+n(`engine`, `findTag`, 247, `findTag`, `(data, tags) => { at, tag }`,
     `Earliest occurrence of any marker`);
-n(`engine`, `holdPartial`, 258, `holdPartial`, `(data, tags) => string`,
+n(`engine`, `holdPartial`, 259, `holdPartial`, `(data, tags) => string`,
     `Holds back the longest suffix that may still become a marker`);
-n(`engine`, `feed`, 271, `feed`, `(text) => void`,
+n(`engine`, `feed`, 272, `feed`, `(text) => void`,
     `Consume a chunk, switch on the current in-reason state`);
-n(`engine`, `flush`, 303, `flush`, `() => void`, `Emit whatever was held back`);
-n(`engine`, `stall`, 313, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
-    `360000 · 840000 · 30000`,
-    `Budgets before a first chunk, a vision first chunk and between chunks`);
-n(`engine`, `stallError`, 320, `StallError`, `class Error`,
+n(`engine`, `flush`, 304, `flush`, `() => void`, `Emit whatever was held back`);
+n(`engine`, `stall`, 314, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
+    `300000 desktop · 3000000 mobile · 840000 floor · 30000 idle`,
+    `First chunk budget per device, a vision floor over it, and the silence`
+    + ` between two chunks`);
+n(`engine`, `stallError`, 321, `StallError`, `class Error`,
     `A stream that stopped producing chunks`);
-n(`engine`, `timeout`, 323, `withTimeout`, `(work, ms, message) => Promise`,
+n(`engine`, `timeout`, 324, `withTimeout`, `(work, ms, message) => Promise`,
     `Race one promise against a timeout`);
-n(`engine`, `close`, 342, `closeStream`, `(iterator) => void`,
+n(`engine`, `close`, 343, `closeStream`, `(iterator) => void`,
     `Close a stream without waiting for it`);
-n(`engine`, `logs`, 349, `logChatCall`, `(model, messages) => void`,
+n(`engine`, `logs`, 350, `logChatCall`, `(model, messages) => void`,
     `Message text and media data are censored, the caller checks the flag`);
-n(`engine`, `streamReply`, 365, `streamReply`, `(params) => Promise<string?>`,
+n(`engine`, `streamReply`, 366, `streamReply`, `(params) => Promise<string?>`,
     `Run the chunk loop, read inline or structured reasoning, collect reply`
     + ` and thought, measure the streamed token speed, stop a silent engine,`
     + ` log when enabled, honour stop`);
 
-n(`engine`, `runEngineChat`, 464, `runEngineChat`,
+n(`engine`, `runEngineChat`, 465, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
@@ -1241,7 +1244,7 @@ n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
 n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
     `Appends a console filter for the benign encoder-hint warnings to the`
     + ` emitted LiteRT glue, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.0.0`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.0.1`,
     `build = tsc declarations, webpack, banner, glue filter; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1439,6 +1442,7 @@ e(`runEngineChat`, `logs`, `call`);
 e(`runEngineChat`, `streamReply`, `call`);
 e(`runEngineChat`, `types.params`, `type`);
 e(`runEngineChat`, `images.resizeImages`, `call`);
+e(`stall`, `models.mobileDevice`, `call`);
 e(`createThinkSplitter`, `findTag`, `inner`);
 e(`createThinkSplitter`, `holdPartial`, `inner`);
 e(`createThinkSplitter`, `engine.feed`, `inner`);
@@ -1591,7 +1595,7 @@ e(`store.download`, `types.store`, `type`);
 
 // image resizing relations
 e(`images.resizeImages`, `images.resizeUrl`, `call`);
-e(`images.resizeUrl`, `images.maxSide`, `call`);
+e(`images.resizeUrl`, `images.visionSize`, `call`);
 
 // tools relations
 e(`entry.exports`, `tools.registry`, `type`);

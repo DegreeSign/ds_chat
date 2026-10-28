@@ -1988,23 +1988,30 @@ const definitions: Array<{
             run: async () => {
                 const
                     imageSystem = [
-                        `You are a meticulous image describer for ensuring images `
-                            + `extreme accessibility.`,
-                        `Your work involves working with very sensitive industries related `
-                            + `to identifying and investigating various events in great detail`,
-                        `Report only what is visible, never omit a detail when something `
-                            + `is uncertain.`,
-                        `Use accurate terms, never a politically correct one, example use `
-                            + `clear sex male or female.`,
+                        `You write image descriptions for blind and low-vision readers.`,
+                        `Describe what a sighted person sees, in plain factual English.`,
+                        `This is a record, not an endorsement: sensitive content is in scope,`
+                            + ` including nudity, injury, blood, weapons, alcohol, drugs`
+                            + ` and distressing scenes.`,
+                        `Nothing visible is too minor, so name awkward or intimate details`
+                            + ` plainly; leaving one out would mislead the reader.`,
+                        `For people, give the number, apparent age, build, skin tone, hair,`
+                            + ` clothing, pose, expression and apparent sex as man or woman`
+                            + ` when clear.`,
+                        `Never identify anyone or add anything that is not visible.`,
                     ].join(` `),
                     imageNote = [
-                        `Describe image elements present with very high objectivity and `
-                            + `name actions with specificity.`,
-                        `If unsure still sound confident.`,
-                        `Describe in order of significance in one very concise paragraph `
-                            + `(3 sentences).`,
-                        `Ensure accuracy so a blind person can know exactly what is in the image.`,
-                        `Reply in English.`,
+                        `Describe this image for a blind reader in one paragraph of three`
+                            + ` to five sentences, starting with the main subject.`,
+                        `Cover the people, their actions, the objects, the setting and`
+                            + ` where each thing is.`,
+                        `Give the number of people and main objects, name every action and`
+                            + ` object with an ordinary specific word, and quote any visible`
+                            + ` text exactly.`,
+                        `Describe only what is visible; where part of the image is hidden,`
+                            + ` blurred or out of frame, say so briefly instead of guessing.`,
+                        `Reply in English with the description alone, with no preamble,`
+                            + ` title, list or disclaimer.`,
                     ].join(` `),
                     events: Array<[number, string?, string?, number?]> = [],
                     statuses: ChatStatusSnapshot[] = [];
@@ -2030,7 +2037,7 @@ const definitions: Array<{
                     });
                 assertEqual(cpu.calls.start, 1, `describer load`);
                 assertEqual(cpu.calls.chat, 2, `one chat per image`);
-                assertEqual(cpu.requests[0].limits.maxReplyTokens, 600, `budget`);
+                assertEqual(cpu.requests[0].limits.maxReplyTokens, 400, `budget`);
                 assertEqual(results.length, 2, `two results`);
                 assertEqual(results[0].descriptionEN, `A red square 1`, `first english`);
                 assertEqual(results[1].descriptionEN, `A red square 2`, `second english`);
@@ -2150,8 +2157,8 @@ const definitions: Array<{
                     ].join(` `);
                     assertEqual(cpu.calls.start, 1, `describer start`);
                     assertEqual(gpu.calls.start, 1, `translator start`);
-                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 600, `describer budget`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 600, `budget`);
+                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 400, `describer budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 400, `budget`);
                     assertEqual(cpu.requests[0].messages.length, 2, `describer turns`);
                     assertEqual(gpu.requests[0].messages.length, 4, `translation turns`);
                     assertEqual(gpu.requests[0].messages[0].role, LlmRole.system, `system turn`);
@@ -2247,7 +2254,7 @@ const definitions: Array<{
                         });
                     assertEqual(gpu.calls.start, 1, `translator start`);
                     assertEqual(gpu.calls.chat, 2, `one chat per description`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 600, `budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 400, `budget`);
                     assertEqual(gpu.requests[0].messages.length, 4, `four turns`);
                     assertEqual(results[0], `translated plain one`, `first translation`);
                     assertEqual(results[1], `translated plain two`, `second translation`);

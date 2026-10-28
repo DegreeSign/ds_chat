@@ -429,10 +429,11 @@ with `requesting: false` marks the end of the call. `describeImages` reports the
 same snapshot for each model it loads: `qwen3_vl_2b_instruct_q3` while it
 describes, then `gemma4_e2b_limited` while it translates.
 
-A stream that never produces its first chunk ends with an error after 360
-seconds, or after 840 seconds when the prompt carries an image, because a CPU
-vision prefill takes minutes. Once a chunk has arrived, 30 seconds of silence
-ends the stream and keeps the text already delivered.
+A stream that never produces its first chunk ends with an error after 5
+minutes on a desktop or 50 minutes on a phone or tablet, and an image turn
+waits at least 14 minutes for a slow CPU vision prefill. Once a chunk has
+arrived, 30 seconds of silence ends the stream and keeps the text already
+delivered.
 
 ## Logging
 

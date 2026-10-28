@@ -1,4 +1,5 @@
 import { LlmRole } from '../enums';
+import { mobileDevice } from '../models';
 import { gpuImageSize, resizeImages } from './images';
 import type {
     ChatMessage,
@@ -309,10 +310,10 @@ const
     };
 
 const
-    /** Longest wait for the first streamed chunk, milliseconds */
-    firstReplyTimeout = 360000,
+    /** Longest wait for the first chunk, 5 min desktop, 50 min mobile */
+    firstReplyTimeout = mobileDevice() ? 3_000_000 : 300_000,
     /** Longest wait for the first chunk of an image turn, milliseconds */
-    firstVisionReplyTimeout = 840000,
+    firstVisionReplyTimeout = Math.max(firstReplyTimeout, 840_000),
     /** Longest silence between two streamed chunks, milliseconds */
     idleReplyTimeout = 30000;
 
