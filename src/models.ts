@@ -57,11 +57,11 @@ const
         },
     ],
     /** Context window requested from the CPU engine, a 32k KV cache needs 3.5 GB */
-    cpuContextWindow = 8192,
+    cpuContextWindow = 8192, // max 262_400
     /** CPU window on a phone, the smaller cache keeps the tab alive */
-    mobileCpuContextWindow = 4096,
+    mobileCpuContextWindow = 4096, // max 32_768
     /** Context window requested from the GPU engine, the wasm heap holds the model */
-    litertContextWindow = 4096,
+    litertContextWindow = 4096, // max 32_768
     /** Whether this client is a phone or tablet */
     mobileDevice = (nav?: MobileNavigator): boolean => {
         const client = nav ?? (typeof navigator == `undefined`

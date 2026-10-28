@@ -301,6 +301,8 @@ interface ImageDescription {
     descriptionEN: string,
     /** Translation of the English description, English itself without a GPU */
     description: string,
+    /** Time the describer took for this image, milliseconds */
+    durationMs: number,
 }
 
 /** One batch image description request */
@@ -314,6 +316,7 @@ interface DescribeImagesInput {
         index: number,
         descriptionEN?: string,
         description?: string,
+        durationMs?: number,
     ) => void,
     /** Override any token, prompt or thread budget */
     limits?: Partial<LlmLimits>,

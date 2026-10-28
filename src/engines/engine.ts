@@ -10,6 +10,7 @@ import type {
     LlmLimits,
     StreamReplyParams,
 } from '../types';
+import { rNum } from '@degreesign/utils';
 
 /** Default token, prompt and thread budgets of the CPU engine */
 const defaultLlmLimits: LlmLimits = {
@@ -310,6 +311,8 @@ const
 const
     /** Longest wait for the first streamed chunk, milliseconds */
     firstReplyTimeout = 180000,
+    /** Longest wait for the first chunk of an image turn, milliseconds */
+    firstVisionReplyTimeout = 420000,
     /** Longest silence between two streamed chunks, milliseconds */
     idleReplyTimeout = 30000;
 
@@ -433,7 +436,7 @@ const
                     if (!tokens) startedAt = now;
                     tokens += 1;
                     if (tokens > 1 && now > startedAt)
-                        onSpeed?.(tokens * 1000 / (now - startedAt));
+                        onSpeed?.(rNum(tokens * 1000 / (now - startedAt)));
                 };
             };
             splitter.flush();
@@ -477,6 +480,10 @@ const
             start: () => start(messages),
             stopped,
             onStall,
+            // vision prefill on the CPU engine needs minutes for one image
+            firstTimeoutMs: hasImages(messages)
+                ? firstVisionReplyTimeout
+                : firstReplyTimeout,
         });
     };
 

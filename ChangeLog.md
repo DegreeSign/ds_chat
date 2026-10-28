@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.2
+
+- Add `ImageDescription.durationMs`, the time the describer took for one image.
+- Pass that duration to `DescribeImagesInput.currentIndex` as its fourth
+  argument, so a host can show a per-image timing before the translation
+  arrives.
+
 ## 0.9.0
 
 - Add `describeImages`, which describes every image in English with

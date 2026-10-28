@@ -308,9 +308,13 @@ Qwen3-VL 2B Instruct build, one image at a time. When a WebGPU adapter exists
 and `targetLanguage` is not English, the English descriptions are then
 translated one by one with `gemma4_e2b_limited`. Without a GPU, when the
 translation model cannot load, or when the translator replies
-`CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. The
-description call uses a 1024-token reply budget unless
+`CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. Both the
+description and translation calls use a 2048-token reply budget unless
 `limits.maxReplyTokens` overrides it.
+
+The describer and translator each receive a system message that puts accuracy
+first: the describer reports only visible detail and the translator preserves
+meaning, names and numbers without adding or omitting anything.
 
 `DescribeImagesInput`:
 
@@ -318,7 +322,7 @@ description call uses a 1024-token reply budget unless
 | ----- | ----------- |
 | `targetLanguage` | Language of `description`; `en`, `English` or a tag such as `en-US` skips translation. |
 | `images` | Image data URLs or URLs, described in this order. |
-| `currentIndex?` | Receives `index`, then `index` and `descriptionEN`, then `index`, `descriptionEN` and `description`. |
+| `currentIndex?` | Receives `index`, then `index` and `descriptionEN`, then `index`, `descriptionEN`, `description` and the description time in milliseconds. |
 | `limits?` | Partial `LlmLimits` for both the description and translation calls. |
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` while the describer and translator load and run. |
@@ -329,12 +333,14 @@ The promise resolves one `ImageDescription` per image, in input order:
 | ----- | ----------- |
 | `descriptionEN` | The English description from the vision model. |
 | `description` | The translated description, or `descriptionEN` without a GPU. |
+| `durationMs` | Time the describer took for this image, in milliseconds. |
 
 `currentIndex` fires once per image at the start of its description, once when
 the English text is ready, and once when the final description is ready. The
-first call carries the index alone, the second adds `descriptionEN`, and the
-third adds `description`. The function uses the shared runtime, so it loads the
-describer and then the translator, replacing whichever model was loaded before.
+first call carries the index alone, the second adds `descriptionEN` and
+`durationMs`, and the third adds `description` while keeping `durationMs`. The
+function uses the shared runtime, so it loads the describer and then the
+translator, replacing whichever model was loaded before.
 
 `onStatus` follows the same snapshots as `createChat`. The describer reports
 first, with `supportsImages: true`. When a translation pass follows, the
@@ -398,14 +404,17 @@ same snapshot for each model it loads: `qwen3_vl_2b_instruct` while it
 describes, then `gemma4_e2b_limited` while it translates.
 
 A stream that never produces its first chunk ends with an error after 180
-seconds instead of waiting forever. Once a chunk has arrived, 30 seconds of
-silence ends the stream and keeps the text already delivered.
+seconds, or after 420 seconds when the prompt carries an image, because a CPU
+vision prefill takes minutes. Once a chunk has arrived, 30 seconds of silence
+ends the stream and keeps the text already delivered.
 
 ## Logging
 
 Console output stays off by default. Pass `logging: true` in a call to receive
 the package's censored engine logs, the wllama engine's own logs and the
-LiteRT-LM wasm diagnostics for that call. The flag is per call, so a later call
+LiteRT-LM wasm diagnostics for that call. `describeImages` also logs every stage
+from the model load to the generated English description, including the image
+URL or data URL size and the raw reply. The flag is per call, so a later call
 without it goes quiet again.
 
 ## Models
@@ -629,7 +638,7 @@ const useReply = () => {
 | `ChatInput` | One request: model, messages, budgets, reasoning and callbacks. |
 | `ChatPreloadInput` | Model, limits, logging and status, the subset `preloadModel` needs. |
 | `DescribeImagesInput` | Target language, images, progress callback, limits and logging. |
-| `ImageDescription` | `descriptionEN` and the translated `description`. |
+| `ImageDescription` | `descriptionEN`, the translated `description` and `durationMs`. |
 | `CancelChat` | The function returned by `createChat`. |
 | `ChatMessage` | One prompt turn, `role`, `content` and optional `images` and `audio`. |
 | `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |

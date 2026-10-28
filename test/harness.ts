@@ -1931,6 +1931,16 @@ const definitions: Array<{
             name: `describe/english`,
             run: async () => {
                 const
+                    imageSystem = [
+                        `You are a meticulous image describer for ensuring images `
+                            + `extreme accessibility.`,
+                        `Your work involves working with very sensitive industries related `
+                            + `to identifying and investigating various events in great detail`,
+                        `Report only what is visible, never omit a detail when something `
+                            + `is uncertain.`,
+                        `Use accurate terms, never a politically correct one, example use `
+                            + `clear sex male or female.`,
+                    ].join(` `),
                     imageNote = [
                         `Describe image elements present with very high objectivity and `
                             + `name actions with specificity.`,
@@ -1940,13 +1950,16 @@ const definitions: Array<{
                         `Ensure accuracy so a blind person can know exactly what is in the image.`,
                         `Reply in English.`,
                     ].join(` `),
-                    events: Array<[number, string?, string?]> = [],
+                    events: Array<[number, string?, string?, number?]> = [],
                     statuses: ChatStatusSnapshot[] = [];
                 let described = 0;
                 const
                     cpu = createFakeEngine({
                         backend: LlmBackend.cpu,
-                        chatImpl: async () => `A red square ${++described}`,
+                        chatImpl: async () => {
+                            await sleep(10);
+                            return `A red square ${++described}`;
+                        },
                     }),
                     runtime = createRuntime({
                         engines: { cpu: cpu.engine },
@@ -1955,30 +1968,49 @@ const definitions: Array<{
                     results = await createDescribeOn(runtime)({
                         targetLanguage: `en`,
                         images: [`one`, `two`],
-                        currentIndex: (index, descriptionEN, description) =>
-                            events.push([index, descriptionEN, description]),
+                        currentIndex: (index, descriptionEN, description, durationMs) =>
+                            events.push([index, descriptionEN, description, durationMs]),
                         onStatus: value => statuses.push(value),
                     });
                 assertEqual(cpu.calls.start, 1, `describer load`);
                 assertEqual(cpu.calls.chat, 2, `one chat per image`);
-                assertEqual(cpu.requests[0].limits.maxReplyTokens, 1024, `budget`);
+                assertEqual(cpu.requests[0].limits.maxReplyTokens, 2048, `budget`);
                 assertEqual(results.length, 2, `two results`);
                 assertEqual(results[0].descriptionEN, `A red square 1`, `first english`);
                 assertEqual(results[1].descriptionEN, `A red square 2`, `second english`);
                 assertEqual(results[0].description, results[0].descriptionEN, `english kept`);
+                assertEqual(results[0].durationMs > 0, true, `first duration`);
+                assertEqual(results[1].durationMs > 0, true, `second duration`);
                 assertEqual(events.length, 6, `three events per image`);
                 assertEqual(events[0][0], 0, `first index`);
                 assertEqual(events[0][1], undefined, `first pending`);
+                assertEqual(events[0][3], undefined, `pending duration`);
                 assertEqual(events[1][1], `A red square 1`, `first english event`);
                 assertEqual(events[1][2], undefined, `first awaiting translation`);
+                assertEqual(events[1][3], results[0].durationMs, `first event duration`);
                 assertEqual(events[2][0], 1, `second index`);
                 assertEqual(events[3][1], `A red square 2`, `second english event`);
-                assertEqual(events[4][2], `A red square 1`, `first final`);
-                assertEqual(events[5][2], `A red square 2`, `second final`);
-                assertEqual(cpu.requests[0].messages[0].images?.[0], `one`, `first image`);
-                assertEqual(cpu.requests[1].messages[0].images?.[0], `two`, `second image`);
                 assertEqual(
-                    cpu.requests[0].messages[0].content,
+                    events[3][3],
+                    results[1].durationMs,
+                    `second event duration`,
+                );
+                assertEqual(events[4][2], `A red square 1`, `first final`);
+                assertEqual(events[4][3], results[0].durationMs, `first final duration`);
+                assertEqual(events[5][2], `A red square 2`, `second final`);
+                assertEqual(
+                    events[5][3],
+                    results[1].durationMs,
+                    `second final duration`,
+                );
+                assertEqual(cpu.requests[0].messages.length, 2, `two turns`);
+                assertEqual(cpu.requests[0].messages[1].role, LlmRole.user, `user role`);
+                assertEqual(cpu.requests[0].messages[1].images?.[0], `one`, `first image`);
+                assertEqual(cpu.requests[1].messages[1].images?.[0], `two`, `second image`);
+                assertEqual(cpu.requests[0].messages[0].role, LlmRole.system, `system role`);
+                assertEqual(cpu.requests[0].messages[0].content, imageSystem, `system note`);
+                assertEqual(
+                    cpu.requests[0].messages[1].content,
                     imageNote,
                     `image note`,
                 );
@@ -2013,7 +2045,7 @@ const definitions: Array<{
             run: async () => {
                 await withGpu(async () => {
                     const
-                        events: Array<[number, string?, string?]> = [],
+                        events: Array<[number, string?, string?, number?]> = [],
                         statuses: ChatStatusSnapshot[] = [],
                         prompts: string[] = [];
                     let described = 0;
@@ -2039,8 +2071,8 @@ const definitions: Array<{
                         results = await createDescribeOn(runtime)({
                             targetLanguage: `German`,
                             images: [`one`, `two`],
-                            currentIndex: (index, descriptionEN, description) =>
-                                events.push([index, descriptionEN, description]),
+                            currentIndex: (index, descriptionEN, description, durationMs) =>
+                                events.push([index, descriptionEN, description, durationMs]),
                             onStatus: value => statuses.push(value),
                         });
                     assertEqual(
@@ -2053,16 +2085,64 @@ const definitions: Array<{
                         ChatModelId.gemma4_e2b_limited,
                         `translator model`,
                     );
+                    const translateSystem = [
+                        `You are a precise translator.`,
+                        `Translate the text faithfully and literally into the target`
+                            + ` language.`,
+                        `Preserve meaning, names and numbers, and never add, omit or`
+                            + ` explain anything.`,
+                    ].join(` `);
                     assertEqual(cpu.calls.start, 1, `describer start`);
                     assertEqual(gpu.calls.start, 1, `translator start`);
+                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 2048, `describer budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 2048, `budget`);
+                    assertEqual(cpu.requests[0].messages.length, 2, `describer turns`);
+                    assertEqual(gpu.requests[0].messages.length, 4, `translation turns`);
+                    assertEqual(gpu.requests[0].messages[0].role, LlmRole.system, `system turn`);
+                    assertEqual(
+                        gpu.requests[0].messages[0].content,
+                        translateSystem,
+                        `system note`,
+                    );
+                    assertEqual(
+                        gpu.requests[0].messages[1].content,
+                        `[image] describe this image in English very accurately`,
+                        `translation image note`,
+                    );
+                    assertEqual(
+                        gpu.requests[0].messages[2].role,
+                        LlmRole.assistant,
+                        `english turn`,
+                    );
+                    assertEqual(
+                        gpu.requests[0].messages[2].content,
+                        `description 1`,
+                        `english content`,
+                    );
+                    assertEqual(
+                        gpu.requests[0].messages[3].role,
+                        LlmRole.user,
+                        `prompt turn`,
+                    );
                     assertEqual(results[0].descriptionEN, `description 1`, `first english`);
                     assertEqual(results[0].description, `translated 1`, `first translation`);
                     assertEqual(results[1].description, `translated 2`, `second translation`);
+                    assert(
+                        typeof results[0].durationMs == `number`,
+                        `first duration`,
+                    );
+                    assert(
+                        typeof results[1].durationMs == `number`,
+                        `second duration`,
+                    );
                     assert(prompts[0].includes(`German`), `target language`);
                     assert(prompts[0].includes(`description 1`), `source text`);
-                    assertEqual(events.length, 6, `four events per image`);
+                    assertEqual(events.length, 6, `three events per image`);
+                    assertEqual(events[1][3], results[0].durationMs, `english duration`);
                     assertEqual(events[4][2], `translated 1`, `first final`);
+                    assertEqual(events[4][3], results[0].durationMs, `first final duration`);
                     assertEqual(events[5][2], `translated 2`, `second final`);
+                    assertEqual(events[5][3], results[1].durationMs, `second final duration`);
                     assertEqual(
                         statuses.some(value =>
                             value.model == ChatModelId.gemma4_e2b_limited),
@@ -2092,7 +2172,7 @@ const definitions: Array<{
             run: async () => {
                 await withGpu(async () => {
                     const
-                        events: Array<[number, string?, string?]> = [],
+                        events: Array<[number, string?, string?, number?]> = [],
                         cpu = createFakeEngine({
                             backend: LlmBackend.cpu,
                             chatImpl: async () => `plain english`,
@@ -2107,11 +2187,15 @@ const definitions: Array<{
                         results = await createDescribeOn(runtime)({
                             targetLanguage: `fa`,
                             images: [`one`],
-                            currentIndex: (index, descriptionEN, description) =>
-                                events.push([index, descriptionEN, description]),
+                            limits: { maxReplyTokens: 64 },
+                            currentIndex: (index, descriptionEN, description, durationMs) =>
+                                events.push([index, descriptionEN, description, durationMs]),
                         });
+                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 64, `describer budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 64, `translator budget`);
                     assertEqual(results[0].description, `plain english`, `english kept`);
                     assertEqual(events[2][2], `plain english`, `refusal event`);
+                    assertEqual(events[2][3], results[0].durationMs, `refusal duration`);
                 });
             },
         },
@@ -2120,7 +2204,7 @@ const definitions: Array<{
             run: async () => {
                 await withGpu(async () => {
                     const
-                        events: Array<[number, string?, string?]> = [],
+                        events: Array<[number, string?, string?, number?]> = [],
                         statuses: ChatStatusSnapshot[] = [],
                         cpu = createFakeEngine({
                             backend: LlmBackend.cpu,
@@ -2133,14 +2217,15 @@ const definitions: Array<{
                         results = await createDescribeOn(runtime)({
                             targetLanguage: `fr`,
                             images: [`one`],
-                            currentIndex: (index, descriptionEN, description) =>
-                                events.push([index, descriptionEN, description]),
+                            currentIndex: (index, descriptionEN, description, durationMs) =>
+                                events.push([index, descriptionEN, description, durationMs]),
                             onStatus: value => statuses.push(value),
                         });
                     assertEqual(cpu.calls.start, 1, `describer load`);
                     assertEqual(results[0].description, `plain english`, `english fallback`);
                     assertEqual(events.length, 3, `three events`);
                     assertEqual(events[2][2], `plain english`, `fallback event`);
+                    assertEqual(events[2][3], results[0].durationMs, `fallback duration`);
                     assertEqual(
                         statuses.some(value =>
                             value.model == ChatModelId.gemma4_e2b_limited),
@@ -2160,7 +2245,7 @@ const definitions: Array<{
             run: async () => {
                 await withGpu(async () => {
                     const
-                        events: Array<[number, string?, string?]> = [],
+                        events: Array<[number, string?, string?, number?]> = [],
                         statuses: ChatStatusSnapshot[] = [],
                         cpu = createFakeEngine({
                             backend: LlmBackend.cpu,
@@ -2176,13 +2261,14 @@ const definitions: Array<{
                         results = await createDescribeOn(runtime)({
                             targetLanguage: `de`,
                             images: [`one`],
-                            currentIndex: (index, descriptionEN, description) =>
-                                events.push([index, descriptionEN, description]),
+                            currentIndex: (index, descriptionEN, description, durationMs) =>
+                                events.push([index, descriptionEN, description, durationMs]),
                             onStatus: value => statuses.push(value),
                         });
                     assertEqual(gpu.calls.start, 1, `translator attempted`);
                     assertEqual(results[0].description, `plain english`, `english kept`);
                     assertEqual(events[2][2], `plain english`, `fallback event`);
+                    assertEqual(events[2][3], results[0].durationMs, `failure duration`);
                     assertEqual(
                         statuses[statuses.length - 1].model,
                         ChatModelId.gemma4_e2b_limited,
@@ -4331,6 +4417,66 @@ const definitions: Array<{
                     42,
                     `host tool runs`,
                 );
+            },
+        },
+        {
+            name: `describe/logging`,
+            run: async () => {
+                const
+                    logs: string[] = [],
+                    original = console.log,
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        thinkingText: `thinking`,
+                        chatText: `logged description`,
+                        onChat: params => params.onSpeed?.(42),
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    });
+                console.log = (...args: unknown[]) => {
+                    logs.push(args.map(value => `${value}`).join(` `));
+                };
+                try {
+                    await createDescribeOn(runtime)({
+                        targetLanguage: `en`,
+                        images: [`one`],
+                        logging: true,
+                    });
+                    assert(
+                        logs.some(line => line.startsWith(`Describe start`)),
+                        `describe start log`,
+                    );
+                    assert(
+                        logs.some(line => line.includes(`Describe english`)),
+                        `describe english log`,
+                    );
+                    assert(
+                        logs.some(line => line.includes(`logged description`)),
+                        `description log`,
+                    );
+                    assert(
+                        logs.some(line => line.includes(`Describe reason`)),
+                        `reason log`,
+                    );
+                    assert(
+                        logs.some(line => line.includes(`Describe text`)),
+                        `text log`,
+                    );
+                    assert(
+                        logs.some(line => line.includes(`Describe speed`)),
+                        `speed log`,
+                    );
+                    logs.length = 0;
+                    await createDescribeOn(runtime)({
+                        targetLanguage: `en`,
+                        images: [`one`],
+                    });
+                    assertEqual(logs.length, 0, `logs stay off`);
+                } finally {
+                    console.log = original;
+                };
             },
         },
     ];

@@ -34,7 +34,7 @@ const
 const cpuThreads = (cores: number, maxThreads: number): number =>
     Math.max(1, Math.min(
         Math.max(2, Math.min(8, (cores || 4) - 1)),
-        maxThreads,
+        2, //  maxThreads,
     ));
 
 let
