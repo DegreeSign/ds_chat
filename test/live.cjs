@@ -55,9 +55,13 @@ window.addEventListener("unhandledrejection", event => {
 <script type="module">
 import { createChat, preloadModel, ChatModelId, LlmRole } from "/dist/browser/chat.min.mjs";
 
-const results = document.getElementById("results");
-const log = document.getElementById("log");
-const write = text => { log.textContent += text + "\\n"; };
+const
+    results = document.getElementById("results"),
+    log = document.getElementById("log"),
+    query = new URLSearchParams(location.search),
+    threads = Number(query.get("threads") || 0),
+    askTimeout = Number(query.get("ask") || 1200000),
+    write = text => { log.textContent += text + "\\n"; };
 console.log = (...args) => write(args.map(a =>
     typeof a == "string"
         ? a
@@ -109,26 +113,40 @@ const imageDataUrl = (color, size = 96) => {
 
 /** Run one chat call and wait for the end snapshot. */
 const ask = (input, label) => new Promise(resolve => {
-    const state = {
-        reply: "",
-        thinking: "",
-        statuses: [],
-        error: undefined,
-        started: false,
-    };
+    const
+        startedAt = performance.now(),
+        state = {
+            reply: "",
+            thinking: "",
+            statuses: [],
+            error: undefined,
+            started: false,
+            firstTextAt: undefined,
+        };
     let cancel = () => { };
     const finish = extra => {
         clearTimeout(timer);
-        resolve({ ...state, ...extra });
+        resolve({
+            ...state,
+            ...extra,
+            firstTextMs: state.firstTextAt
+                ? Math.round(state.firstTextAt - startedAt)
+                : undefined,
+        });
     };
     const timer = setTimeout(() => {
         cancel();
         finish({ timedOut: true });
-    }, 600000);
+    }, askTimeout);
     cancel = createChat({
         ...input,
         onResponse: text => {
             state.reply = text;
+            if (!state.firstTextAt) {
+                state.firstTextAt = performance.now();
+                write(label + " first text "
+                    + Math.round(state.firstTextAt - startedAt) + " ms");
+            }
             write(label + " reply: " + text.slice(0, 160).replace(/\\n/g, " "));
         },
         onThinking: text => { state.thinking = text; },
@@ -150,21 +168,28 @@ const ask = (input, label) => new Promise(resolve => {
 
 const run = async () => {
     write("crossOriginIsolated=" + crossOriginIsolated
-        + " gpu=" + typeof navigator.gpu);
+        + " gpu=" + typeof navigator.gpu
+        + " cores=" + navigator.hardwareConcurrency
+        + " threads=" + (threads || "default"));
     const adapter = await navigator.gpu?.requestAdapter();
     write("adapter=" + (adapter ? adapter.info.vendor + " " + adapter.info.architecture : "none"));
 
-    const model = new URLSearchParams(location.search).get("model") || "gemma4_e2b";
+    const model = query.get("model") || "gemma4_e2b";
     const chosen = model == "qwen3_vl_2b"
         ? ChatModelId.qwen3_vl_2b
-        : model == "gemma4_e2b_limited"
-            ? ChatModelId.gemma4_e2b_limited
-            : ChatModelId.gemma4_e2b;
+        : model == "qwen3_vl_2b_instruct"
+            ? ChatModelId.qwen3_vl_2b_instruct
+            : model == "qwen3_vl_2b_instruct_q3"
+                ? ChatModelId.qwen3_vl_2b_instruct_q3
+                : model == "gemma4_e2b_limited"
+                    ? ChatModelId.gemma4_e2b_limited
+                    : ChatModelId.gemma4_e2b;
     const state = {};
     write("model=" + model);
     const loaded = await preloadModel({
         model: chosen,
         logging: true,
+        ...(threads ? { limits: { maxThreads: threads } } : {}),
         onStatus: snapshot => {
             state.lastPreload = snapshot;
             if (snapshot.percent % 25 == 0)
@@ -180,7 +205,7 @@ const run = async () => {
     }
 
     const replyBudget = { maxReplyTokens: 320 };
-    const only = new URLSearchParams(location.search).get("only");
+    const only = query.get("only");
     const wanted = name => !only || only.split(",").includes(name);
     const timed = async (name, work) => {
         if (!wanted(name)) return;
@@ -237,6 +262,7 @@ const run = async () => {
             reply: image.reply.slice(0, 120),
             error: image.last?.error,
             timedOut: image.timedOut,
+            firstTextMs: image.firstTextMs,
         });
     });
 

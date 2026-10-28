@@ -1,6 +1,6 @@
 import type { ChatModel, EngineMessage, LlmEngine, LlmRuntime, StartLlmParams, WllamaMessage } from '../types';
-/** CPU threads after the hardware maximum and the caller cap */
-declare const cpuThreads: (cores: number, maxThreads: number) => number;
+/** CPU threads after the hardware maximum, the caller and the cap */
+declare const cpuThreads: (cores: number, limit: number, vision?: boolean) => number;
 /** Image limits of one model */
 declare const visionLimits: (model: ChatModel) => {
     image_min_tokens: number;

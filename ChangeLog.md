@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0
+
+- Add `describeTranslated`, which translates existing English image descriptions
+  on the GPU and returns one translated string per description, keeping English
+  when the translator is unavailable or declines.
+- Add `DescribeTranslatedInput`, the batch translation request.
+- Add `ChatModelId.qwen3_vl_2b_instruct_q3`, the Q3_K_M build of Unsloth
+  Qwen3-VL 2B Instruct, and make `describeImages` load it for the English
+  pass. `qwen3_vl_2b_instruct` stays in the catalog as the Q4_K_M build.
+
 ## 0.9.2
 
 - Add `ImageDescription.durationMs`, the time the describer took for one image.

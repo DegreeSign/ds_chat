@@ -517,16 +517,16 @@ const e = (from, to, kind) => EDGES.push({ from, to, kind });
 const step = (ids, text) => ({ ids, text });
 
 f(`host`, `host`, `host app`, `host app`, 0, true);
-f(`entry`, `entry`, `index.ts`, `src/index.ts`, 36);
-f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 67);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 765);
+f(`entry`, `entry`, `index.ts`, `src/index.ts`, 37);
+f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 68);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 788);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 292);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 321);
+f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 432);
 f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 271);
-f(`models`, `runtime`, `models.ts`, `src/models.ts`, 140);
+f(`models`, `runtime`, `models.ts`, `src/models.ts`, 154);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 505);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 376);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 387);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 494);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 178);
@@ -543,7 +543,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4537);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 4684);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 478);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 195);
@@ -605,48 +605,66 @@ n(`chat`, `preloadModel`, 278, `preloadModel`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`chat`, `clearModelCache`, 281, `clearModelCache`, `() => Promise<void>`,
     `Release the loaded model and delete every cached model file`);
-n(`describe`, `describeImages`, 319, `describeImages`,
+n(`describe`, `describeImages`, 422, `describeImages`,
     `(input: DescribeImagesInput) => Promise<ImageDescription[]>`,
     `Describe every image and report its duration, then translate each`
     + ` description on a GPU, bound to the singleton runtime`);
-n(`describe`, `createDescribeOn`, 64, `createDescribeOn`,
+n(`describe`, `describeTranslated`, 425, `describeTranslated`,
+    `(input: DescribeTranslatedInput) => Promise<string[]>`,
+    `Translate existing English descriptions on a GPU, bound to the singleton`
+    + ` runtime`);
+n(`describe`, `createDescribeOn`, 221, `createDescribeOn`,
     `(service: Runtime) => (input) => Promise<ImageDescription[]>`,
     `Testable factory: load the describer, describe each image with a generous`
     + ` reply budget and an accuracy system message, time every image, then load`
     + ` the translator when a GPU exists and the target is not English; a`
     + ` CANNOT_TRANSLATE reply keeps English and every model or request state`
     + ` reaches onStatus`);
-n(`describe`, `report`, 84, `report`, `(model, state) => void`,
+n(`describe`, `createTranslateOn`, 366, `createTranslateOn`,
+    `(service: Runtime) => (input) => Promise<string[]>`,
+    `Testable factory: load the translator when a GPU exists, translate each`
+    + ` English description, and keep English when no model or refusal stops it`);
+n(`describe`, `describeTools`, 68, `describeTools`,
+    `({ service, limits, logging, onStatus }) => tools`,
+    `Build the shared load, generate and status helpers of describers and`
+    + ` translators`);
+n(`describe`, `translateDescriptions`, 175, `translateDescriptions`,
+    `({ translator, generate, descriptions, language, currentIndex }) =>`
+    + ` Promise<string[]>`,
+    `Translate every English description, keep English on refusal and report`
+    + ` each finished entry`);
+n(`describe`, `report`, 80, `report`, `(model, state) => void`,
     `Publish one snapshot for the describer, translator or final state`);
-n(`describe`, `load`, 87, `load`, `(model, limits) => Promise<string | undefined>`,
+n(`describe`, `load`, 83, `load`, `(model) => Promise<string | undefined>`,
     `Load one model, forward its progress, log the load and return its failure`
     + ` text`);
-n(`describe`, `generate`, 135, `generate`,
+n(`describe`, `generate`, 128, `generate`,
     `(model, messages, stage) => Promise<string | undefined>`,
     `Run one reply, log its stage, duration, streamed deltas and text, and`
     + ` report the error before rethrowing it`);
 n(`log`, `log`, 2, `log`, `(logging, ...args) => void`,
     `Write one package log line only when the call enables logging`);
-n(`describe`, `imageSystem`, 18, `imageSystem`, `string`,
+n(`describe`, `imageSystem`, 20, `imageSystem`, `string`,
     `The accuracy system message sent before every image`);
-n(`describe`, `imageNote`, 26, `imageNote`, `string`,
+n(`describe`, `imageNote`, 29, `imageNote`, `string`,
     `The exact English note sent with every image`);
-n(`describe`, `imageReplyTokens`, 35, `imageReplyTokens`, `2048`,
+n(`describe`, `imageReplyTokens`, 38, `imageReplyTokens`, `600`,
     `Default reply budget of one description and translation, overridable by`
     + ` limits`);
-n(`describe`, `translateSystem`, 38, `translateSystem`, `string`,
+n(`describe`, `translateSystem`, 41, `translateSystem`, `string`,
     `The accuracy system message sent before every translation`);
-n(`describe`, `cannotTranslate`, 45, `cannotTranslate`, `CANNOT_TRANSLATE`,
+n(`describe`, `cannotTranslate`, 48, `cannotTranslate`, `CANNOT_TRANSLATE`,
     `The exact reply that makes the description fall back to English`);
-n(`describe`, `needsTranslation`, 48, `needsTranslation`,
+n(`describe`, `needsTranslation`, 51, `needsTranslation`,
     `(language: string) => boolean`,
     `English tags skip the translation pass`);
-n(`describe`, `translatePrompt`, 54, `translatePrompt`,
+n(`describe`, `translatePrompt`, 57, `translatePrompt`,
     `(language) => string`,
     `One translation request that asks for the translation alone`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
     `LlmRole, ChatStatus, LlmStatus, LlmBackend (cpu, gpu, none), LlmPhase,`
-    + ` ChatModelId (qwen, qwen instruct, gemma, gemma limited), BuiltinTool`
+    + ` ChatModelId (qwen, qwen instruct, instruct q3, gemma, gemma limited),`
+    + ` BuiltinTool`
     + ` and WebSearchProvider`);
 n(`types`, `tools`, 22, `tool records`,
     `ChatTool · ChatToolSchema · ChatToolValue · ChatToolCall`
@@ -672,62 +690,63 @@ n(`types`, `gpu`, 348, `GpuNavigator`, `gpu?.requestAdapter`,
 n(`types`, `mobile`, 358, `MobileNavigator`,
     `userAgentData?.mobile · userAgent · maxTouchPoints`,
     `The narrow navigator view that tells a phone from a desktop`);
-n(`types`, `snapshots`, 248, `ChatStatusSnapshot`,
+n(`types`, `snapshots`, 250, `ChatStatusSnapshot`,
     `model · availability · status · backend · supportsImages`
     + ` · supportsAudio · ready · loading · requesting · phase · percent`
     + ` · error`,
     `Every lifecycle value the host renders, including the build that runs`);
-n(`types`, `input`, 271, `ChatInput · CancelChat`,
+n(`types`, `input`, 273, `ChatInput · CancelChat`,
     `(input: ChatInput) => CancelChat`,
     `The chat input and the cancel handle createChat returns`);
-n(`types`, `preload`, 293, `ChatPreloadInput`,
+n(`types`, `preload`, 295, `ChatPreloadInput`,
     `Pick<ChatInput, model | limits | logging | onStatus>`,
     `The model preload subset a host may call before the first chat`);
-n(`types`, `describe`, 299, `ImageDescription · DescribeImagesInput`,
+n(`types`, `describe`, 301,
+    `ImageDescription · DescribeImagesInput · DescribeTranslatedInput`,
     `descriptionEN · description · durationMs · targetLanguage · images`
-    + ` · currentIndex · limits · logging · onStatus`,
-    `One English and translated description with its description time, and`
-    + ` the batch request that describeImages reads, including its status`
-    + ` callback`);
-n(`types`, `call`, 364, `ChatState · ActiveCall · Runtime`,
+    + ` · descriptions · currentIndex · limits · logging · onStatus`,
+    `One English and translated description with its description time, the`
+    + ` batch image request, and the English-description translation request,`
+    + ` including their status callbacks`);
+n(`types`, `call`, 386, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · cancelled · model · requesting · phase`
     + ` · percent · load · chat · unload · clear · error() · model()`,
     `One request state, one live call and the runtime it drives`);
-n(`types`, `load`, 391, `RuntimeLoadParams · RuntimeLoadWaiter`,
+n(`types`, `load`, 413, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
     + ` · report · settle`,
     `One load request and one caller waiting on the load it joined`);
-n(`types`, `store`, 411, `StoredPart · StoredFilePart · StoredModel`
+n(`types`, `store`, 433, `StoredPart · StoredFilePart · StoredModel`
     + ` · StoredModelMeta · ResumePlan · StoreDownloadParams · ModelStore`,
     `size · total · etag · start · complete · file · signal`
     + ` · stored · download · remove · purge`,
     `What the model file store keeps in its parts and metadata, where one`
     + ` response resumes, one download request and one engine store`);
-n(`types`, `params`, 505, `EngineChatParams · StartLlmParams`
+n(`types`, `params`, 527, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · onSpeed`
     + ` · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
     `Per-call budgets, accumulated text and speed callbacks`);
-n(`types`, `runtimeContract`, 537, `LlmRuntime · LlmEngine`,
+n(`types`, `runtimeContract`, 559, `LlmRuntime · LlmEngine`,
     `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`
     + ` · purge`,
     `The engine returns model, backend, contextSize, chat and unload, and can`
     + ` delete its whole cache`);
-n(`types`, `contentParts`, 562, `EngineContentPart`,
+n(`types`, `contentParts`, 584, `EngineContentPart`,
     `text | image | audio`,
     `One segment of a user turn before an engine maps it`);
-n(`types`, `messages`, 580, `EngineMessage`, `role + content`,
+n(`types`, `messages`, 602, `EngineMessage`, `role + content`,
     `One OpenAI-style turn, a user turn may carry media parts`);
-n(`types`, `litertRuntime`, 586, `LitertContentPart · LitertMessage`
+n(`types`, `litertRuntime`, 608, `LitertContentPart · LitertMessage`
     + ` · LitertEngine · LitertModule`,
     `text | image | audio · role + content + channels`,
     `The LiteRT content, turn, engine and module types, type only`);
-n(`types`, `litertParams`, 613, `LitertSession · LitertChatParams`
+n(`types`, `litertParams`, 635, `LitertSession · LitertChatParams`
     + ` · StreamLitertParams`,
     `conversation? · sent · reasoning · maxTokens · engine · model · mod`
     + ` · params · messages · session`,
     `The reused conversation, one LiteRT chat call and one stream over it`);
-n(`types`, `imageSize`, 690, `ImageSize`, `width · height`,
+n(`types`, `imageSize`, 712, `ImageSize`, `width · height`,
     `Pixel size of one image sent to an engine`);
 
 // model runtime
@@ -774,49 +793,49 @@ n(`llm`, `runtime`, 269, `runtime`, `createRuntime()`,
     `The process-wide loaded model`);
 
 // model catalog
-n(`models`, `llmModels`, 14, `llmModels`, `ChatModel[4]`,
-    `qwen3_vl_2b and the qwen3_vl_2b_instruct describer on the CPU with their`
-    + ` mmproj, gemma4_e2b on desktop WebGPU with vision and audio, and the`
-    + ` text-only gemma4_e2b_limited build`);
+n(`models`, `llmModels`, 14, `llmModels`, `ChatModel[5]`,
+    `qwen3_vl_2b on the CPU, the qwen3_vl_2b_instruct_q3 describer and its`
+    + ` Q4_K_M twin with their Q8_0 mmproj, gemma4_e2b on desktop WebGPU with`
+    + ` vision and audio, and the text-only gemma4_e2b_limited build`);
 n(`models`, `defaultModel`, 9, `defaultModel`,
     `Promise<ChatModelId | undefined> | undefined`,
     `The device default probed once per session, shared by every caller`);
 n(`models`, `gpuProbeTimeout`, 13, `gpuProbeTimeout`, `1500`,
     `Milliseconds a WebGPU adapter probe may hang before the CPU wins`);
-n(`models`, `snapshots`, 60, `size`,
+n(`models`, `snapshots`, 74, `size`,
     `cpuContextWindow`,
     `8k context on the CPU engine, the desktop default`);
-n(`models`, `mobileWindow`, 62, `size`,
+n(`models`, `mobileWindow`, 76, `size`,
     `mobileCpuContextWindow`,
     `4k context on a phone, the smaller cache keeps the tab alive`);
-n(`models`, `litertWindow`, 64, `size`,
+n(`models`, `litertWindow`, 78, `size`,
     `litertContextWindow`,
     `4k context on the GPU engine, the wasm heap holds the model`);
-n(`models`, `mobileDevice`, 66, `mobileDevice`,
+n(`models`, `mobileDevice`, 80, `mobileDevice`,
     `(nav?) => boolean`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
-n(`models`, `deviceModelId`, 78, `deviceModelId`,
+n(`models`, `deviceModelId`, 92, `deviceModelId`,
     `(id?, mobile?) => ChatModelId | undefined`,
     `Downgrade a gemma4_e2b request on a phone to the text-only build`);
-n(`models`, `findLlmModel`, 87, `findLlmModel`,
+n(`models`, `findLlmModel`, 101, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
-n(`models`, `gpuAdapter`, 90, `gpuAdapter`,
+n(`models`, `gpuAdapter`, 104, `gpuAdapter`,
     `() => Promise<boolean>`,
     `True when the browser hands out a WebGPU adapter within the timeout,`
     + ` false in Node`);
-n(`models`, `defaultLlmModel`, 110, `defaultLlmModel`,
+n(`models`, `defaultLlmModel`, 124, `defaultLlmModel`,
     `() => Promise<ChatModelId | undefined>`,
     `The Gemma build of this device when an adapter exists, else the CPU`
     + ` model, memoized`);
-n(`models`, `resolveLlmModel`, 118, `resolveLlmModel`,
+n(`models`, `resolveLlmModel`, 132, `resolveLlmModel`,
     `(id?) => Promise<ChatModel | undefined>`,
     `The requested model after the mobile downgrade, or the device default`);
-n(`models`, `supportsImages`, 121, `supportsImages`,
+n(`models`, `supportsImages`, 135, `supportsImages`,
     `(model) => boolean`,
     `The CPU projector or the LiteRT file of that catalog entry decides`
     + ` vision`);
-n(`models`, `supportsAudio`, 124, `supportsAudio`,
+n(`models`, `supportsAudio`, 138, `supportsAudio`,
     `(model) => boolean`,
     `The projector audio flag or the LiteRT file of that catalog entry`
     + ` decides audio`);
@@ -865,7 +884,7 @@ n(`engine`, `feed`, 271, `feed`, `(text) => void`,
     `Consume a chunk, switch on the current in-reason state`);
 n(`engine`, `flush`, 303, `flush`, `() => void`, `Emit whatever was held back`);
 n(`engine`, `stall`, 313, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
-    `180000 · 420000 · 30000`,
+    `360000 · 840000 · 30000`,
     `Budgets before a first chunk, a vision first chunk and between chunks`);
 n(`engine`, `stallError`, 320, `StallError`, `class Error`,
     `A stream that stopped producing chunks`);
@@ -884,52 +903,59 @@ n(`engine`, `runEngineChat`, 464, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
-n(`wllama`, `visionLimits`, 41, `visionLimits`,
+n(`wllama`, `visionLimits`, 52, `visionLimits`,
     `(model) => object`,
-    `Only the instruct model sets a 128 to 256 image token window`);
-n(`wllama`, `wllamaEngine`, 349, `wllamaEngine`, `LlmEngine`,
+    `Only the instruct builds set a 16 to 100 image token window`);
+n(`wllama`, `wllamaEngine`, 360, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, purge`);
-n(`wllama`, `resolveAssets`, 58, `resolveAssets`, `(overrides?) => WllamaAssets`,
+n(`wllama`, `resolveAssets`, 69, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
-n(`wllama`, `cpuLogger`, 67, `cpuLogger`, `(base) => WllamaLogger`,
+n(`wllama`, `cpuLogger`, 78, `cpuLogger`, `(base) => WllamaLogger`,
     `Follows the per-call logging flag and hides the GPU probe`);
-n(`wllama`, `getWllama`, 84, `getWllama`, `() => Promise<Wllama>`,
+n(`wllama`, `getWllama`, 95, `getWllama`, `() => Promise<Wllama>`,
     `Lazy singleton, default assets resolved and cached on first use`);
-n(`wllama`, `entryOf`, 111, `entryOf`, `(entry, file) => boolean`,
+n(`wllama`, `entryOf`, 122, `entryOf`, `(entry, file) => boolean`,
     `Cache entry matches by file name or original URL`);
-n(`wllama`, `cpuFiles`, 115, `cpuFiles`, `(model) => { name, url }[]`,
-    `The model file plus its vision projector, with remote URLs`);
-n(`wllama`, `filesStored`, 129, `filesStored`, `(model) => Promise<boolean>`,
+n(`wllama`, `cpuFiles`, 126, `cpuFiles`, `(model) => { name, url }[]`,
+    `The model file plus its vision projector, the projector from its own`
+    + ` repo when set`);
+n(`wllama`, `filesStored`, 140, `filesStored`, `(model) => Promise<boolean>`,
     `Every CPU file including the projector is complete in the store`);
-n(`wllama`, `filesCached`, 139, `filesCached`,
+n(`wllama`, `filesCached`, 150, `filesCached`,
     `(instance, model) => Promise<boolean>`,
     `Every CPU file is complete in the wllama cache manager`);
-n(`wllama`, `storedBlobs`, 148, `storedBlobs`,
+n(`wllama`, `storedBlobs`, 159, `storedBlobs`,
     `({ model, signal, onProgress }) => Promise<Blob[]?>`,
     `Read every CPU file from the store, resuming the parts already stored`);
-n(`wllama`, `toWllamaMessages`, 175, `toWllamaMessages`,
+n(`wllama`, `toWllamaMessages`, 186, `toWllamaMessages`,
     `(messages) => Promise<WllamaMessage[]>`,
     `Map text, image and audio parts to wllama content segments`);
-n(`wllama`, `dropWllama`, 105, `dropWllama`, `() => Promise<void>`,
+n(`wllama`, `dropWllama`, 116, `dropWllama`, `() => Promise<void>`,
     `Drop the worker, a crashed or exited one cannot be reused`);
-n(`wllama`, `runtime`, 46, `runtime`,
-    `store · cpuThreads · gpuProbeLog · loggingOn`,
+n(`wllama`, `runtime`, 57, `runtime`,
+    `store · cpuThreads · maxThreads · visionMaxThreads · gpuProbeLog`
+    + ` · loggingOn`,
     `The resumable store, hardware threads capped by limits.maxThreads`
-    + ` for every model, 0 GPU layers`);
-n(`wllama`, `cpuThreads`, 34, `cpuThreads`, `(cores, maxThreads) => number`,
-    `Raw hardware maximum first, then the caller cap, minimum 1`);
-n(`wllama`, `startLLM`, 230, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    + ` and the text or vision cap, 0 GPU layers`);
+n(`wllama`, `maxThreads`, 31, `maxThreads`, `3`,
+    `Hard thread cap of a text model`);
+n(`wllama`, `visionMaxThreads`, 33, `visionMaxThreads`, `2`,
+    `Hard thread cap of a model with a vision projector`);
+n(`wllama`, `cpuThreads`, 38, `cpuThreads`, `(cores, limit, vision?) => number`,
+    `Raw hardware maximum first, then the caller budget and the text or vision`
+    + ` cap, minimum 1`);
+n(`wllama`, `startLLM`, 241, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Pick 4k or 8k context, load the model and projector from stored blobs,`
     + ` fall back to the cache or network, cap CPU threads to the shared`
-    + ` budget, set no image limits except the instruct describer's`
-    + ` 128 to 256 window, abortable`);
-n(`wllama`, `cached`, 352, `cached`, `(model) => Promise<boolean>`,
+    + ` budget and the text or vision cap, set no image limits except the`
+    + ` instruct describer's 16 to 100 window, abortable`);
+n(`wllama`, `cached`, 363, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `chat`, 202, `chatOn`, `(instance, model, params)`,
+n(`wllama`, `chat`, 213, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 343, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 354, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `purge`, 359, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 370, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
@@ -1051,7 +1077,7 @@ n(`store`, `purge`, 477, `store.purge`, `() => Promise<void>`,
     `Delete the whole engine store directory and every model file in it`);
 
 // image resizing
-n(`images`, `tokens`, 5, `imageTokens`, `128`,
+n(`images`, `tokens`, 5, `imageTokens`, `64`,
     `Vision token target of one CPU image`);
 n(`images`, `tokenCell`, 7, `tokenCell`, `32`,
     `Pixels covered by one vision token`);
@@ -1063,7 +1089,7 @@ n(`images`, `buffer`, 48, `contentBuffer`, `(url) => Promise<ArrayBuffer>`,
     `Decode a data URL or fetch an image or audio URL into bytes`);
 n(`images`, `visionSize`, 65, `visionSize`,
     `(width, height) => ImageSize`,
-    `Closest 32 px grid from 128 to 136 tokens, aspect kept`);
+    `Closest 32 px grid from 64 to 72 tokens, aspect kept`);
 n(`images`, `resizeUrl`, 93, `resizeImageUrl`,
     `(url, size?) => Promise<string>`,
     `Decode an image, crop the sub-cell remainder, resize to the grid,`
@@ -1159,10 +1185,10 @@ n(`harness`, `withGpu`, 261, `withGpu`,
     `Stub or remove the WebGPU adapter for one description test`);
 n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
     `Controllable engine: cached, gates, failure flags, call log`);
-n(`harness`, `definitions`, 287, `definitions`, `89 deferred cases`,
+n(`harness`, `definitions`, 298, `definitions`, `93 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, describe, chat,`
     + ` speed, threads, square`);
-n(`harness`, `main`, 4485, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 4671, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 34, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat, preloadModel,`
@@ -1215,7 +1241,7 @@ n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
 n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
     `Appends a console filter for the benign encoder-hint warnings to the`
     + ` emitted LiteRT glue, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 0.9.3`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.0.0`,
     `build = tsc declarations, webpack, banner, glue filter; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1272,26 +1298,40 @@ e(`chat.cancel`, `types.call`, `type`);
 
 // describe wiring
 e(`entry.exports`, `describe.describeImages`, `type`);
+e(`entry.exports`, `describe.describeTranslated`, `type`);
 e(`describe.describeImages`, `describe.createDescribeOn`, `call`);
 e(`describe.describeImages`, `llm.runtime`, `call`);
-e(`describe.createDescribeOn`, `describe.report`, `inner`);
-e(`describe.createDescribeOn`, `describe.load`, `inner`);
-e(`describe.createDescribeOn`, `describe.generate`, `inner`);
-e(`describe.createDescribeOn`, `log.log`, `call`);
+e(`describe.describeTranslated`, `describe.createTranslateOn`, `call`);
+e(`describe.describeTranslated`, `llm.runtime`, `call`);
+e(`describe.createDescribeOn`, `describe.describeTools`, `call`);
+e(`describe.createDescribeOn`, `describe.translateDescriptions`, `call`);
+e(`describe.createTranslateOn`, `describe.describeTools`, `call`);
+e(`describe.createTranslateOn`, `describe.translateDescriptions`, `call`);
+e(`describe.describeTools`, `describe.report`, `inner`);
+e(`describe.describeTools`, `describe.load`, `inner`);
+e(`describe.describeTools`, `describe.generate`, `inner`);
 e(`describe.load`, `log.log`, `call`);
 e(`describe.generate`, `log.log`, `call`);
+e(`describe.translateDescriptions`, `describe.translateSystem`, `call`);
+e(`describe.translateDescriptions`, `describe.cannotTranslate`, `call`);
+e(`describe.translateDescriptions`, `describe.translatePrompt`, `call`);
+e(`describe.createDescribeOn`, `log.log`, `call`);
 e(`describe.createDescribeOn`, `describe.imageSystem`, `call`);
 e(`describe.createDescribeOn`, `describe.imageNote`, `call`);
 e(`describe.createDescribeOn`, `describe.imageReplyTokens`, `call`);
-e(`describe.createDescribeOn`, `describe.translateSystem`, `call`);
-e(`describe.createDescribeOn`, `describe.cannotTranslate`, `call`);
 e(`describe.createDescribeOn`, `describe.needsTranslation`, `call`);
-e(`describe.createDescribeOn`, `describe.translatePrompt`, `call`);
 e(`describe.createDescribeOn`, `findLlmModel`, `call`);
 e(`describe.createDescribeOn`, `gpuAdapter`, `call`);
 e(`describe.createDescribeOn`, `resolveLimits`, `call`);
 e(`describe.createDescribeOn`, `types.describe`, `type`);
 e(`describe.createDescribeOn`, `types.records`, `type`);
+e(`describe.createTranslateOn`, `log.log`, `call`);
+e(`describe.createTranslateOn`, `describe.imageReplyTokens`, `call`);
+e(`describe.createTranslateOn`, `describe.needsTranslation`, `call`);
+e(`describe.createTranslateOn`, `findLlmModel`, `call`);
+e(`describe.createTranslateOn`, `gpuAdapter`, `call`);
+e(`describe.createTranslateOn`, `resolveLimits`, `call`);
+e(`describe.createTranslateOn`, `types.describe`, `type`);
 e(`describe.report`, `chat.statusSnapshot`, `call`);
 e(`describe.load`, `llm.load`, `call`);
 e(`describe.load`, `llm.error`, `call`);
@@ -1590,7 +1630,9 @@ e(`harness.definitions`, `chat.preloadModel`, `call`);
 e(`harness.definitions`, `createChatOn`, `call`);
 e(`harness.definitions`, `createPreloadOn`, `call`);
 e(`harness.definitions`, `describe.describeImages`, `call`);
+e(`harness.definitions`, `describe.describeTranslated`, `call`);
 e(`harness.definitions`, `describe.createDescribeOn`, `call`);
+e(`harness.definitions`, `describe.createTranslateOn`, `call`);
 e(`harness.definitions`, `harness.withGpu`, `call`);
 e(`harness.definitions`, `createRuntime`, `call`);
 e(`harness.definitions`, `buildMessages`, `call`);
@@ -1702,7 +1744,7 @@ const FLOWS = {
                 + ` the limits window, drop a leading assistant, merge same`
                 + ` roles.`),
             step([`resizeImages`],
-                ` Target 128 to 136 vision tokens, snap both sides to the`
+                ` Target 64 to 72 vision tokens, snap both sides to the`
                 + ` 32 px grid and crop the remainder. LiteRT instead`
                 + ` center-crops to 384 x 384 for its 70-token budget.`),
             step([`wllama.toWllamaMessages`, `litert.toLitertMessages`],

@@ -310,9 +310,9 @@ const
 
 const
     /** Longest wait for the first streamed chunk, milliseconds */
-    firstReplyTimeout = 180000,
+    firstReplyTimeout = 360000,
     /** Longest wait for the first chunk of an image turn, milliseconds */
-    firstVisionReplyTimeout = 420000,
+    firstVisionReplyTimeout = 840000,
     /** Longest silence between two streamed chunks, milliseconds */
     idleReplyTimeout = 30000;
 

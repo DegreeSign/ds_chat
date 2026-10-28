@@ -207,6 +207,8 @@ interface ChatModel {
         file: string,
         /** Vision projector, present when the CPU build accepts images */
         mmproj?: {
+            /** Repository of the projector, when it differs */
+            repo?: string,
             file: string,
             /** Whether the projector also accepts audio */
             audio?: boolean,
@@ -317,6 +319,26 @@ interface DescribeImagesInput {
         descriptionEN?: string,
         description?: string,
         durationMs?: number,
+    ) => void,
+    /** Override any token, prompt or thread budget */
+    limits?: Partial<LlmLimits>,
+    /** Whether package and engine logs reach the console, defaults to off */
+    logging?: boolean,
+    /** Model and request state, reported on every change */
+    onStatus?: (snapshot: ChatStatusSnapshot) => void,
+}
+
+/** One batch translation request for English image descriptions */
+interface DescribeTranslatedInput {
+    /** English descriptions translated one by one in this order */
+    descriptions: string[],
+    /** Language the descriptions are translated into, English skips translation */
+    targetLanguage: string,
+    /** Index being translated and each description once ready */
+    currentIndex?: (
+        index: number,
+        descriptionEN?: string,
+        description?: string,
     ) => void,
     /** Override any token, prompt or thread budget */
     limits?: Partial<LlmLimits>,
@@ -723,6 +745,7 @@ export type {
     CancelChat,
     ImageDescription,
     DescribeImagesInput,
+    DescribeTranslatedInput,
     WllamaAssets,
     LitertAssets,
     GpuNavigator,

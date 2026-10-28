@@ -27,20 +27,31 @@ import type {
 const
     /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
+    /** Hard thread cap of the CPU engine */
+    maxThreads = 3,
+    /** Hard thread cap when the model has a vision projector */
+    visionMaxThreads = 2,
     /** Resumable file store of the CPU engine */
     store = createModelStore(`wllama-store`);
 
-/** CPU threads after the hardware maximum and the caller cap */
-const cpuThreads = (cores: number, maxThreads: number): number =>
+/** CPU threads after the hardware maximum, the caller and the cap */
+const cpuThreads = (cores: number, limit: number, vision = false): number =>
     Math.max(1, Math.min(
         Math.max(2, Math.min(8, (cores || 4) - 1)),
-        2, // wllama breaks above 2
+        limit,
+        vision ? visionMaxThreads : maxThreads,
     ));
+
+/** Ids that set the instruct vision window */
+const instructIds = [
+    ChatModelId.qwen3_vl_2b_instruct,
+    ChatModelId.qwen3_vl_2b_instruct_q3,
+];
 
 /** Image limits of one model */
 const visionLimits = (model: ChatModel) =>
-    model.cpu?.mmproj && model.id == ChatModelId.qwen3_vl_2b_instruct
-        ? { image_min_tokens: imageTokens, image_max_tokens: 256 }
+    model.cpu?.mmproj && instructIds.includes(model.id)
+        ? { image_min_tokens: 16, image_max_tokens: 100 }
         : {};
 
 let
@@ -120,7 +131,7 @@ const
             ...(cpu.mmproj
                 ? [{
                     name: cpu.mmproj.file,
-                    url: modelUrl(cpu.repo, cpu.mmproj.file),
+                    url: modelUrl(cpu.mmproj.repo ?? cpu.repo, cpu.mmproj.file),
                 }]
                 : []),
         ];
@@ -250,7 +261,7 @@ const
         assetsKey = key;
         const threads = cpuThreads(
             (typeof navigator != `undefined` && navigator.hardwareConcurrency) || 4,
-            limits.maxThreads,
+            limits.maxThreads, !!cpu.mmproj,
         );
         const
             instance = await getWllama(),
@@ -258,7 +269,7 @@ const
             projectorFile = cpu.mmproj?.file,
             modelFileUrl = modelUrl(cpu.repo, cpu.file),
             projectorUrl = projectorFile
-                ? modelUrl(cpu.repo, projectorFile) : ``;
+                ? modelUrl(cpu.mmproj?.repo ?? cpu.repo, projectorFile) : ``;
         if (signal?.aborted) {
             await dropWllama();
             throw new Error(`Cancelled`);

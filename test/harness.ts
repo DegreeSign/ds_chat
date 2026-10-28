@@ -5,7 +5,12 @@ import {
     createChat,
     preloadModel,
 } from "../src/index";import { createChatOn, createPreloadOn } from "../src/chat";
-import { createDescribeOn, describeImages } from "../src/describe";
+import {
+    createDescribeOn,
+    createTranslateOn,
+    describeImages,
+    describeTranslated,
+} from "../src/describe";
 import { createRuntime } from "../src/service";
 import {
     buildMessages,
@@ -301,6 +306,11 @@ const definitions: Array<{
                 assertEqual(typeof preloadModel, `function`, `preloadModel`);
                 assertEqual(typeof clearModelCache, `function`, `clearModelCache`);
                 assertEqual(typeof describeImages, `function`, `describeImages`);
+                assertEqual(
+                    typeof describeTranslated,
+                    `function`,
+                    `describeTranslated`,
+                );
                 assertEqual(typeof createChatOn, `function`, `createChatOn`);
                 assertEqual(typeof createPreloadOn, `function`, `createPreloadOn`);
                 assertEqual(typeof createRuntime, `function`, `createRuntime`);
@@ -322,12 +332,18 @@ const definitions: Array<{
                         `createChat`,
                         `currencyTool`,
                         `describeImages`,
+                        `describeTranslated`,
                         `preloadModel`,
                         `webSearchTool`,
                     ].join(`,`),
                     `public names`,
                 );
                 assertEqual(`createChatOn` in entry, false, `internal chat factory`);
+                assertEqual(
+                    `createTranslateOn` in entry,
+                    false,
+                    `internal translate factory`,
+                );
                 assertEqual(ChatStatus.online, 0, `online`);
                 assertEqual(ChatStatus.away, 1, `away`);
                 assertEqual(ChatStatus.offline, 2, `offline`);
@@ -341,6 +357,11 @@ const definitions: Array<{
                     ChatModelId.qwen3_vl_2b_instruct,
                     `qwen3-vl-2b-instruct`,
                     `qwen instruct id`,
+                );
+                assertEqual(
+                    ChatModelId.qwen3_vl_2b_instruct_q3,
+                    `qwen3-vl-2b-instruct-q3`,
+                    `qwen instruct q3 id`,
                 );
                 assertEqual(ChatModelId.gemma4_e2b, `gemma4-e2b`, `gemma id`);
                 assertEqual(
@@ -366,7 +387,7 @@ const definitions: Array<{
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 4, `catalog size`);
+                assertEqual(llmModels.length, 5, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
                 assertEqual(litertContextWindow, 4096, `gpu window`);
                 assertEqual(
@@ -402,11 +423,39 @@ const definitions: Array<{
                     `instruct file`,
                 );
                 assertEqual(
+                    instruct.cpu?.mmproj?.repo,
+                    `Qwen/Qwen3-VL-2B-Instruct-GGUF`,
+                    `instruct projector repo`,
+                );
+                assertEqual(
                     instruct.cpu?.mmproj?.file,
-                    `mmproj-F16.gguf`,
+                    `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
                     `instruct projector`,
                 );
                 assertEqual(supportsImages(instruct), true, `instruct images`);
+                const instructQ3 = modelOf(ChatModelId.qwen3_vl_2b_instruct_q3);
+                assertEqual(instructQ3.reasoning, false, `q3 no thinking`);
+                assertEqual(
+                    instructQ3.cpu?.repo,
+                    `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
+                    `q3 repo`,
+                );
+                assertEqual(
+                    instructQ3.cpu?.file,
+                    `Qwen3-VL-2B-Instruct-Q3_K_M.gguf`,
+                    `q3 file`,
+                );
+                assertEqual(
+                    instructQ3.cpu?.mmproj?.repo,
+                    `Qwen/Qwen3-VL-2B-Instruct-GGUF`,
+                    `q3 projector repo`,
+                );
+                assertEqual(
+                    instructQ3.cpu?.mmproj?.file,
+                    `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
+                    `q3 projector`,
+                );
+                assertEqual(supportsImages(instructQ3), true, `q3 images`);
                 const gemma = modelOf(ChatModelId.gemma4_e2b);
                 assertEqual(gemma.reasoning, true, `gemma reasoning`);
                 assertEqual(
@@ -1981,7 +2030,7 @@ const definitions: Array<{
                     });
                 assertEqual(cpu.calls.start, 1, `describer load`);
                 assertEqual(cpu.calls.chat, 2, `one chat per image`);
-                assertEqual(cpu.requests[0].limits.maxReplyTokens, 2048, `budget`);
+                assertEqual(cpu.requests[0].limits.maxReplyTokens, 600, `budget`);
                 assertEqual(results.length, 2, `two results`);
                 assertEqual(results[0].descriptionEN, `A red square 1`, `first english`);
                 assertEqual(results[1].descriptionEN, `A red square 2`, `second english`);
@@ -2023,7 +2072,7 @@ const definitions: Array<{
                 );
                 assertEqual(
                     statuses[0].model,
-                    ChatModelId.qwen3_vl_2b_instruct,
+                    ChatModelId.qwen3_vl_2b_instruct_q3,
                     `describer status`,
                 );
                 assertEqual(statuses[0].requesting, false, `idle status`);
@@ -2084,7 +2133,7 @@ const definitions: Array<{
                         });
                     assertEqual(
                         cpu.models[0].id,
-                        ChatModelId.qwen3_vl_2b_instruct,
+                        ChatModelId.qwen3_vl_2b_instruct_q3,
                         `describer model`,
                     );
                     assertEqual(
@@ -2101,8 +2150,8 @@ const definitions: Array<{
                     ].join(` `);
                     assertEqual(cpu.calls.start, 1, `describer start`);
                     assertEqual(gpu.calls.start, 1, `translator start`);
-                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 2048, `describer budget`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 2048, `budget`);
+                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 600, `describer budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 600, `budget`);
                     assertEqual(cpu.requests[0].messages.length, 2, `describer turns`);
                     assertEqual(gpu.requests[0].messages.length, 4, `translation turns`);
                     assertEqual(gpu.requests[0].messages[0].role, LlmRole.system, `system turn`);
@@ -2175,6 +2224,90 @@ const definitions: Array<{
             },
         },
         {
+            name: `describe/translated`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        events: Array<[number, string?, string?]> = [],
+                        statuses: ChatStatusSnapshot[] = [],
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            chatImpl: async params =>
+                                `translated ${params.messages[2]?.content}`,
+                        }),
+                        runtime = createRuntime({
+                            engines: { litert: gpu.engine },
+                        }),
+                        results = await createTranslateOn(runtime)({
+                            descriptions: [`plain one`, `plain two`],
+                            targetLanguage: `German`,
+                            currentIndex: (index, descriptionEN, description) =>
+                                events.push([index, descriptionEN, description]),
+                            onStatus: value => statuses.push(value),
+                        });
+                    assertEqual(gpu.calls.start, 1, `translator start`);
+                    assertEqual(gpu.calls.chat, 2, `one chat per description`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 600, `budget`);
+                    assertEqual(gpu.requests[0].messages.length, 4, `four turns`);
+                    assertEqual(results[0], `translated plain one`, `first translation`);
+                    assertEqual(results[1], `translated plain two`, `second translation`);
+                    assertEqual(events.length, 2, `two events`);
+                    assertEqual(events[0][0], 0, `first index`);
+                    assertEqual(events[0][1], `plain one`, `first english`);
+                    assertEqual(events[0][2], `translated plain one`, `first event`);
+                    assertEqual(events[1][0], 1, `second index`);
+                    assertEqual(events[1][1], `plain two`, `second english`);
+                    assertEqual(events[1][2], `translated plain two`, `second event`);
+                    assertEqual(
+                        statuses[statuses.length - 1].model,
+                        ChatModelId.gemma4_e2b_limited,
+                        `translator final`,
+                    );
+                    assertEqual(
+                        statuses[statuses.length - 1].requesting,
+                        false,
+                        `translator done`,
+                    );
+                });
+            },
+        },
+        {
+            name: `describe/translated english`,
+            run: async () => {
+                const
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { litert: gpu.engine },
+                    }),
+                    results = await createTranslateOn(runtime)({
+                        descriptions: [`plain one`],
+                        targetLanguage: `en`,
+                    });
+                assertEqual(results[0], `plain one`, `english kept`);
+                assertEqual(gpu.calls.start, 0, `no load`);
+            },
+        },
+        {
+            name: `describe/translated refusal`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            chatImpl: async () => `"CANNOT TRANSLATE."`,
+                        }),
+                        runtime = createRuntime({
+                            engines: { litert: gpu.engine },
+                        }),
+                        results = await createTranslateOn(runtime)({
+                            descriptions: [`plain one`],
+                            targetLanguage: `fa`,
+                        });
+                    assertEqual(results[0], `plain one`, `english kept on refusal`);
+                });
+            },
+        },
+        {
             name: `describe/refusal`,
             run: async () => {
                 await withGpu(async () => {
@@ -2241,7 +2374,7 @@ const definitions: Array<{
                     );
                     assertEqual(
                         statuses[statuses.length - 1].model,
-                        ChatModelId.qwen3_vl_2b_instruct,
+                        ChatModelId.qwen3_vl_2b_instruct_q3,
                         `describer final`,
                     );
                 }, null);
@@ -2753,8 +2886,8 @@ const definitions: Array<{
                 assert(image.url.startsWith(`data:image/jpeg`), `resized jpeg`);
                 const bitmap = await createImageBitmap(
                     await (await fetch(image.url)).blob());
-                assertEqual(bitmap.width, 512, `image width`);
-                assertEqual(bitmap.height, 256, `image height`);
+                assertEqual(bitmap.width, 384, `image width`);
+                assertEqual(bitmap.height, 192, `image height`);
                 bitmap.close();
                 assertEqual(replies[replies.length - 1], `seen`, `reply`);
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
@@ -3052,12 +3185,14 @@ const definitions: Array<{
             name: `threads/cap`,
             run: () => {
                 assertEqual(cpuThreads(8, 2), 2, `eight cores cap two`);
-                assertEqual(cpuThreads(8, 1), 2, `eight cores cap one`);
-                assertEqual(cpuThreads(8, 99), 2, `eight cores hard cap two`);
-                assertEqual(cpuThreads(16, 99), 2, `sixteen cores hard cap two`);
+                assertEqual(cpuThreads(8, 1), 1, `eight cores cap one`);
+                assertEqual(cpuThreads(8, 99), 3, `eight cores hard cap three`);
+                assertEqual(cpuThreads(16, 99), 3, `sixteen cores hard cap three`);
                 assertEqual(cpuThreads(1, 2), 2, `one core raw two`);
-                assertEqual(cpuThreads(8, 3), 2, `eight cores cap three`);
-                assertEqual(cpuThreads(8, 6), 2, `default budget two`);
+                assertEqual(cpuThreads(8, 3), 3, `eight cores cap three`);
+                assertEqual(cpuThreads(8, 6), 3, `default budget three`);
+                assertEqual(cpuThreads(8, 99, true), 2, `vision cap two`);
+                assertEqual(cpuThreads(8, 1, true), 1, `vision one`);
             },
         },
         {
@@ -3066,10 +3201,14 @@ const definitions: Array<{
                 const
                     instruct = visionLimits(
                         modelOf(ChatModelId.qwen3_vl_2b_instruct)),
+                    instructQ3 = visionLimits(
+                        modelOf(ChatModelId.qwen3_vl_2b_instruct_q3)),
                     thinking = visionLimits(modelOf(ChatModelId.qwen3_vl_2b)),
                     text = visionLimits(modelOf(ChatModelId.gemma4_e2b));
-                assertEqual(instruct.image_min_tokens, 128, `instruct min`);
-                assertEqual(instruct.image_max_tokens, 256, `instruct max`);
+                assertEqual(instruct.image_min_tokens, 16, `instruct min`);
+                assertEqual(instruct.image_max_tokens, 100, `instruct max`);
+                assertEqual(instructQ3.image_min_tokens, 16, `q3 min`);
+                assertEqual(instructQ3.image_max_tokens, 100, `q3 max`);
                 assertEqual(Object.keys(thinking).length, 0, `thinking unset`);
                 assertEqual(Object.keys(text).length, 0, `text unset`);
             },
@@ -3596,7 +3735,10 @@ const definitions: Array<{
                         cpu: {
                             repo: `test/cpu`,
                             file: `model.gguf`,
-                            mmproj: { file: `mmproj.gguf` },
+                            mmproj: {
+                                repo: `test/projector`,
+                                file: `mmproj.gguf`,
+                            },
                         },
                     },
                     textOnly: ChatModel = {
@@ -3618,6 +3760,11 @@ const definitions: Array<{
                     files[1].url.endsWith(`/mmproj.gguf`),
                     true,
                     `projector url`,
+                );
+                assertEqual(
+                    files[1].url.includes(`/test/projector/`),
+                    true,
+                    `projector repo override`,
                 );
                 assertEqual(cpuFiles(textOnly).length, 1, `text cpu file`);
                 assertEqual(
@@ -3773,12 +3920,12 @@ const definitions: Array<{
                     sizeOf(tallOut.url),
                     sizeOf(smallOut.url),
                 ]);
-                assertEqual(wideSize.width, 512, `wide width`);
-                assertEqual(wideSize.height, 256, `wide height`);
-                assertEqual(tallSize.width, 224, `tall width`);
-                assertEqual(tallSize.height, 608, `tall height`);
-                assertEqual(smallSize.width, 352, `small width`);
-                assertEqual(smallSize.height, 384, `small height`);
+                assertEqual(wideSize.width, 384, `wide width`);
+                assertEqual(wideSize.height, 192, `wide height`);
+                assertEqual(tallSize.width, 160, `tall width`);
+                assertEqual(tallSize.height, 448, `tall height`);
+                assertEqual(smallSize.width, 256, `small width`);
+                assertEqual(smallSize.height, 256, `small height`);
                 const tokensOf = (size: ImageSize): number =>
                     size.width / tokenCell * size.height / tokenCell;
                 assert(tokensOf(wideSize) >= imageTokens, `wide target`);

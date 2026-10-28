@@ -30,7 +30,21 @@ const
                 repo: `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
                 file: `Qwen3-VL-2B-Instruct-Q4_K_M.gguf`,
                 mmproj: {
-                    file: `mmproj-F16.gguf`,
+                    repo: `Qwen/Qwen3-VL-2B-Instruct-GGUF`,
+                    file: `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
+                },
+            },
+        },
+        {
+            // smaller instruct build
+            id: ChatModelId.qwen3_vl_2b_instruct_q3,
+            reasoning: false,
+            cpu: {
+                repo: `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
+                file: `Qwen3-VL-2B-Instruct-Q3_K_M.gguf`,
+                mmproj: {
+                    repo: `Qwen/Qwen3-VL-2B-Instruct-GGUF`,
+                    file: `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
                 },
             },
         },

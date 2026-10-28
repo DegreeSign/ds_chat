@@ -124,7 +124,7 @@ second, measured from the first token so prompt processing is excluded.
 `false` when it cannot load.
 
 Attach images to a user turn with `images: [dataUrl]`. The package sends them
-only to a model with vision support, fits each image to 128 to 136 vision
+only to a model with vision support, fits each image to 64 to 72 vision
 tokens, snaps both sides to multiples of 32 px, crops the remainder, and caps
 the number with `limits.maxImages`. The WebGPU engine asks LiteRT for the
 smallest Gemma 4 vision budget (70 tokens, 630 patches), so it center-crops to a
@@ -230,6 +230,7 @@ starts the vision or audio encoder.
 createChat(input: ChatInput): CancelChat
 preloadModel(input?: ChatPreloadInput): Promise<boolean>
 describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
+describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
 clearModelCache(): Promise<void>
 ```
 
@@ -303,15 +304,15 @@ on failure. A preload owns no cancel function; a new load replaces it.
 describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 ```
 
-Describe every image in English with `qwen3_vl_2b_instruct`, the Unsloth
-Qwen3-VL 2B Instruct build, one image at a time. When a WebGPU adapter exists
-and `targetLanguage` is not English, the English descriptions are then
-translated one by one with `gemma4_e2b_limited`. Without a GPU, when the
-translation model cannot load, or when the translator replies
+Describe every image in English with `qwen3_vl_2b_instruct_q3`, the Q3_K_M
+build of Unsloth Qwen3-VL 2B Instruct, one image at a time. When a WebGPU
+adapter exists and `targetLanguage` is not English, the English descriptions
+are then translated one by one with `gemma4_e2b_limited`. Without a GPU, when
+the translation model cannot load, or when the translator replies
 `CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. Both the
-description and translation calls use a 2048-token reply budget unless
-`limits.maxReplyTokens` overrides it. The describer sets an explicit 128 to
-256 vision-token window; other models leave the engine image limits unset.
+description and translation calls use a 600-token reply budget unless
+`limits.maxReplyTokens` overrides it. The describer sets an explicit 16 to
+100 vision-token window; other models leave the engine image limits unset.
 
 The describer and translator each receive a system message that puts accuracy
 first: the describer reports only visible detail and the translator preserves
@@ -349,6 +350,30 @@ snapshots switch to `gemma4_e2b_limited` while it loads and translates. The
 final snapshot has `requesting: false`; when the translator cannot load, it also
 carries that error and the descriptions stay English. An empty `images` list
 touches no model and reports nothing.
+
+### Translate descriptions
+
+```ts
+describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
+```
+
+Translate English image descriptions that the host already has, without another
+vision pass. `describeImages` uses the same translation pass. When a WebGPU
+adapter exists, each description is translated one by one with
+`gemma4_e2b_limited`. Without a GPU, when the translator cannot load, or when it
+replies `CANNOT_TRANSLATE`, the result keeps the English text. The promise
+resolves one string per input description, in input order.
+
+`DescribeTranslatedInput`:
+
+| Field | Description |
+| ----- | ----------- |
+| `descriptions` | English descriptions, translated in this order. |
+| `targetLanguage` | Language of each result; `en`, `English` or a tag such as `en-US` skips translation. |
+| `currentIndex?` | Receives `index`, `descriptionEN` and `description` as each entry finishes. |
+| `limits?` | Partial `LlmLimits` for the translation call. |
+| `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
+| `onStatus?` | Receives a `ChatStatusSnapshot` while the translator loads and runs. |
 
 ## Tools
 
@@ -401,11 +426,11 @@ search and currency tools fetch over the network; `calculate` does not.
 
 The first snapshot fires synchronously inside `createChat`. A final snapshot
 with `requesting: false` marks the end of the call. `describeImages` reports the
-same snapshot for each model it loads: `qwen3_vl_2b_instruct` while it
+same snapshot for each model it loads: `qwen3_vl_2b_instruct_q3` while it
 describes, then `gemma4_e2b_limited` while it translates.
 
-A stream that never produces its first chunk ends with an error after 180
-seconds, or after 420 seconds when the prompt carries an image, because a CPU
+A stream that never produces its first chunk ends with an error after 360
+seconds, or after 840 seconds when the prompt carries an image, because a CPU
 vision prefill takes minutes. Once a chunk has arrived, 30 seconds of silence
 ends the stream and keeps the text already delivered.
 
@@ -424,6 +449,7 @@ without it goes quiet again.
 | ------------- | ---- | --------- | ------ | ----- | --- | ------ |
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
 | `qwen3_vl_2b_instruct` | Qwen3-VL 2B Instruct | No | Yes | No | Yes | No |
+| `qwen3_vl_2b_instruct_q3` | Qwen3-VL 2B Instruct Q3 | No | Yes | No | Yes | No |
 | `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | Yes | No | Yes |
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 
@@ -445,10 +471,13 @@ context on a phone and 8192 on a desktop. Its projector uses the same CPU thread
 budget as the text pass, so image turns are slower than the Gemma 4 WebGPU path.
 Use the GPU model when images need to be fast.
 
-`qwen3_vl_2b_instruct` is the Unsloth Qwen3-VL 2B Instruct build that
-`describeImages` loads for the English pass. Its Q4_K_M file and F16 projector
-total about 1.9 GB on the CPU engine. It has no reasoning pass, so it answers an
-image prompt directly.
+`qwen3_vl_2b_instruct_q3` is the Unsloth Qwen3-VL 2B Instruct build that
+`describeImages` loads for the English pass, its Q3_K_M file. Both instruct
+builds use Qwen's Q8_0 projector, about 445 MB, so the describer totals about
+1.4 GB on the CPU engine. It has no reasoning pass, so it answers an image
+prompt directly. `qwen3_vl_2b_instruct` is the same model in Q4_K_M, about
+200 MB larger, for a host that prefers the higher precision describer and
+names it explicitly.
 
 Gemma 4 E2B downloads `gemma-4-E2B-it.litertlm`, about 2.6 GB, on a desktop. It
 runs on the WebGPU engine with its vision and audio encoders in the same file,
@@ -486,8 +515,8 @@ user:      {next turn}
   vision or audio support.
 - Images are collected from the newest turns first and capped by `maxImages`
   (default 2). Older image parts are dropped and their text stays.
-- Every image part keeps its full frame and targets 128 vision tokens, with at
-  most 136. Both sides are snapped to multiples of 32 px and the remainder is
+- Every image part keeps its full frame and targets 64 vision tokens, with at
+  most 72. Both sides are snapped to multiples of 32 px and the remainder is
   cropped. The WebGPU engine instead center-crops to a 384 x 384 square, the
   smallest Gemma 4 encoder signature.
 - Audio is collected from the newest turns first and capped by `maxAudio`
@@ -513,9 +542,11 @@ onProgress })` contract and return the runtime object with `model`, `backend`,
 matches the requested model.
 
 The CPU engine derives a raw thread count from the device, then caps it at
-`limits.maxThreads`, default 2. The cap is applied after the raw maximum, so the
-engine never exceeds the device or the caller budget. Every CPU model uses the
-same count, including the vision projector models.
+`limits.maxThreads` and at 3 threads for a text model or 2 threads for a model
+with a vision projector. The vision cap keeps the wasm image path alive: a
+100-token image completes in about 89 seconds with 2 threads, while 3 threads
+stalled past 10 minutes in the headless check. Every CPU model uses one count
+for the whole load.
 
 The CPU engine needs cross-origin isolation for its threads. Serve the page with
 both headers:
@@ -639,6 +670,7 @@ const useReply = () => {
 | `ChatInput` | One request: model, messages, budgets, reasoning and callbacks. |
 | `ChatPreloadInput` | Model, limits, logging and status, the subset `preloadModel` needs. |
 | `DescribeImagesInput` | Target language, images, progress callback, limits and logging. |
+| `DescribeTranslatedInput` | English descriptions, target language, progress callback, limits and logging. |
 | `ImageDescription` | `descriptionEN`, the translated `description` and `durationMs`. |
 | `CancelChat` | The function returned by `createChat`. |
 | `ChatMessage` | One prompt turn, `role`, `content` and optional `images` and `audio`. |
@@ -673,8 +705,8 @@ Yes, on models with vision support. Put image URLs in a user turn's `images`
 array. Qwen3-VL 2B accepts images on the CPU engine and Gemma 4 E2B accepts
 images on the desktop WebGPU engine. On a phone or tablet Gemma resolves to
 `gemma4_e2b_limited`, the text-only browser build, so use `qwen3_vl_2b` for
-mobile images. Each image keeps its full frame and targets 128 vision tokens,
-at most 136, with both sides snapped to multiples of 32 px and the remainder
+mobile images. Each image keeps its full frame and targets 64 vision tokens,
+at most 72, with both sides snapped to multiples of 32 px and the remainder
 cropped. The WebGPU engine instead center-crops a 384 x 384 square with the
 smallest Gemma 4 vision budget. A model without vision drops images
 when the turn also has text; an image-only turn reports

@@ -41,8 +41,8 @@ The weights download at runtime and are not part of this package.
 
 - License: Apache License 2.0
 - Source: https://huggingface.co/unsloth/Qwen3-VL-2B-Instruct-GGUF
-- Contents: the Unsloth Qwen3-VL Instruct checkpoint in Q4_K_M GGUF form and
-  its F16 vision projector.
+- Contents: the Unsloth Qwen3-VL Instruct checkpoint in Q3_K_M and Q4_K_M GGUF
+  form, and its F16 vision projector.
 
 ### Gemma 4 E2B
 

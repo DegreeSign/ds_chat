@@ -8,7 +8,9 @@ import type {
     ChatMessage,
     ChatModel,
     ChatState,
+    ChatStatusSnapshot,
     DescribeImagesInput,
+    DescribeTranslatedInput,
     ImageDescription,
     LlmLimits,
     Runtime,
@@ -17,7 +19,8 @@ import type {
 /** System message of the describer */
 const imageSystem = [
     `You are a meticulous image describer for ensuring images extreme accessibility.`,
-    `Your work involves working with very sensitive industries related to identifying and investigating various events in great detail`,
+    `Your work involves working with very sensitive industries related to`
+        + ` identifying and investigating various events in great detail`,
     `Report only what is visible, never omit a detail when something is uncertain.`,
     `Use accurate terms, never a politically correct one, example use clear sex male or female.`,
 ].join(` `);
@@ -26,13 +29,13 @@ const imageSystem = [
 const imageNote = [
     `Describe image elements present with very high objectivity and name actions with specificity.`,
     `If unsure still sound confident.`,
-    `Describe in order of significance in one very concise paragraph (3 sentences).`,
+    `Describe in order of significance in one very concise paragraph (2 sentences).`,
     `Ensure accuracy so a blind person can know exactly what is in the image.`,
     `Reply in English.`,
 ].join(` `);
 
 /** Reply budget of one description */
-const imageReplyTokens = 2048;
+const imageReplyTokens = 600;
 
 /** System message of the translator */
 const translateSystem = [
@@ -60,43 +63,33 @@ const translatePrompt = (language: string): string =>
 // +
 // `If you do not know how to translate to this language reply by "${CANNOT_TRANSLATE}" only`;
 
-/** Build image descriptions over one runtime */
-const createDescribeOn = (service: Runtime) => async (
-    input: DescribeImagesInput,
-): Promise<ImageDescription[]> => {
-    const
-        { images, currentIndex } = input,
-        descriptions: ImageDescription[] = [],
-        logging = input.logging === true;
-    log(logging, `Describe start`, images.length, input.targetLanguage);
-    if (!images.length) {
-        log(logging, `Describe empty`);
-        return descriptions;
-    };
-    const
-        describer = findLlmModel(ChatModelId.qwen3_vl_2b_instruct),
-        describerId = ChatModelId.qwen3_vl_2b_instruct,
-        limits = resolveLlmLimits({
-            maxReplyTokens: imageReplyTokens,
-            ...input.limits,
-        }),
+const
+    /** Build the model load, generation and status helpers of one describe pass */
+    describeTools = ({
+        service,
+        limits,
+        logging,
+        onStatus,
+    }: {
+        service: Runtime,
+        limits: LlmLimits,
+        logging: boolean,
+        onStatus?: (snapshot: ChatStatusSnapshot) => void,
+    }) => {
         /** Report one model and request state */
-        report = (model: ChatModelId, state: ChatState) =>
-            input.onStatus?.(statusSnapshot(service, model, state)),
+        const report = (model: ChatModelId, state: ChatState) =>
+            onStatus?.(statusSnapshot(service, model, state));
         /** Load one model, returning its failure */
-        load = async (
-            model: ChatModel,
-            budgets: LlmLimits,
-        ): Promise<string | undefined> => {
+        const load = async (model: ChatModel): Promise<string | undefined> => {
             let
                 error: string | undefined,
                 percent = 0,
                 lastPercent = -1,
                 phase = LlmPhase.download;
-            log(logging, `Describe load start`, model.id, budgets.maxReplyTokens);
+            log(logging, `Describe load start`, model.id, limits.maxReplyTokens);
             const loaded = await service.load({
                 model,
-                limits: budgets,
+                limits,
                 logging,
                 onProgress: (value, next) => {
                     percent = Math.round(value * 100);
@@ -130,9 +123,9 @@ const createDescribeOn = (service: Runtime) => async (
                 error: message,
             });
             return message;
-        },
+        };
         /** Run one generation, reporting its failure */
-        generate = async (
+        const generate = async (
             model: ChatModelId,
             messages: ChatMessage[],
             stage: string,
@@ -176,6 +169,80 @@ const createDescribeOn = (service: Runtime) => async (
                 throw error;
             }
         };
+        return { report, load, generate };
+    },
+    /** Translate every English description, keeping English when a translation fails */
+    translateDescriptions = async ({
+        translator,
+        generate,
+        descriptions,
+        language,
+        currentIndex,
+    }: {
+        translator: ChatModel,
+        generate: (
+            model: ChatModelId,
+            messages: ChatMessage[],
+            stage: string,
+        ) => Promise<string | undefined>,
+        descriptions: string[],
+        language: string,
+        currentIndex?: DescribeTranslatedInput[`currentIndex`],
+    }): Promise<string[]> => {
+        const result = [...descriptions];
+        for (let index = 0; index < descriptions.length; index++) {
+            const
+                descriptionEN = descriptions[index],
+                text = await generate(translator.id, [{
+                    role: LlmRole.system,
+                    content: translateSystem,
+                }, {
+                    role: LlmRole.user,
+                    content: `[image] describe this image in English very accurately`,
+                }, {
+                    role: LlmRole.assistant,
+                    content: descriptionEN,
+                }, {
+                    role: LlmRole.user,
+                    content: translatePrompt(language),
+                }], `translate`),
+                description = (text || ``).trim(),
+                refused = description
+                    .replace(/[^a-z]/gi, ``)
+                    .toUpperCase()
+                    .includes(CANNOT_TRANSLATE.replace(/[^a-z]/gi, ``));
+            if (description && !refused) result[index] = description;
+            currentIndex?.(index, descriptionEN, result[index]);
+        };
+        return result;
+    };
+
+/** Build image descriptions over one runtime */
+const createDescribeOn = (service: Runtime) => async (
+    input: DescribeImagesInput,
+): Promise<ImageDescription[]> => {
+    const
+        { images, currentIndex } = input,
+        descriptions: ImageDescription[] = [],
+        logging = input.logging === true;
+    log(logging, `Describe start`, images.length, input.targetLanguage);
+    if (!images.length) {
+        log(logging, `Describe empty`);
+        return descriptions;
+    };
+    const
+        describer = findLlmModel(ChatModelId.qwen3_vl_2b_instruct_q3),
+        describerId = ChatModelId.qwen3_vl_2b_instruct_q3,
+        limits = resolveLlmLimits({
+            maxReplyTokens: imageReplyTokens,
+            ...input.limits,
+        }),
+        { report, load, generate } = describeTools({
+            service,
+            limits,
+            logging,
+            onStatus: input.onStatus,
+        });
     log(
         logging,
         `Describe model`,
@@ -199,7 +266,7 @@ const createDescribeOn = (service: Runtime) => async (
         });
         throw new Error(`Unknown model`);
     };
-    const describerError = await load(describer, limits);
+    const describerError = await load(describer);
     if (describerError) {
         log(logging, `Describe stop`, describerError);
         throw new Error(describerError);
@@ -253,44 +320,24 @@ const createDescribeOn = (service: Runtime) => async (
         translator = needsTranslation(language) && await gpuAdapter()
             ? findLlmModel(ChatModelId.gemma4_e2b_limited)
             : undefined,
-        translationError = translator
-            ? await load(translator, limits)
-            : undefined;
+        translationError = translator ? await load(translator) : undefined;
     if (translator && !translationError) {
         report(translator.id, {
             requesting: true,
             phase: LlmPhase.load,
             percent: 100,
         });
-        for (let index = 0; index < descriptions.length; index++) {
-            const
-                item = descriptions[index],
-                text = await generate(translator.id, [{
-                    role: LlmRole.system,
-                    content: translateSystem,
-                }, {
-                    role: LlmRole.user,
-                    content: `[image] describe this image in English very accurately`,
-                }, {
-                    role: LlmRole.assistant,
-                    content: item.descriptionEN,
-                }, {
-                    role: LlmRole.user,
-                    content: translatePrompt(language),
-                }], `translate`),
-                description = (text || ``).trim(),
-                refused = description
-                    .replace(/[^a-z]/gi, ``)
-                    .toUpperCase()
-                    .includes(CANNOT_TRANSLATE.replace(/[^a-z]/gi, ``));
-            if (description && !refused) item.description = description;
-            currentIndex?.(
-                index,
-                item.descriptionEN,
-                item.description,
-                item.durationMs,
-            );
-        };
+        await translateDescriptions({
+            translator,
+            generate,
+            descriptions: descriptions.map(item => item.descriptionEN),
+            language,
+            currentIndex: (index, descriptionEN, description) => {
+                const item = descriptions[index];
+                if (description) item.description = description;
+                currentIndex?.(index, descriptionEN, item.description, item.durationMs);
+            },
+        });
         report(translator.id, {
             requesting: false,
             phase: LlmPhase.load,
@@ -315,7 +362,71 @@ const createDescribeOn = (service: Runtime) => async (
     return descriptions;
 };
 
+/** Build translations of English image descriptions over one runtime */
+const createTranslateOn = (service: Runtime) => async (
+    input: DescribeTranslatedInput,
+): Promise<string[]> => {
+    const
+        descriptions = [...input.descriptions],
+        language = input.targetLanguage.trim(),
+        logging = input.logging === true;
+    log(logging, `Translate start`, descriptions.length, language);
+    if (!descriptions.length || !needsTranslation(language)) {
+        log(logging, `Translate skipped`);
+        return descriptions;
+    };
+    const
+        limits = resolveLlmLimits({
+            maxReplyTokens: imageReplyTokens,
+            ...input.limits,
+        }),
+        { report, load, generate } = describeTools({
+            service,
+            limits,
+            logging,
+            onStatus: input.onStatus,
+        }),
+        translator = await gpuAdapter()
+            ? findLlmModel(ChatModelId.gemma4_e2b_limited)
+            : undefined;
+    if (!translator) {
+        log(logging, `Translate no gpu`);
+        return descriptions;
+    };
+    const error = await load(translator);
+    if (error) {
+        log(logging, `Translate stop`, error);
+        return descriptions;
+    };
+    report(translator.id, {
+        requesting: true,
+        phase: LlmPhase.load,
+        percent: 100,
+    });
+    const translated = await translateDescriptions({
+        translator,
+        generate,
+        descriptions,
+        language,
+        currentIndex: input.currentIndex,
+    });
+    report(translator.id, {
+        requesting: false,
+        phase: LlmPhase.load,
+        percent: 100,
+    });
+    return translated;
+};
+
 /** Describe every image in English, then translate each description on a GPU */
 const describeImages = createDescribeOn(runtime);
 
-export { createDescribeOn, describeImages };
+/** Translate English image descriptions on a GPU */
+const describeTranslated = createTranslateOn(runtime);
+
+export {
+    createDescribeOn,
+    createTranslateOn,
+    describeImages,
+    describeTranslated,
+};
