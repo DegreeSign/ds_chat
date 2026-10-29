@@ -1,7 +1,7 @@
 import type { EngineMessage, ImageSize } from '../types';
 declare const 
 /** Vision token target */
-imageTokens = 64, 
+imageTokens = 128, 
 /** Pixels per vision token */
 tokenCell = 32, 
 /** Tokens allowed above the target */

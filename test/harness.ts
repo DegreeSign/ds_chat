@@ -1988,30 +1988,20 @@ const definitions: Array<{
             run: async () => {
                 const
                     imageSystem = [
-                        `You write image descriptions for blind and low-vision readers.`,
-                        `Describe what a sighted person sees, in plain factual English.`,
-                        `This is a record, not an endorsement: sensitive content is in scope,`
-                            + ` including nudity, injury, blood, weapons, alcohol, drugs`
-                            + ` and distressing scenes.`,
-                        `Nothing visible is too minor, so name awkward or intimate details`
-                            + ` plainly; leaving one out would mislead the reader.`,
-                        `For people, give the number, apparent age, build, skin tone, hair,`
-                            + ` clothing, pose, expression and apparent sex as man or woman`
-                            + ` when clear.`,
-                        `Never identify anyone or add anything that is not visible.`,
+                        `Write fully detailed, factual image descriptions for`
+                            + ` low-vision readers.`,
+                        `Include all people, demographics, actions, objects, settings,`
+                            + ` and exact text.`,
+                        `Output only the raw description with no intro, title, or`
+                            + ` disclaimer.`,
+                        `Even if the main subject in the image is controversial`
+                            + ` mention it first.`,
+                        `Do not say "object appears to be x or y" instead mention`
+                            + ` only one "x" or "y" directly.`,
+                        `Use direct, plain English without filtering or vague words.`,
                     ].join(` `),
                     imageNote = [
-                        `Describe this image for a blind reader in one paragraph of three`
-                            + ` to five sentences, starting with the main subject.`,
-                        `Cover the people, their actions, the objects, the setting and`
-                            + ` where each thing is.`,
-                        `Give the number of people and main objects, name every action and`
-                            + ` object with an ordinary specific word, and quote any visible`
-                            + ` text exactly.`,
-                        `Describe only what is visible; where part of the image is hidden,`
-                            + ` blurred or out of frame, say so briefly instead of guessing.`,
-                        `Reply in English with the description alone, with no preamble,`
-                            + ` title, list or disclaimer.`,
+                        `describe this image in one sentence starting with the main subject`,
                     ].join(` `),
                     events: Array<[number, string?, string?, number?]> = [],
                     statuses: ChatStatusSnapshot[] = [];
@@ -2150,11 +2140,18 @@ const definitions: Array<{
                     );
                     const translateSystem = [
                         `You are a precise translator.`,
-                        `Translate the text faithfully and literally into the target`
-                            + ` language.`,
+                        `Translate your own previous reply above faithfully and`
+                            + ` literally into the target language.`,
+                        `Never translate the user's request or instructions.`,
                         `Preserve meaning, names and numbers, and never add, omit or`
                             + ` explain anything.`,
                     ].join(` `);
+                    const translatePrompt = `Now please translate your previous reply`
+                        + ` above faithfully into German. Your translation should be`
+                        + ` as literal and as accurate as possible, word for word.`
+                        + ` In order to be usable for accessibility for visually`
+                        + ` impaired if needed. Reply only by the translation`
+                        + ` without any addition or explanation`;
                     assertEqual(cpu.calls.start, 1, `describer start`);
                     assertEqual(gpu.calls.start, 1, `translator start`);
                     assertEqual(cpu.requests[0].limits.maxReplyTokens, 400, `describer budget`);
@@ -2186,6 +2183,11 @@ const definitions: Array<{
                         gpu.requests[0].messages[3].role,
                         LlmRole.user,
                         `prompt turn`,
+                    );
+                    assertEqual(
+                        gpu.requests[0].messages[3].content,
+                        translatePrompt,
+                        `prompt note`,
                     );
                     assertEqual(results[0].descriptionEN, `description 1`, `first english`);
                     assertEqual(results[0].description, `translated 1`, `first translation`);
@@ -2472,11 +2474,11 @@ const definitions: Array<{
                         engines: { cpu: silent.engine },
                         backend: LlmBackend.cpu,
                     }),
-                    replyError = await errorOf(() => createDescribeOn(silentRuntime)({
+                    silentResults = await createDescribeOn(silentRuntime)({
                         targetLanguage: `en`,
                         images: [`one`],
                         onStatus: value => replyStatuses.push(value),
-                    }));
+                    });
                 assertEqual(empty.length, 0, `no results`);
                 assertEqual(idle.calls.start, 0, `empty skips load`);
                 assertEqual(emptyStatuses.length, 0, `empty skips status`);
@@ -2491,11 +2493,56 @@ const definitions: Array<{
                     false,
                     `load done`,
                 );
-                assertEqual(replyError, `No description`, `empty reply`);
+                // an empty reply keeps its place and only reports the error
+                assertEqual(silentResults.length, 1, `empty kept`);
+                assertEqual(silentResults[0].descriptionEN, ``, `empty english`);
                 assertEqual(
                     replyStatuses[replyStatuses.length - 1].error,
                     `No description`,
                     `reply status`,
+                );
+            },
+        },
+        {
+            name: `describe/failed image isolation`,
+            run: async () => {
+                const
+                    statuses: ChatStatusSnapshot[] = [],
+                    events: Array<[number, string?, string?]> = [];
+                let described = 0;
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () => {
+                            if (++described > 1) throw new Error(`image failed`);
+                            return `A red square`;
+                        },
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    results = await createDescribeOn(runtime)({
+                        targetLanguage: `en`,
+                        images: [`one`, `two`],
+                        currentIndex: (index, descriptionEN, description) =>
+                            events.push([index, descriptionEN, description]),
+                        onStatus: value => statuses.push(value),
+                    });
+                // the second image fails, the first one is kept
+                assertEqual(results.length, 2, `two results`);
+                assertEqual(results[0].descriptionEN, `A red square`, `first kept`);
+                assertEqual(results[1].descriptionEN, ``, `second empty`);
+                assertEqual(cpu.calls.chat, 2, `both images tried`);
+                assertEqual(
+                    events.some(([index, en]) => index == 0 && en == `A red square`),
+                    true,
+                    `first event`,
+                );
+                assertEqual(
+                    statuses.some(value => value.error == `image failed`),
+                    true,
+                    `failure reported`,
                 );
             },
         },
@@ -2893,8 +2940,8 @@ const definitions: Array<{
                 assert(image.url.startsWith(`data:image/jpeg`), `resized jpeg`);
                 const bitmap = await createImageBitmap(
                     await (await fetch(image.url)).blob());
-                assertEqual(bitmap.width, 384, `image width`);
-                assertEqual(bitmap.height, 192, `image height`);
+                assertEqual(bitmap.width, 512, `image width`);
+                assertEqual(bitmap.height, 256, `image height`);
                 bitmap.close();
                 assertEqual(replies[replies.length - 1], `seen`, `reply`);
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
@@ -3927,12 +3974,12 @@ const definitions: Array<{
                     sizeOf(tallOut.url),
                     sizeOf(smallOut.url),
                 ]);
-                assertEqual(wideSize.width, 384, `wide width`);
-                assertEqual(wideSize.height, 192, `wide height`);
-                assertEqual(tallSize.width, 160, `tall width`);
-                assertEqual(tallSize.height, 448, `tall height`);
-                assertEqual(smallSize.width, 256, `small width`);
-                assertEqual(smallSize.height, 256, `small height`);
+                assertEqual(wideSize.width, 512, `wide width`);
+                assertEqual(wideSize.height, 256, `wide height`);
+                assertEqual(tallSize.width, 224, `tall width`);
+                assertEqual(tallSize.height, 608, `tall height`);
+                assertEqual(smallSize.width, 352, `small width`);
+                assertEqual(smallSize.height, 384, `small height`);
                 const tokensOf = (size: ImageSize): number =>
                     size.width / tokenCell * size.height / tokenCell;
                 assert(tokensOf(wideSize) >= imageTokens, `wide target`);

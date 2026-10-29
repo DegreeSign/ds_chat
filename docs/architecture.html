@@ -521,7 +521,7 @@ f(`entry`, `entry`, `index.ts`, `src/index.ts`, 37);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 68);
 f(`types`, `entry`, `types.ts`, `src/types.ts`, 804);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 292);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 472);
+f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 491);
 f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 271);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 154);
@@ -605,40 +605,41 @@ n(`chat`, `preloadModel`, 278, `preloadModel`,
     `Download and load a model before the first chat, bound to the singleton`);
 n(`chat`, `clearModelCache`, 281, `clearModelCache`, `() => Promise<void>`,
     `Release the loaded model and delete every cached model file`);
-n(`describe`, `describeImages`, 462, `describeImages`,
+n(`describe`, `describeImages`, 481, `describeImages`,
     `(input: DescribeImagesInput) => Promise<ImageDescription[]>`,
     `Describe every image, stream its text and speed, then translate each`
     + ` description on a GPU, bound to the singleton runtime`);
-n(`describe`, `describeTranslated`, 465, `describeTranslated`,
+n(`describe`, `describeTranslated`, 484, `describeTranslated`,
     `(input: DescribeTranslatedInput) => Promise<string[]>`,
     `Translate existing English descriptions on a GPU, streaming their text,`
     + ` bound to the singleton runtime`);
-n(`describe`, `createDescribeOn`, 252, `createDescribeOn`,
+n(`describe`, `createDescribeOn`, 254, `createDescribeOn`,
     `(service: Runtime) => (input) => Promise<ImageDescription[]>`,
-    `Testable factory: load the describer, describe each image with a generous`
-    + ` reply budget and an accessibility system message, time every image, then load`
-    + ` the translator when a GPU exists and the target is not English; a`
+    `Testable factory: load the describer, describe each image in its own`
+    + ` request with a generous reply budget and an accessibility system message,`
+    + ` keep every finished image when a later one fails, time every image, then`
+    + ` load the translator when a GPU exists and the target is not English; a`
     + ` CANNOT_TRANSLATE reply keeps English and every model or request state`
     + ` reaches onStatus`);
-n(`describe`, `createTranslateOn`, 404, `createTranslateOn`,
+n(`describe`, `createTranslateOn`, 422, `createTranslateOn`,
     `(service: Runtime) => (input) => Promise<string[]>`,
     `Testable factory: load the translator when a GPU exists, translate each`
     + ` English description, and keep English when no model or refusal stops it`);
-n(`describe`, `describeTools`, 75, `describeTools`,
+n(`describe`, `describeTools`, 65, `describeTools`,
     `({ service, limits, logging, onStatus }) => tools`,
     `Build the shared load, generate and status helpers of describers and`
     + ` translators`);
-n(`describe`, `translateDescriptions`, 194, `translateDescriptions`,
+n(`describe`, `translateDescriptions`, 184, `translateDescriptions`,
     `({ translator, generate, descriptions, language, currentIndex, onSpeed,`
     + ` onText }) => Promise<string[]>`,
     `Translate every English description, stream its text, keep English on`
     + ` refusal and report each finished entry and its speed`);
-n(`describe`, `report`, 87, `report`, `(model, state) => void`,
+n(`describe`, `report`, 77, `report`, `(model, state) => void`,
     `Publish one snapshot for the describer, translator or final state`);
-n(`describe`, `load`, 90, `load`, `(model) => Promise<string | undefined>`,
+n(`describe`, `load`, 80, `load`, `(model) => Promise<string | undefined>`,
     `Load one model, forward its progress, log the load and return its failure`
     + ` text`);
-n(`describe`, `generate`, 135, `generate`,
+n(`describe`, `generate`, 125, `generate`,
     `({ model, messages, stage, onSpeed?, onText? })`
     + ` => Promise<string | undefined>`,
     `Run one reply, log its stage, duration, streamed deltas and text, forward`
@@ -647,21 +648,21 @@ n(`log`, `log`, 2, `log`, `(logging, ...args) => void`,
     `Write one package log line only when the call enables logging`);
 n(`describe`, `imageSystem`, 20, `imageSystem`, `string`,
     `The accessibility role and permission system message sent before every image`);
-n(`describe`, `imageNote`, 33, `imageNote`, `string`,
+n(`describe`, `imageNote`, 30, `imageNote`, `string`,
     `The exact English coverage and output note sent with every image`);
-n(`describe`, `imageReplyTokens`, 45, `imageReplyTokens`, `400`,
+n(`describe`, `imageReplyTokens`, 35, `imageReplyTokens`, `400`,
     `Default reply budget of one description and translation, overridable by`
     + ` limits`);
-n(`describe`, `translateSystem`, 48, `translateSystem`, `string`,
-    `The accuracy system message sent before every translation`);
-n(`describe`, `cannotTranslate`, 55, `cannotTranslate`, `CANNOT_TRANSLATE`,
+n(`describe`, `translateSystem`, 38, `translateSystem`, `string`,
+    `The translator system message that points the request at its own reply`);
+n(`describe`, `cannotTranslate`, 46, `cannotTranslate`, `CANNOT_TRANSLATE`,
     `The exact reply that makes the description fall back to English`);
-n(`describe`, `needsTranslation`, 58, `needsTranslation`,
+n(`describe`, `needsTranslation`, 49, `needsTranslation`,
     `(language: string) => boolean`,
     `English tags skip the translation pass`);
-n(`describe`, `translatePrompt`, 64, `translatePrompt`,
+n(`describe`, `translatePrompt`, 55, `translatePrompt`,
     `(language) => string`,
-    `One translation request that asks for the translation alone`);
+    `One request that asks for the previous reply alone, never the instruction`);
 n(`enums`, `enums`, 2, `enums`, `8 exported enums`,
     `LlmRole, ChatStatus, LlmStatus, LlmBackend (cpu, gpu, none), LlmPhase,`
     + ` ChatModelId (qwen, qwen instruct, instruct q3, gemma, gemma limited),`
@@ -1080,7 +1081,7 @@ n(`store`, `purge`, 477, `store.purge`, `() => Promise<void>`,
     `Delete the whole engine store directory and every model file in it`);
 
 // image resizing
-n(`images`, `tokens`, 5, `imageTokens`, `64`,
+n(`images`, `tokens`, 5, `imageTokens`, `128`,
     `Vision token target of one CPU image`);
 n(`images`, `tokenCell`, 7, `tokenCell`, `32`,
     `Pixels covered by one vision token`);
@@ -1092,7 +1093,7 @@ n(`images`, `buffer`, 48, `contentBuffer`, `(url) => Promise<ArrayBuffer>`,
     `Decode a data URL or fetch an image or audio URL into bytes`);
 n(`images`, `visionSize`, 65, `visionSize`,
     `(width, height) => ImageSize`,
-    `Closest 32 px grid from 64 to 72 tokens, aspect kept`);
+    `Closest 32 px grid from 128 to 136 tokens, aspect kept`);
 n(`images`, `resizeUrl`, 93, `resizeImageUrl`,
     `(url, size?) => Promise<string>`,
     `Decode an image, crop the sub-cell remainder, resize to the grid,`
@@ -1244,7 +1245,7 @@ n(`scripts`, `banner`, 1, `banner-wllama`, `node script`,
 n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
     `Appends a console filter for the benign encoder-hint warnings to the`
     + ` emitted LiteRT glue, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.0.1`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.0.2`,
     `build = tsc declarations, webpack, banner, glue filter; typecheck = tsc --noEmit;`
     + ` wllama and LiteRT are build-time dependencies; exports point at`
     + ` dist/browser, dist/node cjs and dist/node esm`);
@@ -1748,7 +1749,7 @@ const FLOWS = {
                 + ` the limits window, drop a leading assistant, merge same`
                 + ` roles.`),
             step([`resizeImages`],
-                ` Target 64 to 72 vision tokens, snap both sides to the`
+                ` Target 128 to 136 vision tokens, snap both sides to the`
                 + ` 32 px grid and crop the remainder. LiteRT instead`
                 + ` center-crops to 384 x 384 for its 70-token budget.`),
             step([`wllama.toWllamaMessages`, `litert.toLitertMessages`],

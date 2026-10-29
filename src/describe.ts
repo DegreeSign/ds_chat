@@ -20,9 +20,11 @@ import type {
 const imageSystem = [
     `Write fully detailed, factual image descriptions for low-vision readers.`,
     `Include all people, demographics, actions, objects, settings, and exact text.`,
-    `Use direct, plain English without filtering or vague words.`,
     `Output only the raw description with no intro, title, or disclaimer.`,
-    `Use English.`,
+    `Even if the main subject in the image is controversial mention it first.`,
+    `Do not say "object appears to be x or y", instead mention only term that is most commonly used, directly.`,
+    `Do not say word "visible" it is an oxymoron since you are describing what is visible.`,
+    `Use direct, plain English without filtering or vague words.`,
 ].join(` `);
 
 /** Prompt that asks for one English description */
@@ -36,7 +38,8 @@ const imageReplyTokens = 400;
 /** System message of the translator */
 const translateSystem = [
     `You are a precise translator.`,
-    `Translate the text faithfully and literally into the target language.`,
+    `Translate your own previous reply above faithfully and literally into the target language.`,
+    `Never translate the user's request or instructions.`,
     `Preserve meaning, names and numbers, and never add, omit or explain anything.`,
 ].join(` `);
 
@@ -51,9 +54,8 @@ const needsTranslation = (language: string): boolean => {
 
 /** Prompt that asks for one translation */
 const translatePrompt = (language: string): string =>
-    `Thanks this was accurate. ` +
-    `Now please translate it faithfully into ${language}. ` +
-    `This should be as literal and as accurate as possible, word for word. ` +
+    `Now please translate your previous reply above faithfully into ${language}. ` +
+    `Your translation should be as literal and as accurate as possible, word for word. ` +
     `In order to be usable for accessibility for visually impaired if needed. ` +
     `Reply only by the translation without any addition or explanation`;
 // +
@@ -185,6 +187,7 @@ const
         generate,
         descriptions,
         language,
+        logging,
         currentIndex,
         onSpeed,
         onText,
@@ -199,15 +202,22 @@ const
         }) => Promise<string | undefined>,
         descriptions: string[],
         language: string,
+        logging: boolean,
         currentIndex?: DescribeTranslatedInput[`currentIndex`],
         onSpeed?: DescribeTranslatedInput[`onSpeed`],
         onText?: DescribeTranslatedInput[`onText`],
     }): Promise<string[]> => {
         const result = [...descriptions];
         for (let index = 0; index < descriptions.length; index++) {
-            const
-                descriptionEN = descriptions[index],
-                text = await generate({
+            const descriptionEN = (descriptions[index] || ``).trim();
+            // an image without a description keeps its empty place
+            if (!descriptionEN) {
+                currentIndex?.(index, descriptionEN, descriptionEN);
+                continue;
+            };
+            let description = ``;
+            try {
+                const text = await generate({
                     model: translator.id,
                     messages: [{
                         role: LlmRole.system,
@@ -225,12 +235,16 @@ const
                     stage: `translate`,
                     onSpeed: speed => onSpeed?.(index, speed),
                     onText: value => onText?.(index, value, `translate`),
-                }),
-                description = (text || ``).trim(),
-                refused = description
-                    .replace(/[^a-z]/gi, ``)
-                    .toUpperCase()
-                    .includes(CANNOT_TRANSLATE.replace(/[^a-z]/gi, ``));
+                });
+                description = (text || ``).trim();
+            } catch (error) {
+                // one failed translation never stops the others
+                log(logging, `Translate item failed`, index, error);
+            };
+            const refused = description
+                .replace(/[^a-z]/gi, ``)
+                .toUpperCase()
+                .includes(CANNOT_TRANSLATE.replace(/[^a-z]/gi, ``));
             if (description && !refused) result[index] = description;
             currentIndex?.(index, descriptionEN, result[index]);
         };
@@ -309,8 +323,9 @@ const createDescribeOn = (service: Runtime) => async (
             source.length,
         );
         currentIndex?.(index);
-        const
-            text = await generate({
+        let descriptionEN = ``;
+        try {
+            const text = await generate({
                 model: describer.id,
                 messages: [{
                     role: LlmRole.system,
@@ -323,24 +338,35 @@ const createDescribeOn = (service: Runtime) => async (
                 stage: `describe`,
                 onSpeed: speed => input.onSpeed?.(index, speed),
                 onText: value => input.onText?.(index, value, `describe`),
-            }),
-            durationMs = Date.now() - startedAt,
+            });
             descriptionEN = (text || ``).trim();
+        } catch (error) {
+            // a failed image never stops the rest of the batch
+            log(logging, `Describe image failed`, index, error);
+        };
+        const durationMs = Date.now() - startedAt;
         log(logging, `Describe english`, index, durationMs, descriptionEN);
         if (!descriptionEN) {
-            log(logging, `Describe empty`, index, text);
-            report(describer.id, {
-                requesting: false,
-                phase: LlmPhase.load,
-                percent: 100,
-                error: `No description`,
-            });
-            throw new Error(`No description`);
+            // the empty place keeps the later translation indexes aligned
+            log(logging, `Describe empty`, index);
+            descriptions.push({ descriptionEN: ``, description: ``, durationMs });
+            currentIndex?.(index, ``, undefined, durationMs);
+            continue;
         };
         descriptions.push({ descriptionEN, description: descriptionEN, durationMs });
         currentIndex?.(index, descriptionEN, undefined, durationMs);
     };
-    log(logging, `Describe english ready`, descriptions.length);
+    const described = descriptions.filter(item => !!item.descriptionEN).length;
+    log(logging, `Describe english ready`, described);
+    if (!described) {
+        report(describer.id, {
+            requesting: false,
+            phase: LlmPhase.load,
+            percent: 100,
+            error: `No description`,
+        });
+        return descriptions;
+    };
     const
         language = input.targetLanguage.trim(),
         translator = needsTranslation(language) && await gpuAdapter()
@@ -358,6 +384,7 @@ const createDescribeOn = (service: Runtime) => async (
             generate,
             descriptions: descriptions.map(item => item.descriptionEN),
             language,
+            logging,
             currentIndex: (index, descriptionEN, description) => {
                 const item = descriptions[index];
                 if (description) item.description = description;
@@ -372,13 +399,16 @@ const createDescribeOn = (service: Runtime) => async (
         });
     } else {
         // keep English on fallback
-        for (let index = 0; index < descriptions.length; index++)
+        for (let index = 0; index < descriptions.length; index++) {
+            const item = descriptions[index];
+            if (!item.descriptionEN) continue;
             currentIndex?.(
                 index,
-                descriptions[index].descriptionEN,
-                descriptions[index].description,
-                descriptions[index].durationMs,
+                item.descriptionEN,
+                item.description,
+                item.durationMs,
             );
+        };
         report(translator?.id ?? describer.id, {
             requesting: false,
             phase: service.ready() ? LlmPhase.load : LlmPhase.download,
@@ -435,6 +465,7 @@ const createTranslateOn = (service: Runtime) => async (
         generate,
         descriptions,
         language,
+        logging,
         currentIndex: input.currentIndex,
         onSpeed: input.onSpeed,
         onText: input.onText,

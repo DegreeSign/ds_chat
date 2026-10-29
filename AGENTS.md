@@ -43,7 +43,9 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   performance work and internal changes stay out of it.
 - Keep `docs/architecture.html` current with every change. Update the file line
   counts, node line numbers, added or removed helpers, edges and the send flow
-  in the same change, so the map never drifts from the source.
+  in the same change, so the map never drifts from the source. A version bump
+  is a change too: update the `@degreesign/chat` version label on the
+  `package.json` node in the same edit as `package.json`.
 - Model weights are never stored in the repository. The engines own their
   caches.
 - Never leave `dist/` in the worktree and never add it to a change. The owner
