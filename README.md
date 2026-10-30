@@ -231,14 +231,17 @@ createChat(input: ChatInput): CancelChat
 preloadModel(input?: ChatPreloadInput): Promise<boolean>
 describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
+describeModelId: ChatModelId
 clearModelCache(): Promise<void>
 ```
 
 Call it once per response. A new call aborts the previous stream. When the
-requested model is already loaded, no download or load happens. Switching to a
-different model unloads the previous runtime and keeps its files on disk.
-`clearModelCache` releases the loaded model and deletes every cached model file
-from this device.
+requested model is already loaded, no download or load happens. On a desktop a
+loaded model stays resident, one per backend, so the CPU describer and the GPU
+translator never reload each other; a new model of the same backend replaces the
+old one. A phone keeps one model in total. Files stay on disk, and
+`clearModelCache` releases every loaded model and deletes every cached model
+file from this device.
 
 `ChatInput`:
 
@@ -258,19 +261,20 @@ Without `model` the package picks the GPU build when the browser provides a
 WebGPU adapter and the CPU build when it does not. The budget defaults are 250
 reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning tokens (320 on the
 CPU), 2 images, 1 audio clip, 1000 characters per message, 10000 prompt
-characters and 6 CPU threads.
+characters and 32 CPU threads.
 
 `CancelChat` is `() => void`. Its meaning depends on the current state:
 
 | State | Effect |
 | ----- | ------ |
 | Downloading or loading | Stops waiting for the load. Bytes stay on disk, and a download another caller waits for keeps going. |
-| Ready | Aborts the reply and unloads the model. |
+| Ready | Aborts the reply and unloads the model that answered. |
 | An older call | Nothing, because a newer call owns the runtime. |
 
-The model stays loaded between calls until a cancel frees it. One model
-download serves every caller: a chat that joins a preload shares its progress
-and never starts a second download.
+The model stays loaded between calls until a cancel frees it, and a newer
+model of the same backend replaces it. One model download serves every caller:
+a chat that joins a preload shares its progress and never starts a second
+download.
 
 ### Preload
 
@@ -284,6 +288,10 @@ unsupported or failed. A later `createChat` for the same model reuses the loaded
 runtime, and either call joins a load already in flight. A preload owns no cancel
 function, so a chat that joins its download and is cancelled leaves the download
 running.
+
+Preloads on different backends run together, so a host may warm the GPU text
+model and the CPU media model inside one `Promise.all`. Each call reports only
+its own model, and a load on the same backend still replaces the one in flight.
 
 `ChatPreloadInput` is the subset of `ChatInput` that a preload needs:
 
@@ -312,7 +320,8 @@ the translation model cannot load, or when the translator replies
 `CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. Both the
 description and translation calls use a 600-token reply budget unless
 `limits.maxReplyTokens` overrides it. The describer sets an explicit 16 to
-100 vision-token window; other models leave the engine image limits unset.
+128 vision-token window, the same target the package resizes images to; other
+models leave the engine image limits unset.
 
 The describer and translator each receive a system message that puts accuracy
 first: the describer reports only visible detail, and the translator translates
@@ -463,7 +472,8 @@ vision or audio encoder, so `supportsImages` and `supportsAudio` report `false`
 there. Use `qwen3_vl_2b` for images on mobile.
 
 The first call downloads the model before its engine loads it. Later calls
-reuse the loaded runtime. Only one model stays in memory. An interrupted
+reuse the loaded runtime. A desktop keeps one model per backend in memory, so
+the CPU describer and the GPU text model stay resident together. An interrupted
 download keeps every part it committed and resumes from the last one on the
 next attempt, including after a reload.
 
@@ -543,12 +553,28 @@ onProgress })` contract and return the runtime object with `model`, `backend`,
 `contextSize`, `chat()` and `unload()`. `createChat` starts the engine that
 matches the requested model.
 
-The CPU engine derives a raw thread count from the device, then caps it at
-`limits.maxThreads` and at 3 threads for a text model or 2 threads for a model
-with a vision projector. The vision cap keeps the wasm image path alive: a
-100-token image completes in about 89 seconds with 2 threads, while 3 threads
-stalled past 10 minutes in the headless check. Every CPU model uses one count
-for the whole load.
+The CPU engine reads `navigator.hardwareConcurrency`, keeps a fifth of the
+logical cores free for the page (at least one) and gives the rest to the
+engine: 8 threads run with 7, 16 with 13, 4 with 3. `limits.maxThreads` only
+lowers the count, and phones follow the same rule; only the context window is
+smaller there. On an 8-thread desktop a 128-token image reaches its first token
+in 71.3 seconds with 7 threads, 82.3 seconds with 6 and 106.6 seconds with 4. A
+JavaScript probe was measured and rejected: it follows JS worker scaling, not
+the ggml pool, and its curve was too noisy to trust.
+
+The vision path runs two ggml pools, one for the projector and one for the
+model, so it needs twice the workers of a text model. wllama 3.8.1 pre-spawns
+only `n_threads` workers, which leaves the second pool without workers and
+stalls the encode at 3 or more threads. `scripts/patch-wllama.cjs` sizes the
+pool at twice the thread count on every build until the fix is released
+upstream; with it the image path runs at the heuristic count (7 threads on this
+8-thread desktop) instead of 2. Every CPU model uses one count for the whole
+load.
+
+The build bundles wllama from the installed package, so `yarn build` runs
+`scripts/patch-wllama.cjs` first. The script is idempotent and fails loudly when
+the installed wllama no longer matches the patch. `patches/wllama-pool.patch`
+holds the same change as an upstream diff for wllama.
 
 The CPU engine needs cross-origin isolation for its threads. Serve the page with
 both headers:
@@ -570,8 +596,11 @@ self hosted. Chromium also accepts
 changed. A page inside an iframe is isolated only when every ancestor sets the
 same headers.
 
-Each engine keeps its own cache. Loading a model unloads the previous runtime
-and keeps the previous model's files, so a switch back skips the download.
+Each engine keeps its own cache. A desktop keeps one loaded model per backend,
+so a switch between the CPU and GPU models skips both the download and the
+load; a model of the same backend replaces the previous one. A phone keeps one
+model in total. The previous model's files always stay, so a switch back skips
+the download.
 `clearModelCache()` deletes them all and frees the storage. Both engines store
 model files in the origin private file system as numbered parts, under
 `wllama-store` for the CPU engine and `litert-store` for the GPU engine. The GPU

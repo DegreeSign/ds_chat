@@ -10,7 +10,9 @@ import {
     runEngineChat,
 } from './engine';
 import { createModelStore, isStoreError } from './store';
+import { heuristicThreads } from './threads';
 import { contentBuffer, imageTokens } from './images';
+import { log } from '../log';
 import { ChatModelId, LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
@@ -27,20 +29,8 @@ import type {
 const
     /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
-    /** Hard thread cap of the CPU engine */
-    maxThreads = 3,
-    /** Hard thread cap when the model has a vision projector */
-    visionMaxThreads = 2,
     /** Resumable file store of the CPU engine */
     store = createModelStore(`wllama-store`);
-
-/** CPU threads after the hardware maximum, the caller and the cap */
-const cpuThreads = (cores: number, limit: number, vision = false): number =>
-    Math.max(1, Math.min(
-        Math.max(2, Math.min(8, (cores || 4) - 1)),
-        limit,
-        vision ? visionMaxThreads : maxThreads,
-    ));
 
 /** Ids that set the instruct vision window */
 const instructIds = [
@@ -51,7 +41,7 @@ const instructIds = [
 /** Image limits of one model */
 const visionLimits = (model: ChatModel) =>
     model.cpu?.mmproj && instructIds.includes(model.id)
-        ? { image_min_tokens: 16, image_max_tokens: 100 }
+        ? { image_min_tokens: 16, image_max_tokens: imageTokens }
         : {};
 
 let
@@ -259,11 +249,10 @@ const
         if (wllama && key != assetsKey) await dropWllama();
         assets = next;
         assetsKey = key;
-        const threads = cpuThreads(
-            (typeof navigator != `undefined` && navigator.hardwareConcurrency) || 4,
-            limits.maxThreads, !!cpu.mmproj,
-        );
         const
+            cores = typeof navigator != `undefined`
+                ? navigator.hardwareConcurrency : 0,
+            threads = Math.min(heuristicThreads(cores), limits.maxThreads),
             instance = await getWllama(),
             complete = await filesStored(model),
             projectorFile = cpu.mmproj?.file,
@@ -287,6 +276,10 @@ const
         const loadParams = {
             n_ctx: contextSize,
             n_threads: threads,
+            // one request only
+            n_parallel: 1,
+            // warm graphs at load
+            warmup: true,
             reasoning_budget_tokens: limits.maxThinkingTokens, // cap chain-of-thought tokens, long thinking makes replies slow
             n_gpu_layers: 0, // this engine is the CPU fallback, never offload to a GPU
             jinja: true,
@@ -340,12 +333,34 @@ const
             await dropWllama();
             throw new Error(`Cancelled`);
         };
+        const info = instance.getLoadedContextInfo();
         // a failed context init is still reported as loaded, the first chat
         // call would abort the wasm module
-        if (!instance.getLoadedContextInfo().n_ctx) {
+        if (!info.n_ctx) {
             await dropWllama();
             throw new Error(`Failed to create model context`);
         };
+        log(
+            logging,
+            `CPU engine ready`,
+            model.id,
+            `cores`,
+            typeof navigator != `undefined` ? navigator.hardwareConcurrency : 0,
+            `isolated`,
+            typeof crossOriginIsolated != `undefined` && crossOriginIsolated,
+            `requested`,
+            threads,
+            `multithread`,
+            instance.isMultithread(),
+            `active`,
+            instance.getNumThreads(),
+            `context`,
+            info.n_ctx,
+            `batch`,
+            info.n_batch,
+            `ubatch`,
+            info.n_ubatch,
+        );
         return {
             model,
             backend: LlmBackend.cpu,
@@ -378,7 +393,6 @@ const
 
 export {
     cpuFiles,
-    cpuThreads,
     startLLM,
     storedBlobs,
     toWllamaMessages,

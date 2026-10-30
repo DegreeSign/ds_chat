@@ -12,6 +12,7 @@ import {
 } from './engine';
 import { createModelStore, isStoreError } from './store';
 import { contentBuffer } from './images';
+import { log } from '../log';
 import { LlmBackend, LlmPhase } from '../enums';
 import type {
     ChatModel,
@@ -35,6 +36,12 @@ const
     cacheName = `litertlm-models`,
     /** Smallest Gemma 4 vision budget in tokens */
     visionTokens = 70,
+    /** Share of wall time the GPU stays busy */
+    gpuBudget = 0.8,
+    /** Least rest handed to the browser */
+    minRestMs = 12,
+    /** Most rest one pause may take */
+    maxRestMs = 120,
     /** Resumable file store of the GPU engine */
     store = createModelStore(`litert-store`),
     /** GPU executor settings tuned by the LiteRT web chat demo */
@@ -54,11 +61,35 @@ const
 /** Whether the LiteRT wasm logs reach the console */
 let loggingOn = false;
 
+/** Live engines, the device is released with the last one */
+let engines = 0;
+
 const
     /** Wasm stdout, quiet unless logging is on */
     wasmOut = (...args: unknown[]) => { if (loggingOn) console.log(...args); },
     /** Wasm stderr, quiet unless logging is on */
     wasmErr = (...args: unknown[]) => { if (loggingOn) console.error(...args); };
+
+const
+    /** Turn text without its reasoning channel */
+    visibleText = (text: string): string => text
+        .replace(/<\|channel>thought\n?[\s\S]*?<channel\|>/g, ``)
+        .replace(/<\|channel>thought[\s\S]*$/, ``)
+        .trim(),
+    /** Pause between chunks for the GPU share */
+    createGpuPacer = () => {
+        let owed = 0;
+        return async (busyMs: number): Promise<void> => {
+            if (!(busyMs > 0)) return;
+            owed += busyMs * (1 / gpuBudget - 1);
+            // small rests carry over
+            if (owed < minRestMs) return;
+            const wait = Math.min(maxRestMs, owed);
+            owed -= wait;
+            await new Promise<void>(resolve =>
+                setTimeout(resolve, Math.round(wait)));
+        };
+    };
 
 /** Drop the device the module cached, a deleted engine leaves it unusable */
 const releaseDevice = (mod: Awaited<ReturnType<typeof loadLitert>>) => {
@@ -187,8 +218,11 @@ const sameMessage = (
     next: EngineMessage,
 ): boolean => {
     if (first.role != next.role) return false;
+    // reply without channel
     if (typeof first.content == `string` || typeof next.content == `string`)
-        return first.content == next.content;
+        return typeof first.content == `string`
+            && typeof next.content == `string`
+            && visibleText(first.content) == visibleText(next.content);
     if (first.content.length != next.content.length) return false;
     for (let i = 0; i < first.content.length; i++) {
         const
@@ -196,11 +230,11 @@ const sameMessage = (
             right = next.content[i];
         if (left.type != right.type) return false;
         if (left.type == `text` && right.type == `text`) {
-            if (left.text != right.text) return false;
-        } else if ((left.type == `image` && right.type == `image`)
-            || (left.type == `audio` && right.type == `audio`)) {
-            if (left.url != right.url) return false;
-        };
+            if (visibleText(left.text) != visibleText(right.text)) return false;
+        } else if (left.type != `text` && right.type != `text`) {
+            // re-encoded file keeps place
+            if (!!left.url != !!right.url) return false;
+        } else return false;
     };
     return true;
 };
@@ -242,18 +276,22 @@ const streamLitert = async function* ({
         history = messages.slice(0, -1),
         prompt = (await toLitertMessages([last]))[0];
     if (!prompt) throw new Error(`Empty prompt`);
-    const reuse = !!session.conversation
-        && session.reasoning == params.reasoning
-        && session.maxTokens == options.max_tokens
-        && continuesHistory(session.sent, history);
+    const
+        sameFlags = session.reasoning == params.reasoning
+            && session.maxTokens == options.max_tokens,
+        sameHistory = !!session.conversation
+            && continuesHistory(session.sent, history),
+        reuse = sameFlags && sameHistory;
     let conversation: import('@litert-lm/core').Conversation;
-    if (reuse && session.conversation)
+    if (reuse && session.conversation) {
+        log(loggingOn, `LiteRT conversation reused`, session.sent.length);
         conversation = session.conversation;
-    else {
+    } else {
         // history media becomes text notes
         const previous = await toLitertMessages(history, false);
         session.conversation = undefined;
         session.sent = [];
+        const startedAt = performance.now();
         conversation = await engine.createConversation({
             sessionConfig: {
                 maxOutputTokens: options.max_tokens,
@@ -270,6 +308,16 @@ const streamLitert = async function* ({
             },
             prefillPrefaceOnInit: previous.length > 0,
         });
+        log(
+            loggingOn,
+            `LiteRT conversation created`,
+            previous.length,
+            Math.round(performance.now() - startedAt),
+            `flags`,
+            sameFlags,
+            `history`,
+            sameHistory,
+        );
         session.conversation = conversation;
         session.reasoning = params.reasoning;
         session.maxTokens = options.max_tokens;
@@ -279,7 +327,9 @@ const streamLitert = async function* ({
     let
         reader: ReadableStreamDefaultReader<LitertMessage> | undefined,
         completed = false,
+        first = true,
         reply = ``;
+    const pace = createGpuPacer();
     const stop = () => {
         if (reader) void reader.cancel().catch(() => { });
         try { conversation.cancel(); } catch { };
@@ -290,8 +340,15 @@ const streamLitert = async function* ({
         const current = conversation.sendMessageStreaming(prompt).getReader();
         reader = current;
         while (true) {
+            const readAt = performance.now();
             const { done, value } = await current.read();
+            const busyMs = performance.now() - readAt;
             if (done) break;
+            // first chunk carries prefill
+            const prefill = first;
+            first = false;
+            if (prefill)
+                log(loggingOn, `LiteRT first chunk`, Math.round(busyMs));
             const delta: EngineDelta = {};
             let text = typeof value.content == `string` ? value.content : ``;
             if (Array.isArray(value.content))
@@ -305,6 +362,8 @@ const streamLitert = async function* ({
             if (thought) delta.reasoning = thought;
             if (delta.content || delta.reasoning)
                 yield { choices: [{ delta }] };
+            // rest after delivery
+            if (!prefill) await pace(busyMs);
         };
         completed = true;
     } finally {
@@ -445,9 +504,28 @@ const startLLM = async ({
     onProgress(1, LlmPhase.load);
     const engine = await mod.Engine.create(
         litertSettings({ model, limits, source, mod }));
+    engines += 1;
+    /** Release this engine and the device with the last one */
+    const releaseEngine = () => {
+        engines = Math.max(0, engines - 1);
+        if (!engines) releaseDevice(mod);
+    };
+    // first conversation builds environment
+    try {
+        const startedAt = performance.now();
+        const warm = await engine.createConversation();
+        await warm.delete();
+        log(
+            loggingOn,
+            `LiteRT conversation warm-up`,
+            Math.round(performance.now() - startedAt),
+        );
+    } catch (error) {
+        log(loggingOn, `LiteRT conversation warm-up failed`, error);
+    };
     if (signal?.aborted) {
         await engine.delete();
-        releaseDevice(mod);
+        releaseEngine();
         throw new Error(`Cancelled`);
     };
     const session: LitertSession = {
@@ -466,7 +544,7 @@ const startLLM = async ({
             session.sent = [];
             try { await conversation?.delete(); } catch { };
             await engine.delete();
-            releaseDevice(mod);
+            releaseEngine();
         },
     };
 };

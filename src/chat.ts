@@ -31,8 +31,8 @@ const statusSnapshot = (
     state: ChatState,
 ): ChatStatusSnapshot => {
     const
-        status = service.status(),
         effective = deviceModelId(model),
+        status = service.status(effective),
         catalog = findLlmModel(effective),
         availability = status == LlmStatus.ready
             ? ChatStatus.online
@@ -43,11 +43,11 @@ const statusSnapshot = (
         ...(effective ? { model: effective } : {}),
         availability,
         status,
-        backend: service.backend(),
+        backend: service.backend(effective),
         supportsImages: catalog ? supportsImages(catalog) : false,
         supportsAudio: catalog ? supportsAudio(catalog) : false,
-        ready: service.ready(),
-        loading: service.loading(),
+        ready: service.ready(effective),
+        loading: service.loading(effective),
         requesting: state.requesting,
         phase: state.phase,
         percent: state.percent,
@@ -136,7 +136,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
             if (call.cancelled) return;
             if (!loaded) {
                 if (!call.error)
-                    call.error = service.error() || `Model not ready`;
+                    call.error = service.error(model.id) || `Model not ready`;
                 emitStatus(call);
                 return;
             };
@@ -160,6 +160,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 result: string | undefined;
             try {
                 result = await service.chat({
+                    model: model.id,
                     messages,
                     limits,
                     reasoning: input.reasoning === true,
@@ -197,8 +198,8 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
             if (call.token != token) return;
             call.cancelled = true;
             call.controller.abort();
-            if (service.status() == LlmStatus.ready) {
-                void service.unload().then(() => emitStatus(call));
+            if (call.model && service.status(call.model) == LlmStatus.ready) {
+                void service.unload(call.model).then(() => emitStatus(call));
                 return;
             };
             // a load another caller waits for keeps going
@@ -207,12 +208,15 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
 
     return input => {
         active?.controller.abort();
+        const
+            target = deviceModelId(input.model),
+            ready = service.ready(target);
         const call: ActiveCall = {
             token: ++token,
             input,
             controller: new AbortController(),
-            percent: service.ready() ? 100 : 0,
-            phase: service.ready() ? LlmPhase.load : LlmPhase.download,
+            percent: ready ? 100 : 0,
+            phase: ready ? LlmPhase.load : LlmPhase.download,
             requesting: false,
             cancelled: false,
         };
@@ -244,7 +248,7 @@ const createPreloadOn = (service: Runtime) => async (
         percent = 0,
         phase = LlmPhase.download;
     const
-        wasReady = service.ready() && service.model()?.id == model.id,
+        wasReady = service.ready(model.id),
         loaded = await service.load({
             model,
             limits: resolveLlmLimits(input.limits, !!model.litert),
@@ -268,7 +272,7 @@ const createPreloadOn = (service: Runtime) => async (
         requesting: false,
         phase,
         percent,
-        error: error || service.error() || `Model not ready`,
+        error: error || service.error(model.id) || `Model not ready`,
     });
     return false;
 };

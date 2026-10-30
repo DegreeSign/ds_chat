@@ -40,11 +40,11 @@ import {
 } from "../src/models";
 import {
     cpuFiles,
-    cpuThreads,
     storedBlobs,
     toWllamaMessages,
     visionLimits,
 } from "../src/engines/wllama";
+import { heuristicThreads } from "../src/engines/threads";
 import {
     cacheModel,
     continuesHistory,
@@ -332,6 +332,7 @@ const definitions: Array<{
                         `createChat`,
                         `currencyTool`,
                         `describeImages`,
+                        `describeModelId`,
                         `describeTranslated`,
                         `preloadModel`,
                         `webSearchTool`,
@@ -684,7 +685,7 @@ const definitions: Array<{
                 assertEqual(defaults.promptCharBudget, 10_000, `budget`);
                 assertEqual(defaults.maxImages, 2, `images`);
                 assertEqual(defaults.maxAudio, 1, `audio`);
-                assertEqual(defaults.maxThreads, 6, `threads`);
+                assertEqual(defaults.maxThreads, 32, `threads`);
                 assertEqual(defaults.maxContentLength, 1_000, `content`);
                 assertEqual(
                     defaults.maxReasoningTokens,
@@ -703,7 +704,7 @@ const definitions: Array<{
                 );
                 assertEqual(resolveLlmLimits({ maxThreads: 1 }).maxThreads, 1, `one thread`);
                 assertEqual(resolveLlmLimits({ maxThreads: 8 }).maxThreads, 8, `eight threads`);
-                assertEqual(resolveLlmLimits({ maxThreads: 0 }).maxThreads, 6, `bad threads`);
+                assertEqual(resolveLlmLimits({ maxThreads: 0 }).maxThreads, 32, `bad threads`);
                 const custom = resolveLlmLimits({
                     maxReplyTokens: 40,
                     promptCharBudget: 12.9,
@@ -1036,6 +1037,55 @@ const definitions: Array<{
                 );
                 assertEqual(continuesHistory(full, [system]), false, `empty turns`);
                 assertEqual(continuesHistory([], []), false, `empty history`);
+                assertEqual(
+                    continuesHistory(
+                        [system, user(`one`),
+                            assistant(`<|channel>thought\nhmm<channel|>first`)],
+                        [system, user(`one`), assistant(`first`)],
+                    ),
+                    true,
+                    `thinking channel ignored`,
+                );
+                assertEqual(
+                    continuesHistory(
+                        [user(`one`), assistant(`first`)],
+                        [user(`one`), assistant(`other`)],
+                    ),
+                    false,
+                    `changed reply`,
+                );
+                const
+                    stored = [{
+                        role: LlmRole.user,
+                        content: [
+                            { type: `text`, text: `look` },
+                            { type: `image`, url: `one` },
+                        ],
+                    }] as EngineMessage[],
+                    reencoded = [{
+                        role: LlmRole.user,
+                        content: [
+                            { type: `text`, text: `look` },
+                            { type: `image`, url: `two` },
+                        ],
+                    }] as EngineMessage[],
+                    recodedAudio = [{
+                        role: LlmRole.user,
+                        content: [
+                            { type: `text`, text: `look` },
+                            { type: `audio`, url: `one` },
+                        ],
+                    }] as EngineMessage[];
+                assertEqual(
+                    continuesHistory(stored, reencoded),
+                    true,
+                    `re-encoded image`,
+                );
+                assertEqual(
+                    continuesHistory(stored, recodedAudio),
+                    false,
+                    `file kind changed`,
+                );
                 const
                     left = [user(`look`)],
                     right = [{
@@ -1608,6 +1658,214 @@ const definitions: Array<{
             },
         },
         {
+            name: `runtime/resident backends`,
+            run: async () => {
+                const
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        mobile: () => false,
+                    }),
+                    cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b);
+                assertEqual(await runtime.load({
+                    model: cpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                }), true, `cpu loaded`);
+                assertEqual(await runtime.load({
+                    model: gpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                }), true, `gpu loaded`);
+                assertEqual(cpu.calls.unload, 0, `cpu stays resident`);
+                assertEqual(runtime.ready(cpuModel.id), true, `cpu ready`);
+                assertEqual(runtime.ready(gpuModel.id), true, `gpu ready`);
+                assertEqual(
+                    runtime.backend(cpuModel.id), LlmBackend.cpu, `cpu backend`);
+                assertEqual(
+                    runtime.backend(gpuModel.id), LlmBackend.gpu, `gpu backend`);
+                assertEqual(
+                    runtime.status(cpuModel.id),
+                    LlmStatus.ready,
+                    `cpu status`,
+                );
+                await runtime.chat({
+                    model: cpuModel.id,
+                    messages: [userMessage(`hi`)],
+                    limits: resolveLlmLimits(),
+                    reasoning: false,
+                    onReason: () => { },
+                    onText: () => { },
+                });
+                assertEqual(cpu.calls.chat, 1, `cpu chat`);
+                assertEqual(gpu.calls.chat, 0, `gpu untouched`);
+                await runtime.unload(cpuModel.id);
+                assertEqual(cpu.calls.unload, 1, `cpu released`);
+                assertEqual(runtime.ready(gpuModel.id), true, `gpu survives`);
+                assertEqual(runtime.model()?.id, gpuModel.id, `gpu active`);
+                assertEqual(runtime.status(), LlmStatus.ready, `still ready`);
+                await runtime.unload();
+                assertEqual(gpu.calls.unload, 1, `gpu released`);
+                assertEqual(runtime.status(), LlmStatus.idle, `idle at last`);
+            },
+        },
+        {
+            name: `runtime/parallel backend loads`,
+            run: async () => {
+                const
+                    gate = { cpu: deferred(), gpu: deferred() },
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        loadGate: gate.cpu.promise,
+                    }),
+                    gpu = createFakeEngine({
+                        backend: LlmBackend.gpu,
+                        loadGate: gate.gpu.promise,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        mobile: () => false,
+                    }),
+                    cpuModel = modelOf(ChatModelId.qwen3_vl_2b_instruct_q3),
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b),
+                    cpuLoad = runtime.load({
+                        model: cpuModel,
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    }),
+                    gpuLoad = runtime.load({
+                        model: gpuModel,
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                await waitFor(
+                    () => cpu.calls.start == 1 && gpu.calls.start == 1,
+                    `both loads started`,
+                );
+                gate.cpu.resolve();
+                gate.gpu.resolve();
+                assertEqual(await cpuLoad, true, `cpu loaded`);
+                assertEqual(await gpuLoad, true, `gpu loaded`);
+                assertEqual(runtime.ready(cpuModel.id), true, `cpu ready`);
+                assertEqual(runtime.ready(gpuModel.id), true, `gpu ready`);
+                assertEqual(
+                    runtime.status(cpuModel.id),
+                    LlmStatus.ready,
+                    `cpu status`,
+                );
+                assertEqual(
+                    runtime.status(gpuModel.id),
+                    LlmStatus.ready,
+                    `gpu status`,
+                );
+                assertEqual(cpu.calls.unload, 0, `cpu stays resident`);
+                assertEqual(gpu.calls.unload, 0, `gpu stays resident`);
+            },
+        },
+        {
+            name: `runtime/same backend load replaces`,
+            run: async () => {
+                const
+                    gate = deferred(),
+                    fake = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        loadGate: gate.promise,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: fake.engine },
+                        backend: LlmBackend.cpu,
+                        mobile: () => false,
+                    }),
+                    first = modelOf(ChatModelId.qwen3_vl_2b),
+                    second = modelOf(ChatModelId.qwen3_vl_2b_instruct_q3),
+                    firstLoad = runtime.load({
+                        model: first,
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                await waitFor(() => fake.calls.start == 1, `first load started`);
+                const secondLoad = runtime.load({
+                    model: second,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                gate.resolve();
+                assertEqual(await firstLoad, false, `first replaced`);
+                assertEqual(await secondLoad, true, `second loaded`);
+                assertEqual(runtime.ready(first.id), false, `first not ready`);
+                assertEqual(runtime.ready(second.id), true, `second ready`);
+                assertEqual(
+                    runtime.status(first.id),
+                    LlmStatus.idle,
+                    `first idle`,
+                );
+            },
+        },
+        {
+            name: `runtime/backend model switch`,
+            run: async () => {
+                const
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        mobile: () => false,
+                    }),
+                    cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
+                    first = modelOf(ChatModelId.gemma4_e2b),
+                    second = modelOf(ChatModelId.gemma4_e2b_limited);
+                await runtime.load({
+                    model: cpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                await runtime.load({
+                    model: first,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                await runtime.load({
+                    model: second,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                assertEqual(cpu.calls.unload, 0, `cpu stays`);
+                assertEqual(gpu.calls.unload, 1, `first gpu released`);
+                assertEqual(runtime.ready(first.id), false, `first gone`);
+                assertEqual(runtime.ready(second.id), true, `second ready`);
+                assertEqual(runtime.status(first.id), LlmStatus.idle, `first idle`);
+            },
+        },
+        {
+            name: `runtime/mobile single model`,
+            run: async () => {
+                const
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        mobile: () => true,
+                    }),
+                    cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b);
+                await runtime.load({
+                    model: cpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                await runtime.load({
+                    model: gpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                assertEqual(cpu.calls.unload, 1, `cpu released on mobile`);
+                assertEqual(runtime.ready(cpuModel.id), false, `cpu gone`);
+                assertEqual(runtime.ready(gpuModel.id), true, `gpu ready`);
+            },
+        },
+        {
             name: `runtime/chat budgets`,
             run: async () => {
                 const
@@ -1996,8 +2254,10 @@ const definitions: Array<{
                             + ` disclaimer.`,
                         `Even if the main subject in the image is controversial`
                             + ` mention it first.`,
-                        `Do not say "object appears to be x or y" instead mention`
-                            + ` only one "x" or "y" directly.`,
+                        `Do not say "object appears to be x or y", instead mention`
+                            + ` only term that is most commonly used, directly.`,
+                        `Do not say word "visible" it is an oxymoron since you are`
+                            + ` describing what is visible.`,
                         `Use direct, plain English without filtering or vague words.`,
                     ].join(` `),
                     imageNote = [
@@ -3039,6 +3299,34 @@ const definitions: Array<{
             },
         },
         {
+            name: `chat/cancel before model resolves`,
+            run: async () => {
+                const
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
+                        mobile: () => false,
+                    }),
+                    cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b);
+                await runtime.load({
+                    model: cpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
+                createChatOn(runtime)({
+                    model: gpuModel.id,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                })();
+                await sleep(20);
+                assertEqual(cpu.calls.unload, 0, `resident cpu kept`);
+                assertEqual(runtime.ready(cpuModel.id), true, `cpu ready`);
+                assertEqual(gpu.calls.start, 0, `no gpu start`);
+            },
+        },
+        {
             name: `chat/cancel load`,
             run: async () => {
                 const
@@ -3236,17 +3524,17 @@ const definitions: Array<{
             },
         },
         {
-            name: `threads/cap`,
+            name: `threads/heuristic`,
             run: () => {
-                assertEqual(cpuThreads(8, 2), 2, `eight cores cap two`);
-                assertEqual(cpuThreads(8, 1), 1, `eight cores cap one`);
-                assertEqual(cpuThreads(8, 99), 3, `eight cores hard cap three`);
-                assertEqual(cpuThreads(16, 99), 3, `sixteen cores hard cap three`);
-                assertEqual(cpuThreads(1, 2), 2, `one core raw two`);
-                assertEqual(cpuThreads(8, 3), 3, `eight cores cap three`);
-                assertEqual(cpuThreads(8, 6), 3, `default budget three`);
-                assertEqual(cpuThreads(8, 99, true), 2, `vision cap two`);
-                assertEqual(cpuThreads(8, 1, true), 1, `vision one`);
+                assertEqual(heuristicThreads(0), 3, `missing cores`);
+                assertEqual(heuristicThreads(1), 1, `one core`);
+                assertEqual(heuristicThreads(2), 1, `two threads`);
+                assertEqual(heuristicThreads(4), 3, `four threads`);
+                assertEqual(heuristicThreads(6), 5, `six threads`);
+                assertEqual(heuristicThreads(8), 7, `eight threads`);
+                assertEqual(heuristicThreads(12), 10, `twelve threads`);
+                assertEqual(heuristicThreads(16), 13, `sixteen threads`);
+                assertEqual(heuristicThreads(32), 26, `thirty two threads`);
             },
         },
         {
@@ -3260,9 +3548,9 @@ const definitions: Array<{
                     thinking = visionLimits(modelOf(ChatModelId.qwen3_vl_2b)),
                     text = visionLimits(modelOf(ChatModelId.gemma4_e2b));
                 assertEqual(instruct.image_min_tokens, 16, `instruct min`);
-                assertEqual(instruct.image_max_tokens, 100, `instruct max`);
+                assertEqual(instruct.image_max_tokens, 128, `instruct max`);
                 assertEqual(instructQ3.image_min_tokens, 16, `q3 min`);
-                assertEqual(instructQ3.image_max_tokens, 100, `q3 max`);
+                assertEqual(instructQ3.image_max_tokens, 128, `q3 max`);
                 assertEqual(Object.keys(thinking).length, 0, `thinking unset`);
                 assertEqual(Object.keys(text).length, 0, `text unset`);
             },

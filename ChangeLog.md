@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- Load models on different backends at the same time, so a host can warm the
+  GPU text model and the CPU media model with one `Promise.all`. A load on the
+  same backend still replaces the one in flight, and a phone still keeps one
+  model in total.
+- Report the last failure and engine status per model, so a concurrent load
+  never reports the outcome of the other one.
+- Add `describeModelId`, the model `describeImages` loads for its English pass,
+  so a host can warm it beside its own text model.
+
 ## 1.0.0
 
 - Add `describeTranslated`, which translates existing English image descriptions

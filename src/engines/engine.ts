@@ -22,7 +22,7 @@ const defaultLlmLimits: LlmLimits = {
     maxAudio: 1,
     maxContentLength: 1000,
     promptCharBudget: 10000,
-    maxThreads: 6,
+    maxThreads: 32,
 };
 
 /** Reasoning budget of the GPU engine, thought plus answer */

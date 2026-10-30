@@ -1,0 +1,14 @@
+diff --git a/src/wllama.ts b/src/wllama.ts
+index 6ecbb68..15dd4ee 100644
+--- a/src/wllama.ts
++++ b/src/wllama.ts
+@@ -497,7 +497,8 @@ export class Wllama {
+     }
+     this.proxy = new ProxyToWorker(
+       workerResources,
+-      this.useMultiThread ? nbThreads : 0, // 0 means disable pthread
++      // fits both pools
++      this.useMultiThread ? nbThreads * 2 : 0, // 0 means disable pthread
+       this.config.suppressNativeLog ?? false,
+       this.logger()
+     );

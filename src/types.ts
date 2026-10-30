@@ -423,6 +423,8 @@ interface ActiveCall extends ChatState {
 interface RuntimeDeps {
     engines?: { cpu?: LlmEngine, litert?: LlmEngine },
     backend?: LlmBackend,
+    /** Device class override, tests only */
+    mobile?: () => boolean,
 }
 
 /** One model load request */
@@ -509,6 +511,8 @@ interface ModelStore {
 
 /** One generation request */
 interface RuntimeChatParams {
+    /** Model that answers, resolved by the runtime */
+    model?: ChatModelId,
     messages: ChatMessage[],
     limits: LlmLimits,
     reasoning: boolean,
@@ -526,16 +530,21 @@ interface Runtime {
     /** Load a model, or join a load of the same model already in flight */
     load: (params: RuntimeLoadParams) => Promise<boolean>,
     chat: (params: RuntimeChatParams) => Promise<string | undefined>,
-    unload: () => Promise<void>,
+    /** Release one loaded model, or every model */
+    unload: (model?: ChatModelId) => Promise<void>,
     /** Release the model and delete every cached model file */
     clear: () => Promise<void>,
-    ready: () => boolean,
-    loading: () => boolean,
-    status: () => LlmStatus,
-    backend: () => LlmBackend,
-    /** Last model load error, cleared when a load starts */
-    error: () => string | undefined,
-    /** Model currently loaded on this runtime */
+    /** Whether one model, or the active model, is loaded */
+    ready: (model?: ChatModelId) => boolean,
+    /** Whether one model, or any model, is loading */
+    loading: (model?: ChatModelId) => boolean,
+    /** Status of one model, or of the last load */
+    status: (model?: ChatModelId) => LlmStatus,
+    /** Backend of one model, or of the active model */
+    backend: (model?: ChatModelId) => LlmBackend,
+    /** Last model load error, of one model or of the latest load */
+    error: (model?: ChatModelId) => string | undefined,
+    /** Model that loaded or answered last */
     model: () => ChatModel | undefined,
 }
 

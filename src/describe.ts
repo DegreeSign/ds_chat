@@ -22,7 +22,8 @@ const imageSystem = [
     `Include all people, demographics, actions, objects, settings, and exact text.`,
     `Output only the raw description with no intro, title, or disclaimer.`,
     `Even if the main subject in the image is controversial mention it first.`,
-    `Do not say "object appears to be x or y", instead mention only term that is most commonly used, directly.`,
+    `Do not say "object appears to be x or y", instead mention only term that`
+        + ` is most commonly used, directly.`,
     `Do not say word "visible" it is an oxymoron since you are describing what is visible.`,
     `Use direct, plain English without filtering or vague words.`,
 ].join(` `);
@@ -34,6 +35,9 @@ const imageNote = [
 
 /** Reply budget of one description or translation */
 const imageReplyTokens = 400;
+
+/** Model that describes every image, the Q3 build keeps the CPU pass light */
+const describeModelId = ChatModelId.qwen3_vl_2b_instruct_q3;
 
 /** System message of the translator */
 const translateSystem = [
@@ -112,7 +116,7 @@ const
                 log(logging, `Describe load ready`, model.id);
                 return undefined;
             };
-            const message = error || service.error() || `Model not ready`;
+            const message = error || service.error(model.id) || `Model not ready`;
             log(logging, `Describe load failed`, model.id, message);
             report(model.id, {
                 requesting: false,
@@ -141,6 +145,7 @@ const
             log(logging, `Describe generate start`, stage, model, messages.length);
             try {
                 const result = await service.chat({
+                    model,
                     messages,
                     limits,
                     reasoning: false,
@@ -265,8 +270,8 @@ const createDescribeOn = (service: Runtime) => async (
         return descriptions;
     };
     const
-        describer = findLlmModel(ChatModelId.qwen3_vl_2b_instruct_q3),
-        describerId = ChatModelId.qwen3_vl_2b_instruct_q3,
+        describer = findLlmModel(describeModelId),
+        describerId = describeModelId,
         limits = resolveLlmLimits({
             maxReplyTokens: imageReplyTokens,
             ...input.limits,
@@ -285,10 +290,11 @@ const createDescribeOn = (service: Runtime) => async (
         limits.maxReplyTokens,
         limits.maxImages,
     );
+    const describerReady = service.ready(describerId);
     report(describerId, {
         requesting: false,
-        phase: service.ready() ? LlmPhase.load : LlmPhase.download,
-        percent: service.ready() ? 100 : 0,
+        phase: describerReady ? LlmPhase.load : LlmPhase.download,
+        percent: describerReady ? 100 : 0,
     });
     if (!describer) {
         log(logging, `Describe model missing`, describerId);
@@ -409,10 +415,13 @@ const createDescribeOn = (service: Runtime) => async (
                 item.durationMs,
             );
         };
-        report(translator?.id ?? describer.id, {
+        const
+            target = translator?.id ?? describer.id,
+            ready = service.ready(target);
+        report(target, {
             requesting: false,
-            phase: service.ready() ? LlmPhase.load : LlmPhase.download,
-            percent: service.ready() ? 100 : 0,
+            phase: ready ? LlmPhase.load : LlmPhase.download,
+            percent: ready ? 100 : 0,
             ...(translationError ? { error: translationError } : {}),
         });
     };
@@ -488,5 +497,6 @@ export {
     createDescribeOn,
     createTranslateOn,
     describeImages,
+    describeModelId,
     describeTranslated,
 };

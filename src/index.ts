@@ -1,5 +1,5 @@
 export { clearModelCache, createChat, preloadModel } from './chat';
-export { describeImages, describeTranslated } from './describe';
+export { describeImages, describeModelId, describeTranslated } from './describe';
 export {
     builtinTools,
     calculateTool,
