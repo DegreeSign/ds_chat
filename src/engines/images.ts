@@ -8,10 +8,10 @@ const
     /** Tokens allowed above the target */
     tokenSlack = 8;
 
-/** Square size the WebGPU engine encodes */
+/** Square size for WebGPU encoding */
 const gpuImageSize: ImageSize = { width: 384, height: 384 };
 
-/** Read a blob back as a data URL */
+/** Read blob as data URL */
 const blobToDataUrl = (blob: Blob): Promise<string> =>
     new Promise(resolve => {
         if (typeof FileReader == `undefined`) {
@@ -24,7 +24,7 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
         reader.readAsDataURL(blob);
     });
 
-/** Create a 2d canvas on the main thread or in a worker */
+/** Canvas on main or worker */
 const createCanvas = (
     width: number,
     height: number,
@@ -38,13 +38,13 @@ const createCanvas = (
     return canvas;
 };
 
-/** Whether a canvas can encode itself without the DOM */
+/** Whether a canvas encodes itself */
 const isOffscreen = (
     canvas: OffscreenCanvas | HTMLCanvasElement,
 ): canvas is OffscreenCanvas =>
     typeof OffscreenCanvas != `undefined` && canvas instanceof OffscreenCanvas;
 
-/** Decode a data URL or fetch a URL into bytes for an engine */
+/** Decode URL into engine bytes */
 const contentBuffer = async (url: string): Promise<ArrayBuffer> => {
     if (!url.startsWith(`data:`))
         return await (await fetch(url)).arrayBuffer();
@@ -61,18 +61,22 @@ const contentBuffer = async (url: string): Promise<ArrayBuffer> => {
     return bytes.buffer;
 };
 
-/** Full-frame size near the token target */
-const visionSize = (width: number, height: number): ImageSize => {
+/** Full-frame size near token target */
+const visionSize = (
+    width: number,
+    height: number,
+    tokens = imageTokens,
+): ImageSize => {
     const aspect = width / Math.max(1, height);
     let
         bestWidth = tokenCell,
         bestHeight = tokenCell,
         bestError = Infinity,
         bestTokens = Infinity;
-    for (let rows = 1; rows <= imageTokens; rows++) {
+    for (let rows = 1; rows <= tokens; rows++) {
         const
-            firstCols = Math.ceil(imageTokens / rows),
-            lastCols = Math.floor((imageTokens + tokenSlack) / rows);
+            firstCols = Math.ceil(tokens / rows),
+            lastCols = Math.floor((tokens + tokenSlack) / rows);
         for (let cols = firstCols; cols <= lastCols; cols++) {
             const
                 tokens = cols * rows,
@@ -89,10 +93,11 @@ const visionSize = (width: number, height: number): ImageSize => {
     return { width: bestWidth, height: bestHeight };
 };
 
-/** Fit one image URL to the token grid for an engine */
+/** Fit image to token grid */
 const resizeImageUrl = async (
     url: string,
     size?: ImageSize,
+    tokens = imageTokens,
 ): Promise<string> => {
     if (!url || typeof fetch != `function` || typeof createImageBitmap != `function`)
         return url;
@@ -100,7 +105,7 @@ const resizeImageUrl = async (
         const
             response = await fetch(url),
             bitmap = await createImageBitmap(await response.blob()),
-            target = size ?? visionSize(bitmap.width, bitmap.height),
+            target = size ?? visionSize(bitmap.width, bitmap.height, tokens),
             sourceAspect = bitmap.width / Math.max(1, bitmap.height),
             targetAspect = target.width / target.height,
             sourceWidth = Math.min(
@@ -145,10 +150,11 @@ const resizeImageUrl = async (
     } catch { return url; }
 };
 
-/** Fit every image part before an engine sees it */
+/** Fit image parts before engine */
 const resizeImages = async (
     messages: EngineMessage[],
     size?: ImageSize,
+    tokens = imageTokens,
 ): Promise<EngineMessage[]> => {
     const resized: EngineMessage[] = [];
     for (const message of messages) {
@@ -159,7 +165,10 @@ const resizeImages = async (
         const parts: EngineContentPart[] = [];
         for (const part of message.content)
             parts.push(part.type == `image`
-                ? { type: `image`, url: await resizeImageUrl(part.url, size) }
+                ? {
+                    type: `image`,
+                    url: await resizeImageUrl(part.url, size, tokens),
+                }
                 : part);
         resized.push({ role: `user`, content: parts });
     }

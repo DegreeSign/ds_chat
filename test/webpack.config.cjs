@@ -6,6 +6,7 @@ const webpack = require("webpack");
 module.exports = {
     entry: {
         harness: "./test/harness.ts",
+        images: "./test/images.ts",
     },
     target: "web",
     mode: "development",

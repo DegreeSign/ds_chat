@@ -1,7 +1,7 @@
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
-import { litertContextWindow } from '../models';
+import { litertContextWindow, mobileDevice, mobileLitertContextWindow } from '../models';
 import {
     contentLength,
     hasAudio,
@@ -19,6 +19,10 @@ import type {
     EngineChunk,
     EngineDelta,
     EngineMessage,
+    GpuBuffer,
+    GpuDevice,
+    GpuThrottleParams,
+    GpuWasm,
     LitertChatParams,
     LitertContentPart,
     LitertMessage,
@@ -32,23 +36,21 @@ import type {
 } from '../types';
 
 const
-    /** Cache Storage bucket for the downloaded LiteRT models */
+    /** Cache bucket for LiteRT models */
     cacheName = `litertlm-models`,
-    /** Smallest Gemma 4 vision budget in tokens */
+    /** Smallest Gemma 4 vision budget */
     visionTokens = 70,
-    /** Share of wall time the GPU stays busy */
-    gpuBudget = 0.8,
-    /** Least rest handed to the browser */
-    minRestMs = 12,
-    /** Most rest one pause may take */
-    maxRestMs = 120,
-    /** Resumable file store of the GPU engine */
+    /** GPU busy share of time */
+    gpuShare = 0.7,
+    /** Most rest per readback */
+    maxRestMs = 40,
+    /** Resumable store of GPU engine */
     store = createModelStore(`litert-store`),
-    /** GPU executor settings tuned by the LiteRT web chat demo */
+    /** One GPU decode per sync */
     backendConfig: Partial<GpuArtisanConfig> = {
         num_output_candidates: 1,
         wait_for_weight_uploads: true,
-        num_decode_steps_per_sync: 3,
+        num_decode_steps_per_sync: 1,
         sequence_batch_size: 0,
         supported_lora_ranks: [],
         max_top_k: 40,
@@ -58,47 +60,100 @@ const
         use_autosized_ringbuffers: true,
     };
 
-/** Whether the LiteRT wasm logs reach the console */
+/** Whether wasm logs reach console */
 let loggingOn = false;
 
-/** Live engines, the device is released with the last one */
+/** Live engines, device released last */
 let engines = 0;
 
+/** Devices already GPU throttled */
+const pacedDevices = new WeakSet<object>();
+
+let
+    /** Whether a reply is streaming */
+    pacing = false,
+    /** Last readback time, busy starts */
+    lastSync = 0;
+
 const
-    /** Wasm stdout, quiet unless logging is on */
+    /** Wasm stdout, quiet unless logging */
     wasmOut = (...args: unknown[]) => { if (loggingOn) console.log(...args); },
-    /** Wasm stderr, quiet unless logging is on */
+    /** Wasm stderr, quiet unless logging */
     wasmErr = (...args: unknown[]) => { if (loggingOn) console.error(...args); };
 
 const
-    /** Turn text without its reasoning channel */
+    /** Turn text without reasoning channel */
     visibleText = (text: string): string => text
         .replace(/<\|channel>thought\n?[\s\S]*?<channel\|>/g, ``)
         .replace(/<\|channel>thought[\s\S]*$/, ``)
         .trim(),
-    /** Pause between chunks for the GPU share */
-    createGpuPacer = () => {
-        let owed = 0;
-        return async (busyMs: number): Promise<void> => {
-            if (!(busyMs > 0)) return;
-            owed += busyMs * (1 / gpuBudget - 1);
-            // small rests carry over
-            if (owed < minRestMs) return;
-            const wait = Math.min(maxRestMs, owed);
-            owed -= wait;
-            await new Promise<void>(resolve =>
-                setTimeout(resolve, Math.round(wait)));
-        };
-    };
+    /** Rest owed for busy interval */
+    restFor = (busyMs: number): number =>
+        Math.min(maxRestMs, Math.max(0, busyMs * (1 / gpuShare - 1)));
 
-/** Drop the device the module cached, a deleted engine leaves it unusable */
-const releaseDevice = (mod: Awaited<ReturnType<typeof loadLitert>>) => {
-    try {
-        mod.getGlobalLiteRtLm().liteRtLmWasm.preinitializedWebGPUDevice = undefined;
-    } catch { };
+/** WebGPU device resting after readback */
+const throttledDevice = ({
+    device,
+    pace,
+}: GpuThrottleParams): GpuDevice => new Proxy(device, {
+    get: (target, key) => {
+        if (key == `createBuffer`)
+            return (...args: unknown[]) => {
+                const buffer = (Reflect.get(target, key, target) as (
+                    ...args: unknown[]
+                ) => GpuBuffer).apply(target, args);
+                const map = buffer.mapAsync;
+                try {
+                    buffer.mapAsync = async (...mapArgs: unknown[]) => {
+                        await map.apply(buffer, mapArgs);
+                        await pace();
+                    };
+                } catch { };
+                return buffer;
+            };
+        const value = Reflect.get(target, key, target);
+        return typeof value == `function` ? value.bind(target) : value;
+    },
+});
+
+/** Rest GPU after each readback */
+const paceGpu = async (): Promise<void> => {
+    const
+        now = performance.now(),
+        busy = now - lastSync;
+    lastSync = now;
+    if (!pacing) return;
+    const rest = Math.round(restFor(busy));
+    if (rest < 1) return;
+    await new Promise<void>(resolve => setTimeout(resolve, rest));
+    lastSync = performance.now();
 };
 
-/** Open the model cache, absent in Node */
+/** Start pacing after prefill */
+const startPacing = () => {
+    pacing = true;
+    lastSync = performance.now();
+};
+
+/** Stop pacing when reply settles */
+const stopPacing = () => {
+    pacing = false;
+};
+
+/** Drop device and wasm module */
+const releaseDevice = (mod: Awaited<ReturnType<typeof loadLitert>>) => {
+    try {
+        const wasm = mod.getGlobalLiteRtLm().liteRtLmWasm as GpuWasm;
+        const device = wasm.preinitializedWebGPUDevice;
+        // drop cached device id
+        wasm.preinitializedWebGPUDevice = undefined;
+        if (wasm.WebGPU) wasm.WebGPU.preinitializedDeviceId = undefined;
+        device?.destroy?.();
+    } catch { };
+    try { mod.unloadLiteRtLm(); } catch { };
+};
+
+/** Model cache, absent in Node */
 const cacheOpen = async (): Promise<Cache | undefined> => {
     try {
         if (typeof caches == `undefined`) return undefined;
@@ -106,7 +161,7 @@ const cacheOpen = async (): Promise<Cache | undefined> => {
     } catch { return undefined; };
 };
 
-/** Whether one model file is stored, in the cache or on disk */
+/** Whether model file is stored */
 const modelCached = async (model: ChatModel): Promise<boolean> => {
     const litert = model.litert;
     if (!litert) return false;
@@ -119,10 +174,10 @@ const modelCached = async (model: ChatModel): Promise<boolean> => {
     } catch { return false; };
 };
 
-/** Every model file download in flight, shared by every caller */
+/** Downloads in flight, shared */
 const downloads = new Map<string, Promise<void>>();
 
-/** Stream one response body, reporting its download progress */
+/** Stream body with download progress */
 const countStream = (
     body: ReadableStream<Uint8Array>,
     total: number,
@@ -138,7 +193,7 @@ const countStream = (
     }));
 };
 
-/** Fetch one model file into the cache, once per URL */
+/** Cache one file per URL */
 const cacheModel = async (
     url: string,
     cache: Cache,
@@ -154,7 +209,7 @@ const cacheModel = async (
         const
             total = contentLength(response),
             body = countStream(response.body, total, onProgress);
-        // the whole file lands on disk before the engine reads it back
+        // whole file lands before readback
         await cache.put(url, new Response(body, {
             headers: {
                 'content-type': `application/octet-stream`,
@@ -168,7 +223,7 @@ const cacheModel = async (
     return await pending;
 };
 
-/** Stream one model file from the network, for a cache the browser rejects */
+/** Stream model file, cache rejected */
 const fetchModel = async (
     url: string,
     signal: AbortSignal | undefined,
@@ -180,7 +235,7 @@ const fetchModel = async (
     return countStream(response.body, contentLength(response), onProgress);
 };
 
-/** Map built messages to LiteRT turns */
+/** Map messages to LiteRT turns */
 const toLitertMessages = async (
     messages: EngineMessage[],
     keepMedia = true,
@@ -212,7 +267,7 @@ const toLitertMessages = async (
     return result;
 };
 
-/** Whether two built turns carry the same role and content */
+/** Whether two turns are identical */
 const sameMessage = (
     first: EngineMessage,
     next: EngineMessage,
@@ -239,7 +294,7 @@ const sameMessage = (
     return true;
 };
 
-/** Whether the live conversation already holds the incoming history */
+/** Whether conversation holds incoming history */
 const continuesHistory = (
     sent: EngineMessage[],
     history: EngineMessage[],
@@ -260,7 +315,7 @@ const continuesHistory = (
     return true;
 };
 
-/** Stream one LiteRT reply as engine chunks */
+/** Stream LiteRT reply as chunks */
 const streamLitert = async function* ({
     engine,
     mod,
@@ -270,7 +325,7 @@ const streamLitert = async function* ({
 }: StreamLitertParams): AsyncGenerator<EngineChunk> {
     const
         last = messages[messages.length - 1],
-        options = replyOptions(params.limits, params.reasoning);
+        options = replyOptions(params.limits, params.reasoning, params.temperature);
     if (last?.role != `user`) throw new Error(`No user turn`);
     const
         history = messages.slice(0, -1),
@@ -329,10 +384,10 @@ const streamLitert = async function* ({
         completed = false,
         first = true,
         reply = ``;
-    const pace = createGpuPacer();
     const stop = () => {
         if (reader) void reader.cancel().catch(() => { });
-        try { conversation.cancel(); } catch { };
+        try { void Promise.resolve(conversation.cancel()).catch(() => { }); }
+        catch { };
     };
     params.signal?.addEventListener(`abort`, stop, { once: true });
     try {
@@ -341,14 +396,23 @@ const streamLitert = async function* ({
         reader = current;
         while (true) {
             const readAt = performance.now();
-            const { done, value } = await current.read();
+            // aborted read ends the stream
+            const { done, value } = await current.read().catch(error => {
+                if (params.signal?.aborted)
+                    return { done: true, value: undefined } as
+                        ReadableStreamReadResult<LitertMessage>;
+                throw error;
+            });
             const busyMs = performance.now() - readAt;
             if (done) break;
             // first chunk carries prefill
             const prefill = first;
             first = false;
-            if (prefill)
+            if (prefill) {
                 log(loggingOn, `LiteRT first chunk`, Math.round(busyMs));
+                // decode rests after prefill
+                startPacing();
+            };
             const delta: EngineDelta = {};
             let text = typeof value.content == `string` ? value.content : ``;
             if (Array.isArray(value.content))
@@ -362,11 +426,10 @@ const streamLitert = async function* ({
             if (thought) delta.reasoning = thought;
             if (delta.content || delta.reasoning)
                 yield { choices: [{ delta }] };
-            // rest after delivery
-            if (!prefill) await pace(busyMs);
         };
         completed = true;
     } finally {
+        stopPacing();
         params.signal?.removeEventListener(`abort`, stop);
         // keep the conversation open
         if (completed && reply)
@@ -378,7 +441,7 @@ const streamLitert = async function* ({
     }
 };
 
-/** Stream one reply on a started GPU runtime */
+/** Stream reply on started GPU */
 const chatOn = async ({
     engine,
     model,
@@ -413,10 +476,11 @@ const chatOn = async ({
     };
 };
 
-/** Build one engine settings object with the small vision budget */
+/** Engine settings with vision budget */
 const litertSettings = ({
     model,
     limits,
+    contextSize,
     source,
     mod,
 }: LitertSettingsParams): LitertSettings => {
@@ -424,7 +488,7 @@ const litertSettings = ({
     return {
         model: source,
         mainExecutorSettings: {
-            maxNumTokens: litertContextWindow,
+            maxNumTokens: contextSize,
             ...(litert?.vision
                 ? { maxNumImages: Math.max(1, limits.maxImages) }
                 : {}),
@@ -438,12 +502,12 @@ const litertSettings = ({
                 minVisionTokensPerImage: visionTokens,
             }
             : {}),
-        // audio encoder on demand, the Gemma 4 build requires the CPU backend
+        // audio encoder requires CPU backend
         ...(litert?.audio ? { audioBackend: mod.Backend.CPU } : {}),
     };
 };
 
-/** Start the GPU runtime, the unified engine entry */
+/** Start GPU runtime engine entry */
 const startLLM = async ({
     model,
     limits,
@@ -454,7 +518,10 @@ const startLLM = async ({
     loggingOn = logging === true;
     const litert = model.litert;
     if (!litert) throw new Error(`Model has no LiteRT artifact`);
-    const mod = await loadLitert();
+    const
+        contextSize = mobileDevice()
+            ? mobileLitertContextWindow : litertContextWindow,
+        mod = await loadLitert();
     const
         scope = globalThis as { Module?: unknown },
         previous = scope.Module;
@@ -466,10 +533,24 @@ const startLLM = async ({
     };
     if (signal?.aborted) throw new Error(`Cancelled`);
     const
+        litertLm = mod.getGlobalLiteRtLm(),
+        wasm = litertLm.liteRtLmWasm as GpuWasm;
+    await litertLm.setupDefaultWebGpuDevice();
+    if (signal?.aborted) throw new Error(`Cancelled`);
+    const device = wasm.preinitializedWebGPUDevice;
+    if (!device) throw new Error(`No WebGPU device`);
+    // rest between decode readbacks
+    if (!pacedDevices.has(device)) {
+        const paced = throttledDevice({ device, pace: paceGpu });
+        pacedDevices.add(device);
+        pacedDevices.add(paced);
+        wasm.preinitializedWebGPUDevice = paced;
+    };
+    const
         url = modelUrl(litert.repo, litert.file),
         cache = await cacheOpen();
     let source: ReadableStream<Uint8Array> | undefined;
-    // a complete file in either store needs no network
+    // complete file needs no network
     const legacy = cache ? await cache.match(url) : undefined;
     if (legacy?.body) source = legacy.body;
     else {
@@ -477,11 +558,11 @@ const startLLM = async ({
         if (stored?.complete) source = stored.file.stream();
     };
     if (!source) {
-        // the file store keeps what it fetches, so a retry resumes it
+        // file store keeps fetched parts
         const saved = await store.download({ url, signal, onProgress })
             .catch(error => {
                 if (signal?.aborted) throw new Error(`Cancelled`);
-                // a store the browser cannot write still loads from the network
+                // unwritable store loads from network
                 if (!isStoreError(error)) throw error;
                 if (logging) console.log(`Local model store failed`, error);
                 return undefined;
@@ -498,14 +579,14 @@ const startLLM = async ({
             if (logging) console.log(`Local model cache failed`, error);
         };
     };
-    // a host without a file system still loads from the network stream
+    // no file system streams network
     if (!source) source = await fetchModel(url, signal, onProgress);
     if (signal?.aborted) throw new Error(`Cancelled`);
     onProgress(1, LlmPhase.load);
     const engine = await mod.Engine.create(
-        litertSettings({ model, limits, source, mod }));
+        litertSettings({ model, limits, contextSize, source, mod }));
     engines += 1;
-    /** Release this engine and the device with the last one */
+    /** Release engine and device together */
     const releaseEngine = () => {
         engines = Math.max(0, engines - 1);
         if (!engines) releaseDevice(mod);
@@ -536,7 +617,7 @@ const startLLM = async ({
     return {
         model,
         backend: LlmBackend.gpu,
-        contextSize: litertContextWindow,
+        contextSize,
         chat: params => chatOn({ engine, model, mod, params, session }),
         unload: async () => {
             const conversation = session.conversation;
@@ -564,9 +645,14 @@ const litertEngine: LlmEngine = {
 export {
     cacheModel,
     continuesHistory,
+    gpuShare,
     litertEngine,
     litertSettings,
+    maxRestMs,
+    releaseDevice,
+    restFor,
     streamLitert,
+    throttledDevice,
     toLitertMessages,
     visionTokens,
 };

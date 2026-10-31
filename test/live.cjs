@@ -45,6 +45,24 @@ window.fetch = (input, init) => {
         .exec(url);
     return realFetch(match ? "/models/" + match[1] : input, init);
 };
+if (navigator.gpu) {
+    const request = navigator.gpu.requestAdapter.bind(navigator.gpu);
+    window.__gpu = { adapters: 0, devices: 0, lost: [] };
+    navigator.gpu.requestAdapter = async (...args) => {
+        const found = await request(...args);
+        window.__gpu.adapters += 1;
+        if (found) {
+            const device = found.requestDevice.bind(found);
+            found.requestDevice = async (...rest) => {
+                const created = await device(...rest);
+                window.__gpu.devices += 1;
+                created.lost.then(info => window.__gpu.lost.push(info.reason));
+                return created;
+            };
+        }
+        return found;
+    };
+}
 window.addEventListener("error", event => {
     console.log("PAGE_ERROR", event.error?.stack || event.message);
 });
@@ -129,6 +147,7 @@ const ask = (input, label) => new Promise(resolve => {
         resolve({
             ...state,
             ...extra,
+            cancel,
             firstTextMs: state.firstTextAt
                 ? Math.round(state.firstTextAt - startedAt)
                 : undefined,
@@ -220,8 +239,14 @@ const run = async () => {
             logging: true,
             limits: replyBudget,
             messages: [
-                { role: LlmRole.system, content: "Answer in one short sentence." },
-                { role: LlmRole.user, content: "What is the capital of France?" },
+                {
+                    role: LlmRole.system,
+                    content: query.get("system") || "Answer in one short sentence.",
+                },
+                {
+                    role: LlmRole.user,
+                    content: query.get("prompt") || "What is the capital of France?",
+                },
             ],
         }, "text");
         record("text", !!text.reply && !text.last?.error, {
@@ -230,6 +255,38 @@ const run = async () => {
             timedOut: text.timedOut,
         });
     });
+
+    if (query.get("reset") && model.startsWith("gemma")) {
+        await timed("reset", async () => {
+            const prompt = {
+                model: chosen,
+                logging: true,
+                limits: replyBudget,
+                messages: [
+                    { role: LlmRole.system, content: "Answer in one short sentence." },
+                    { role: LlmRole.user, content: "What is the capital of France?" },
+                ],
+            };
+            const first = await ask(prompt, "reset first");
+            first.cancel();
+            // the cancel unloads the model and destroys its device
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            const second = await ask(prompt, "reset second");
+            const gpu = window.__gpu || { devices: 0, lost: [] };
+            record(
+                "reset",
+                !!first.reply && !!second.reply && !second.last?.error
+                    && gpu.devices >= 2
+                    && !gpu.lost.some(reason => reason == "unknown"),
+                {
+                    first: first.reply.slice(0, 120),
+                    second: second.reply.slice(0, 120),
+                    error: second.last?.error,
+                    gpu,
+                },
+            );
+        });
+    };
 
     await timed("image", async () => {
         if (model == "gemma4_e2b_limited") {

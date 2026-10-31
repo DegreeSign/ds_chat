@@ -5,12 +5,12 @@ import type { CalculationResult, ChatTool, ChatToolValue } from '../types';
 const allowedPattern = /^[0-9+\-*/%^().]+$/;
 /** Longest expression accepted, characters */
 const maxExpressionLength = 200;
-/** Results at or above this value keep six decimals through pNum */
+/** Threshold for pNum six decimals */
 const exactLimit = 1e5;
-/** Decimals kept by rNum below the exact limit */
+/** rNum decimals below exact limit */
 const resultDigits = 12;
 
-/** Normalize symbols, then drop spaces and thousands commas */
+/** Normalize symbols, spaces and commas */
 const normalizeExpression = (input: string): string =>
     input
         .replace(/×/g, `*`)
@@ -23,9 +23,9 @@ const normalizeExpression = (input: string): string =>
 const evaluateExpression = (expression: string): number => {
     let at = 0;
     const
-        /** Whether one character is a decimal digit */
+        /** Whether char is a digit */
         digit = (char?: string): boolean => !!char && char >= `0` && char <= `9`,
-        /** Reject the expression with one clear message */
+        /** Reject expression with clear message */
         fail = (message: string): never => {
             throw new Error(message);
         },
@@ -44,7 +44,7 @@ const evaluateExpression = (expression: string): number => {
             if (!whole && !fraction) return fail(`Expected a number`);
             return Number(`${whole || `0`}.${fraction || `0`}`);
         },
-        /** Read a number or a group, then its postfix percents */
+        /** Number or group, then percents */
         parsePrimary = (): number => {
             let value: number;
             if (expression[at] == `(`) {
@@ -66,7 +66,7 @@ const evaluateExpression = (expression: string): number => {
             at++;
             return base ** parseUnary();
         },
-        /** Read one unary sign over a power */
+        /** Read unary sign over power */
         parseUnary = (): number => {
             if (expression[at] == `+`) {
                 at++;
@@ -78,7 +78,7 @@ const evaluateExpression = (expression: string): number => {
             };
             return parsePower();
         },
-        /** Read a product or a quotient */
+        /** Read product or quotient */
         parseProduct = (): number => {
             let value = parseUnary();
             while (expression[at] == `*` || expression[at] == `/`) {
@@ -93,7 +93,7 @@ const evaluateExpression = (expression: string): number => {
             };
             return value;
         },
-        /** Read a sum or a difference */
+        /** Read sum or difference */
         parseSum = (): number => {
             let value = parseProduct();
             while (expression[at] == `+` || expression[at] == `-`) {
@@ -110,7 +110,7 @@ const evaluateExpression = (expression: string): number => {
     return result;
 };
 
-/** Parse and evaluate one expression, rejecting unusable input */
+/** Parse expression, rejecting unusable input */
 const calculate = (input: string): CalculationResult => {
     if (input.trim().length > maxExpressionLength)
         throw new Error(`Expression is too long`);

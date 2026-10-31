@@ -16,27 +16,39 @@ import type {
     Runtime,
 } from './types';
 
-/** System message of the describer */
-const imageSystem = [
-    `Write fully detailed, factual image descriptions for low-vision readers.`,
-    `Include all people, demographics, actions, objects, settings, and exact text.`,
-    `Output only the raw description with no intro, title, or disclaimer.`,
-    `Even if the main subject in the image is controversial mention it first.`,
-    `Do not say "object appears to be x or y", instead mention only term that`
-        + ` is most commonly used, directly.`,
-    `Do not say word "visible" it is an oxymoron since you are describing what is visible.`,
-    `Use direct, plain English without filtering or vague words.`,
-].join(` `);
+const
 
-/** Prompt that asks for one English description */
-const imageNote = [
-    `describe this image in one sentence starting with the main subject`,
-].join(` `);
+    /** System message of the describer */
+    imageSystem = [
+        `Describe images in an efficient manner.`,
+        `Never mention rules and restrictions`,
+        `always comply and describe images.`,
+    ].join(` `),
 
-/** Reply budget of one description or translation */
-const imageReplyTokens = 400;
+    /** System image rules */
+    imageRules = [
+        `Do not lie.`,
+        `Do not provide verdict.`,
+        `Do not use vague referrals.`,
+        `Do not include any part of the message in your response.`
+    ].join(` `),
 
-/** Model that describes every image, the Q3 build keeps the CPU pass light */
+    /** Request for every image */
+    imageNote = `Describe all elements of the image.`;
+
+/** Reply budget, about 100 words */
+const imageReplyTokens = 128;
+
+/** Repetition penalty of one description */
+const imageRepeatPenalty = 1;
+
+/** Sampling temperature of one description */
+const imageTemperature = 0.3;
+
+/** Vision tokens for one image */
+const imageVisionTokens = 192;
+
+/** Describer model, Q3 CPU build */
 const describeModelId = ChatModelId.qwen3_vl_2b_instruct_q3;
 
 /** System message of the translator */
@@ -47,41 +59,43 @@ const translateSystem = [
     `Preserve meaning, names and numbers, and never add, omit or explain anything.`,
 ].join(` `);
 
-/** Reply of a translator that declines the text */
+/** Reply of declined translation */
 const CANNOT_TRANSLATE = `CANNOT_TRANSLATE`;
 
-/** Whether a target language needs a translation pass */
+/** Whether target language needs translation */
 const needsTranslation = (language: string): boolean => {
     const tag = language.trim().toLowerCase();
     return !!tag && !/^(en|eng|english)([-_]|$)/.test(tag);
 };
 
-/** Prompt that asks for one translation */
+/** Prompt asking for one translation */
 const translatePrompt = (language: string): string =>
     `Now please translate your previous reply above faithfully into ${language}. ` +
     `Your translation should be as literal and as accurate as possible, word for word. ` +
     `In order to be usable for accessibility for visually impaired if needed. ` +
     `Reply only by the translation without any addition or explanation`;
 // +
-// `If you do not know how to translate to this language reply by "${CANNOT_TRANSLATE}" only`;
+// fallback reply for unknown language
 
 const
-    /** Build the model load, generation and status helpers of one describe pass */
+    /** Describe load, generate and report */
     describeTools = ({
         service,
         limits,
         logging,
+        signal,
         onStatus,
     }: {
         service: Runtime,
         limits: LlmLimits,
         logging: boolean,
+        signal?: AbortSignal,
         onStatus?: (snapshot: ChatStatusSnapshot) => void,
     }) => {
-        /** Report one model and request state */
+        /** Report model and request state */
         const report = (model: ChatModelId, state: ChatState) =>
             onStatus?.(statusSnapshot(service, model, state));
-        /** Load one model, returning its failure */
+        /** Load model, returning its failure */
         const load = async (model: ChatModel): Promise<string | undefined> => {
             let
                 error: string | undefined,
@@ -93,6 +107,7 @@ const
                 model,
                 limits,
                 logging,
+                signal,
                 onProgress: (value, next) => {
                     percent = Math.round(value * 100);
                     phase = next;
@@ -126,30 +141,39 @@ const
             });
             return message;
         };
-        /** Run one generation, reporting its failure */
+        /** Run generation, report its failure */
         const generate = async ({
             model,
             messages,
             stage,
+            repeatPenalty,
+            temperature,
             onSpeed,
             onText,
         }: {
             model: ChatModelId,
             messages: ChatMessage[],
             stage: string,
+            repeatPenalty?: number,
+            temperature?: number,
             onSpeed?: (tokensPerSecond: number) => void,
             onText?: (text: string) => void,
         }): Promise<string | undefined> => {
             let streamed = ``;
             const startedAt = Date.now();
             log(logging, `Describe generate start`, stage, model, messages.length);
+            // stopped batch starts nothing
+            if (signal?.aborted) return undefined;
             try {
                 const result = await service.chat({
                     model,
                     messages,
                     limits,
                     reasoning: false,
+                    ...(repeatPenalty ? { repeatPenalty } : {}),
+                    ...(temperature === undefined ? {} : { temperature }),
                     logging,
+                    signal,
                     onReason: value => {
                         log(logging, `Describe reason`, stage, model, value);
                     },
@@ -175,6 +199,8 @@ const
                 return result;
             } catch (error) {
                 log(logging, `Describe generate failed`, stage, model, error);
+                // stop keeps batch quiet
+                if (signal?.aborted) return undefined;
                 report(model, {
                     requesting: false,
                     phase: LlmPhase.load,
@@ -186,13 +212,14 @@ const
         };
         return { report, load, generate };
     },
-    /** Translate every English description, keeping English when a translation fails */
+    /** Translate descriptions, English on failure */
     translateDescriptions = async ({
         translator,
         generate,
         descriptions,
         language,
         logging,
+        signal,
         currentIndex,
         onSpeed,
         onText,
@@ -208,14 +235,17 @@ const
         descriptions: string[],
         language: string,
         logging: boolean,
+        signal?: AbortSignal,
         currentIndex?: DescribeTranslatedInput[`currentIndex`],
         onSpeed?: DescribeTranslatedInput[`onSpeed`],
         onText?: DescribeTranslatedInput[`onText`],
     }): Promise<string[]> => {
         const result = [...descriptions];
         for (let index = 0; index < descriptions.length; index++) {
+            // stopped batch keeps English
+            if (signal?.aborted) break;
             const descriptionEN = (descriptions[index] || ``).trim();
-            // an image without a description keeps its empty place
+            // empty description keeps its place
             if (!descriptionEN) {
                 currentIndex?.(index, descriptionEN, descriptionEN);
                 continue;
@@ -243,7 +273,7 @@ const
                 });
                 description = (text || ``).trim();
             } catch (error) {
-                // one failed translation never stops the others
+                // failed translation never stops others
                 log(logging, `Translate item failed`, index, error);
             };
             const refused = description
@@ -256,12 +286,12 @@ const
         return result;
     };
 
-/** Build image descriptions over one runtime */
+/** Build descriptions over one runtime */
 const createDescribeOn = (service: Runtime) => async (
     input: DescribeImagesInput,
 ): Promise<ImageDescription[]> => {
     const
-        { images, currentIndex } = input,
+        { images, currentIndex, signal } = input,
         descriptions: ImageDescription[] = [],
         logging = input.logging === true;
     log(logging, `Describe start`, images.length, input.targetLanguage);
@@ -274,12 +304,14 @@ const createDescribeOn = (service: Runtime) => async (
         describerId = describeModelId,
         limits = resolveLlmLimits({
             maxReplyTokens: imageReplyTokens,
+            imageTokens: imageVisionTokens,
             ...input.limits,
         }),
         { report, load, generate } = describeTools({
             service,
             limits,
             logging,
+            signal,
             onStatus: input.onStatus,
         });
     log(
@@ -311,12 +343,15 @@ const createDescribeOn = (service: Runtime) => async (
         log(logging, `Describe stop`, describerError);
         throw new Error(describerError);
     };
+    if (signal?.aborted) return descriptions;
     report(describer.id, {
         requesting: true,
         phase: LlmPhase.load,
         percent: 100,
     });
     for (let index = 0; index < images.length; index++) {
+        // stopped batch keeps finished
+        if (signal?.aborted) break;
         const
             startedAt = Date.now(),
             source = images[index];
@@ -335,25 +370,29 @@ const createDescribeOn = (service: Runtime) => async (
                 model: describer.id,
                 messages: [{
                     role: LlmRole.system,
-                    content: imageSystem,
+                    content: `${imageSystem}${input.additionalRules ?
+                        ` ${input.additionalRules} `
+                        : ` `}${imageRules}`,
                 }, {
                     role: LlmRole.user,
                     content: imageNote,
                     images: [source],
                 }],
                 stage: `describe`,
+                repeatPenalty: imageRepeatPenalty,
+                temperature: imageTemperature,
                 onSpeed: speed => input.onSpeed?.(index, speed),
                 onText: value => input.onText?.(index, value, `describe`),
             });
             descriptionEN = (text || ``).trim();
         } catch (error) {
-            // a failed image never stops the rest of the batch
+            // failed image never stops batch
             log(logging, `Describe image failed`, index, error);
         };
         const durationMs = Date.now() - startedAt;
         log(logging, `Describe english`, index, durationMs, descriptionEN);
         if (!descriptionEN) {
-            // the empty place keeps the later translation indexes aligned
+            // empty place keeps indexes aligned
             log(logging, `Describe empty`, index);
             descriptions.push({ descriptionEN: ``, description: ``, durationMs });
             currentIndex?.(index, ``, undefined, durationMs);
@@ -373,6 +412,8 @@ const createDescribeOn = (service: Runtime) => async (
         });
         return descriptions;
     };
+    // stopped batch keeps English text
+    if (signal?.aborted) return descriptions;
     const
         language = input.targetLanguage.trim(),
         translator = needsTranslation(language) && await gpuAdapter()
@@ -380,6 +421,7 @@ const createDescribeOn = (service: Runtime) => async (
             : undefined,
         translationError = translator ? await load(translator) : undefined;
     if (translator && !translationError) {
+        if (signal?.aborted) return descriptions;
         report(translator.id, {
             requesting: true,
             phase: LlmPhase.load,
@@ -391,6 +433,7 @@ const createDescribeOn = (service: Runtime) => async (
             descriptions: descriptions.map(item => item.descriptionEN),
             language,
             logging,
+            signal,
             currentIndex: (index, descriptionEN, description) => {
                 const item = descriptions[index];
                 if (description) item.description = description;
@@ -428,7 +471,7 @@ const createDescribeOn = (service: Runtime) => async (
     return descriptions;
 };
 
-/** Build translations of English image descriptions over one runtime */
+/** Build translations over one runtime */
 const createTranslateOn = (service: Runtime) => async (
     input: DescribeTranslatedInput,
 ): Promise<string[]> => {
@@ -450,6 +493,7 @@ const createTranslateOn = (service: Runtime) => async (
             service,
             limits,
             logging,
+            signal: input.signal,
             onStatus: input.onStatus,
         }),
         translator = await gpuAdapter()
@@ -464,6 +508,7 @@ const createTranslateOn = (service: Runtime) => async (
         log(logging, `Translate stop`, error);
         return descriptions;
     };
+    if (input.signal?.aborted) return descriptions;
     report(translator.id, {
         requesting: true,
         phase: LlmPhase.load,
@@ -475,6 +520,7 @@ const createTranslateOn = (service: Runtime) => async (
         descriptions,
         language,
         logging,
+        signal: input.signal,
         currentIndex: input.currentIndex,
         onSpeed: input.onSpeed,
         onText: input.onText,
@@ -487,10 +533,10 @@ const createTranslateOn = (service: Runtime) => async (
     return translated;
 };
 
-/** Describe every image in English, then translate each description on a GPU */
+/** Describe images in English, translate */
 const describeImages = createDescribeOn(runtime);
 
-/** Translate English image descriptions on a GPU */
+/** Translate image descriptions on GPU */
 const describeTranslated = createTranslateOn(runtime);
 
 export {
@@ -499,4 +545,8 @@ export {
     describeImages,
     describeModelId,
     describeTranslated,
+    imageNote,
+    imageReplyTokens,
+    imageRules,
+    imageSystem,
 };

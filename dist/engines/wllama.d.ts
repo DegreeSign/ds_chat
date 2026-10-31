@@ -8,19 +8,19 @@ declare const visionLimits: (model: ChatModel) => {
     image_max_tokens?: undefined;
 };
 declare const 
-/** Every CPU file of one model, its name and remote URL */
+/** CPU file names and URLs */
 cpuFiles: (model: ChatModel) => Array<{
     name: string;
     url: string;
 }>, 
-/** Every CPU file as a Blob, from the store or a resumable download */
+/** CPU files as stored blobs */
 storedBlobs: ({ model, signal, onProgress, }: {
     model: ChatModel;
     signal?: AbortSignal;
     onProgress: StartLlmParams[`onProgress`];
 }) => Promise<Blob[] | undefined>, 
-/** Map built messages to wllama turns */
+/** Map messages to wllama turns */
 toWllamaMessages: (messages: EngineMessage[]) => Promise<WllamaMessage[]>, 
-/** Start the CPU runtime, the unified engine entry */
+/** Start CPU runtime engine entry */
 startLLM: ({ model, limits, onProgress, signal, logging, assets: overrides, }: StartLlmParams) => Promise<LlmRuntime>, wllamaEngine: LlmEngine;
 export { cpuFiles, startLLM, storedBlobs, toWllamaMessages, visionLimits, wllamaEngine, };

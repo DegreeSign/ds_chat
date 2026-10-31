@@ -1,4 +1,4 @@
-/** Write one package log line when logging is on */
+/** Write log line when enabled */
 const log = (logging: boolean | undefined, ...args: unknown[]) => {
     if (logging !== true) return;
     console.log(...args);

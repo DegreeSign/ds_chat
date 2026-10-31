@@ -1,18 +1,18 @@
 import type { ChatModelId, ChatStatus, LlmBackend, LlmPhase, LlmRole, LlmStatus, WebSearchProvider } from './enums';
-/** One chat message, owned by the host */
+/** Host-owned chat message */
 interface ChatMessage {
     role: LlmRole;
     content: string;
-    /** Image data URLs or URLs attached to the turn */
+    /** Turn image URLs */
     images?: string[];
-    /** Audio data URLs or URLs attached to the turn */
+    /** Turn audio URLs */
     audio?: string[];
 }
-/** One JSON-safe value passed to or returned from a tool */
+/** JSON-safe tool value */
 type ChatToolValue = string | number | boolean | null | ChatToolValue[] | {
     [key: string]: ChatToolValue;
 };
-/** The JSON-schema subset the model reads for a tool parameter */
+/** Tool parameter JSON schema */
 interface ChatToolSchema {
     type?: `object` | `array` | `string` | `number` | `integer` | `boolean` | `null`;
     description?: string;
@@ -21,7 +21,7 @@ interface ChatToolSchema {
     items?: ChatToolSchema;
     enum?: string[];
 }
-/** One tool a host may run itself, never handed to the model */
+/** Host-run tool */
 interface ChatTool {
     /** Unique tool name */
     name: string;
@@ -30,36 +30,36 @@ interface ChatTool {
     parameters?: ChatToolSchema;
     execute: (args: Record<string, ChatToolValue>) => ChatToolValue | Promise<ChatToolValue>;
 }
-/** One tool call, with its parsed arguments */
+/** Parsed tool call */
 interface ChatToolCall {
     id: number;
     name: string;
     arguments: Record<string, ChatToolValue>;
 }
-/** One finished tool call, carrying its value or its error */
+/** Finished tool result */
 interface ChatToolResult extends ChatToolCall {
     result?: ChatToolValue;
     error?: string;
 }
-/** Search provider settings of the websearch tool */
+/** Websearch provider settings */
 interface WebSearchConfig {
     provider?: WebSearchProvider;
-    /** Wikipedia language edition, two or three letters plus an optional region */
+    /** Wikipedia language code */
     language?: string;
-    /** Results asked of the provider, 1 to 20 */
+    /** Provider result count */
     limit?: number;
     /** Characters kept per snippet */
     snippetLength?: number;
     /** Request budget in milliseconds */
     timeout?: number;
 }
-/** One search hit returned by the websearch tool */
+/** Websearch result hit */
 interface WebSearchResult {
     title: string;
     url: string;
     snippet: string;
 }
-/** Websearch settings with every default and clamp resolved */
+/** Resolved websearch settings */
 interface WebSearchSettings {
     provider: WebSearchProvider;
     language: string;
@@ -67,7 +67,7 @@ interface WebSearchSettings {
     snippetLength: number;
     timeout: number;
 }
-/** Fiat and metal rates of one feed fetch, quoted per EUR */
+/** Fiat and metal rates */
 interface FiatSnapshot {
     /** Local fetch time, milliseconds */
     fetchedAt: number;
@@ -76,24 +76,24 @@ interface FiatSnapshot {
     rates: Record<string, number>;
     yesterday: Record<string, number>;
 }
-/** Crypto prices of one feed fetch, quoted in EUR per unit */
+/** Crypto prices in EUR */
 interface CryptoSnapshot {
     fetchedAt: number;
     sourceAt: number;
     prices: Record<string, number>;
     yesterday: Record<string, number>;
 }
-/** The price sections held in memory and in localStorage */
+/** Cached price sections */
 interface PriceSnapshot {
     fiat?: FiatSnapshot;
     crypto?: CryptoSnapshot;
 }
-/** Price sections one request has to read */
+/** Required price sections */
 interface PriceSections {
     fiat: boolean;
     crypto: boolean;
 }
-/** One conversion returned by the currency tool */
+/** Currency conversion result */
 interface CurrencyResult {
     from: string;
     to: string;
@@ -112,7 +112,7 @@ interface CalculationResult {
     expression: string;
     result: number;
 }
-/** One page of a Wikipedia search response */
+/** Wikipedia search page */
 interface WikipediaPage {
     key?: string;
     title?: string;
@@ -123,7 +123,7 @@ interface WikipediaPage {
 interface WikipediaResponse {
     pages?: WikipediaPage[];
 }
-/** One DuckDuckGo topic, a group carries nested topics */
+/** DuckDuckGo topic group */
 interface DuckDuckGoTopic {
     FirstURL?: string;
     Text?: string;
@@ -137,50 +137,50 @@ interface DuckDuckGoResponse {
     Results?: DuckDuckGoTopic[];
     RelatedTopics?: DuckDuckGoTopic[];
 }
-/** One crypto row of the price feed */
+/** Crypto price row */
 interface PriceCoin {
     /** Price in EUR per unit */
     pr?: number;
-    /** Price in EUR per unit, 24 hours earlier */
+    /** Price 24 hours ago */
     yst?: number;
 }
-/** The CoinExams price feed, validated before use */
+/** Validated CoinExams feed */
 interface PriceFeed {
     rates?: {
-        /** Feed timestamp of the fiat and metal rates, milliseconds */
+        /** Fiat feed timestamp */
         date?: number;
-        /** Units of each symbol per EUR */
+        /** Symbol units per EUR */
         current?: Record<string, number>;
-        /** The same rates, 24 hours earlier */
+        /** Rates 24 hours ago */
         yesterday?: Record<string, number>;
     };
     coins?: Record<string, PriceCoin>;
-    /** Feed timestamp of the crypto prices, milliseconds */
+    /** Crypto feed timestamp */
     date?: number;
 }
 /** One on-device model */
 interface ChatModel {
-    /** Stable catalog id, passed by the host */
+    /** Stable catalog id */
     id: ChatModelId;
-    /** Whether the model supports chain-of-thought reasoning */
+    /** Model reasoning support */
     reasoning: boolean;
     /** wllama (CPU) artifact */
     cpu?: {
         repo: string;
         file: string;
-        /** Vision projector, present when the CPU build accepts images */
+        /** Optional CPU vision projector */
         mmproj?: {
-            /** Repository of the projector, when it differs */
+            /** Projector repository override */
             repo?: string;
             file: string;
-            /** Whether the projector also accepts audio */
+            /** Projector audio support */
             audio?: boolean;
         };
     };
     /** LiteRT-LM (WebGPU) artifact */
     litert?: {
         repo: string;
-        /** File name inside the model repository */
+        /** Model repository file name */
         file: string;
         /** Whether the build accepts images */
         vision: boolean;
@@ -188,159 +188,192 @@ interface ChatModel {
         audio: boolean;
     };
 }
-/** Token, prompt and thread budgets of an on-device generation */
+/** Generation budget settings */
 interface LlmLimits {
     /** Max answer tokens */
     maxReplyTokens: number;
-    /** Max chain-of-thought tokens, used by the CPU engine when it loads */
+    /** Max reasoning tokens */
     maxThinkingTokens: number;
-    /** Total output budget when reasoning is on, thought plus answer */
+    /** Reasoning output budget */
     maxReasoningTokens: number;
-    /** Max images sent in one prompt */
+    /** Max prompt images */
     maxImages: number;
-    /** Max audio clips sent in one prompt */
+    /** Vision tokens per image */
+    imageTokens: number;
+    /** Max prompt audio clips */
     maxAudio: number;
     /** Max characters kept per message */
     maxContentLength: number;
-    /** Max characters of the whole prompt */
+    /** Max prompt characters */
     promptCharBudget: number;
-    /** Max CPU threads, applied after the hardware maximum */
+    /** Max CPU threads */
     maxThreads: number;
 }
-/** Current model and request state reported to the host */
+/** Reported model and request state */
 interface ChatStatusSnapshot {
-    /** Build that runs on this device after the mobile swap */
+    /** Device-specific model build */
     model?: ChatModelId;
-    /** Availability derived from the engine status */
+    /** Derived engine availability */
     availability: ChatStatus;
     status: LlmStatus;
     backend: LlmBackend;
-    /** Whether the requested model accepts images on this backend */
+    /** Model image support */
     supportsImages: boolean;
-    /** Whether the requested model accepts audio on this backend */
+    /** Model audio support */
     supportsAudio: boolean;
     ready: boolean;
     loading: boolean;
-    /** Whether a reply is streaming right now */
+    /** Reply streaming flag */
     requesting: boolean;
     phase: LlmPhase;
     /** Download or load progress, 0..100 */
     percent: number;
-    /** Last request error, cleared when a reply starts */
+    /** Last request error */
     error?: string;
 }
-/** One chat request, invoked for every response */
+/** Chat request callback */
 interface ChatInput {
-    /** Model that answers, the GPU model when WebGPU is available, else the CPU one */
+    /** Model that answers */
     model?: ChatModelId;
-    /** Complete prompt, including the system and user turns */
+    /** Complete chat prompt */
     messages: ChatMessage[];
-    /** Override any token, prompt or thread budget */
+    /** Budget overrides */
     limits?: Partial<LlmLimits>;
-    /** Whether the model may use chain-of-thought reasoning, defaults to off */
+    /** Reasoning option, off */
     reasoning?: boolean;
-    /** Whether package and engine logs reach the console, defaults to off */
+    /** Logging option, off */
     logging?: boolean;
-    /** Accumulated reasoning text, streamed while the model thinks */
+    /** Streamed reasoning text */
     onThinking?: (text: string) => void;
-    /** Accumulated reply text, streamed while the model answers */
+    /** Streamed reply text */
     onResponse: (text: string) => void;
-    /** Current generation speed in tokens per second, streamed while the model answers */
+    /** Generation speed callback */
     onSpeed?: (tokensPerSecond: number) => void;
-    /** Model and request state, reported on every change */
+    /** Status change callback */
     onStatus?: (snapshot: ChatStatusSnapshot) => void;
 }
-/** Model preload request, a subset of ChatInput */
+/** Model preload request */
 type ChatPreloadInput = Pick<ChatInput, `model` | `limits` | `logging` | `onStatus`>;
-/** Stop the current request, its model load, or free the loaded model */
+/** Stop request or model */
 type CancelChat = () => void;
-/** One image described in English and in the requested language */
+/** Described image result */
 interface ImageDescription {
-    /** Description produced by the vision model */
+    /** Vision description */
     descriptionEN: string;
-    /** Translation of the English description, English itself without a GPU */
+    /** Description translation */
     description: string;
-    /** Time the describer took for this image, milliseconds */
+    /** Description duration */
     durationMs: number;
 }
 /** One batch image description request */
 interface DescribeImagesInput {
-    /** Language the description is translated into, English skips translation */
+    /** Target description language */
     targetLanguage: string;
-    /** Image data URLs or URLs, described one by one in this order */
+    /** Ordered image URLs */
     images: string[];
-    /** Index of the image being processed and each description once ready */
+    /** Stop batch, keep finished */
+    signal?: AbortSignal;
+    /** Description progress callback */
     currentIndex?: (index: number, descriptionEN?: string, description?: string, durationMs?: number) => void;
-    /** Index of the image being described and its speed, tokens per second */
+    /** Image speed callback */
     onSpeed?: (index: number, tokensPerSecond: number) => void;
-    /** Index of the image and its accumulated text while the model writes */
+    /** Image text callback */
     onText?: (index: number, text: string, stage: `describe` | `translate`) => void;
-    /** Override any token, prompt or thread budget */
+    /** Budget overrides */
     limits?: Partial<LlmLimits>;
-    /** Whether package and engine logs reach the console, defaults to off */
+    /** Logging option, off */
     logging?: boolean;
-    /** Model and request state, reported on every change */
+    /** Status change callback */
     onStatus?: (snapshot: ChatStatusSnapshot) => void;
+    /** Additional rules */
+    additionalRules?: string;
 }
-/** One batch translation request for English image descriptions */
+/** Batch translation request */
 interface DescribeTranslatedInput {
-    /** English descriptions translated one by one in this order */
+    /** Ordered English descriptions */
     descriptions: string[];
-    /** Language the descriptions are translated into, English skips translation */
+    /** Target translation language */
     targetLanguage: string;
-    /** Index being translated and each description once ready */
+    /** Stop batch, keep finished */
+    signal?: AbortSignal;
+    /** Translation progress callback */
     currentIndex?: (index: number, descriptionEN?: string, description?: string) => void;
-    /** Index of the description being generated and its speed, tokens per second */
+    /** Translation speed callback */
     onSpeed?: (index: number, tokensPerSecond: number) => void;
-    /** Index of the description and its accumulated text while the model writes */
+    /** Translation text callback */
     onText?: (index: number, text: string, stage: `translate`) => void;
-    /** Override any token, prompt or thread budget */
+    /** Budget overrides */
     limits?: Partial<LlmLimits>;
-    /** Whether package and engine logs reach the console, defaults to off */
+    /** Logging option, off */
     logging?: boolean;
-    /** Model and request state, reported on every change */
+    /** Status change callback */
     onStatus?: (snapshot: ChatStatusSnapshot) => void;
 }
-/** wllama wasm assets used by the CPU engine */
+/** CPU wasm assets */
 interface WllamaAssets {
-    /** URL of the wllama wasm binary */
+    /** wllama wasm URL */
     wasm: string;
-    /** URL of the wllama compat wasm binary */
+    /** Compat wasm URL */
     compatWasm: string;
-    /** URL of the wllama compat worker script */
+    /** Compat worker URL */
     compatWorker: string;
 }
-/** LiteRT-LM wasm assets used by the GPU engine */
+/** GPU wasm assets */
 interface LitertAssets {
-    /** URL of the LiteRT-LM wasm glue script */
+    /** LiteRT glue URL */
     script: string;
-    /** URL of the LiteRT-LM wasm binary */
+    /** LiteRT wasm URL */
     wasm: string;
 }
-/** Navigator with the WebGPU entry point, absent in Node */
+/** WebGPU navigator type */
 interface GpuNavigator extends Navigator {
     gpu?: {
-        /** Ask the browser for a WebGPU adapter */
+        /** Request WebGPU adapter */
         requestAdapter: (options?: {
             powerPreference?: `low-power` | `high-performance`;
         }) => Promise<unknown>;
     };
 }
-/** Navigator fields that tell a phone or tablet from a desktop */
+/** Minimal WebGPU buffer */
+interface GpuBuffer {
+    /** Map buffer after work */
+    mapAsync: (...args: unknown[]) => Promise<void>;
+}
+/** Minimal WebGPU device */
+interface GpuDevice {
+    /** Create engine buffer */
+    createBuffer?: (...args: unknown[]) => GpuBuffer;
+    /** Release device resources */
+    destroy?: () => void;
+}
+/** Reset wasm fields */
+interface GpuWasm {
+    preinitializedWebGPUDevice?: GpuDevice;
+    WebGPU?: {
+        preinitializedDeviceId?: number;
+    };
+}
+/** GPU throttle state */
+interface GpuThrottleParams {
+    device: GpuDevice;
+    /** Rest after one GPU readback */
+    pace: () => Promise<void>;
+}
+/** Mobile detection fields */
 type MobileNavigator = Pick<Navigator, `userAgent` | `maxTouchPoints`> & {
-    /** Chromium client hints, the reliable mobile flag */
+    /** Chromium mobile hint */
     userAgentData?: {
         mobile?: boolean;
     };
 };
-/** Request state that builds one status snapshot */
+/** Status snapshot state */
 interface ChatState {
-    /** Whether a reply is streaming right now */
+    /** Reply streaming flag */
     requesting: boolean;
     phase: LlmPhase;
     /** Download or load progress, 0..100 */
     percent: number;
-    /** Last request error, cleared when a reply starts */
+    /** Last request error */
     error?: string;
 }
 /** One live chat request */
@@ -352,7 +385,7 @@ interface ActiveCall extends ChatState {
     /** Model resolved for this call */
     model?: ChatModelId;
 }
-/** Engine and backend overrides used by tests */
+/** Test engine overrides */
 interface RuntimeDeps {
     engines?: {
         cpu?: LlmEngine;
@@ -367,165 +400,173 @@ interface RuntimeLoadParams {
     model: ChatModel;
     limits: LlmLimits;
     assets?: Partial<WllamaAssets>;
-    /** Whether engine logs reach the console */
+    /** Engine logging flag */
     logging?: boolean;
-    /** Stop waiting for this load, the download continues while another caller waits */
+    /** Stop awaiting shared load */
     signal?: AbortSignal;
     onProgress: (progress: number, phase: LlmPhase) => void;
 }
-/** One caller waiting on an in-flight model load */
+/** Waiting load caller */
 interface RuntimeLoadWaiter {
-    /** Report load progress to this caller */
+    /** Report caller progress */
     report: RuntimeLoadParams[`onProgress`];
-    /** Resolve this caller, early when it leaves the load */
+    /** Resolve waiting caller */
     settle: (loaded: boolean) => void;
 }
-/** Bytes of one model file already stored on disk */
+/** Stored model file bytes */
 interface StoredPart {
     /** Bytes already stored */
     size: number;
-    /** Full file size, zero while unknown */
+    /** File size, zero unknown */
     total: number;
-    /** Entity tag of the stored bytes, empty when the host hides it */
+    /** Stored bytes entity tag */
     etag: string;
 }
-/** One part file of a model, at its byte offset */
+/** Model part file */
 interface StoredFilePart {
-    /** Byte offset of the part in the model file */
+    /** Part byte offset */
     start: number;
     /** Bytes stored in the part */
     size: number;
 }
-/** One stored model file, complete or still downloading */
+/** Stored model file */
 interface StoredModel extends StoredPart {
-    /** The stored bytes, a snapshot of the parts on disk */
+    /** Stored file snapshot */
     file: Blob;
-    /** Whether every byte of the total is stored */
+    /** Complete file flag */
     complete: boolean;
 }
-/** Download metadata kept beside one stored model file */
+/** Stored download metadata */
 interface StoredModelMeta {
     total: number;
     etag: string;
     complete: boolean;
 }
-/** Where one response continues a stored part */
+/** Stored part continuation */
 interface ResumePlan {
-    /** Byte the response body starts at */
+    /** Response start byte */
     start: number;
-    /** Full file size, zero while unknown */
+    /** File size, zero unknown */
     total: number;
     etag: string;
 }
-/** One model file download into the store */
+/** Model download into store */
 interface StoreDownloadParams {
     url: string;
-    /** Stop the download, the bytes stored so far are kept */
+    /** Stop download, keep bytes */
     signal?: AbortSignal;
     onProgress: StartLlmParams[`onProgress`];
 }
-/** Resumable model file store owned by one engine */
+/** Engine resumable file store */
 interface ModelStore {
-    /** Stored bytes and metadata of one model file, undefined when absent */
+    /** Stored model file info */
     stored: (url: string) => Promise<StoredModel | undefined>;
-    /** Download one model file, resuming the parts already stored */
+    /** Resume model file download */
     download: (params: StoreDownloadParams) => Promise<StoredModel | undefined>;
-    /** Delete one stored model file and its metadata */
+    /** Delete model file */
     remove: (url: string) => Promise<void>;
-    /** Delete the whole store directory and every model file in it */
+    /** Delete entire store */
     purge: () => Promise<void>;
 }
 /** One generation request */
 interface RuntimeChatParams {
-    /** Model that answers, resolved by the runtime */
+    /** Resolved answer model */
     model?: ChatModelId;
     messages: ChatMessage[];
     limits: LlmLimits;
     reasoning: boolean;
-    /** Whether engine logs reach the console */
+    /** Repetition penalty */
+    repeatPenalty?: number;
+    /** Sampling temperature */
+    temperature?: number;
+    /** Engine logging flag */
     logging?: boolean;
     onReason: (text: string) => void;
     onText: (text: string) => void;
-    /** Current generation speed in tokens per second */
+    /** Generation speed */
     onSpeed?: (tokensPerSecond: number) => void;
     signal?: AbortSignal;
 }
-/** On-device runtime shared by every request */
+/** Shared on-device runtime */
 interface Runtime {
-    /** Load a model, or join a load of the same model already in flight */
+    /** Load or join model */
     load: (params: RuntimeLoadParams) => Promise<boolean>;
     chat: (params: RuntimeChatParams) => Promise<string | undefined>;
-    /** Release one loaded model, or every model */
+    /** Release one or all models */
     unload: (model?: ChatModelId) => Promise<void>;
-    /** Release the model and delete every cached model file */
+    /** Release and delete caches */
     clear: () => Promise<void>;
-    /** Whether one model, or the active model, is loaded */
+    /** Model loaded check */
     ready: (model?: ChatModelId) => boolean;
-    /** Whether one model, or any model, is loading */
+    /** Model loading check */
     loading: (model?: ChatModelId) => boolean;
-    /** Status of one model, or of the last load */
+    /** Model load status */
     status: (model?: ChatModelId) => LlmStatus;
-    /** Backend of one model, or of the active model */
+    /** Model backend */
     backend: (model?: ChatModelId) => LlmBackend;
-    /** Last model load error, of one model or of the latest load */
+    /** Latest model load error */
     error: (model?: ChatModelId) => string | undefined;
-    /** Model that loaded or answered last */
+    /** Last active model */
     model: () => ChatModel | undefined;
 }
-/** Params for a single on-device chat generation */
+/** Single chat generation params */
 interface EngineChatParams {
     messages: ChatMessage[];
     limits: LlmLimits;
-    /** User preference, off unless explicitly turned on */
+    /** Opt-in reasoning preference */
     reasoning: boolean;
-    /** Whether engine logs reach the console */
+    /** Repetition penalty */
+    repeatPenalty?: number;
+    /** Sampling temperature */
+    temperature?: number;
+    /** Engine logging flag */
     logging?: boolean;
     /** Streamed reasoning delta */
     onReason: (text: string) => void;
     /** Streamed reply delta */
     onText: (text: string) => void;
-    /** Current generation speed in tokens per second */
+    /** Generation speed */
     onSpeed?: (tokensPerSecond: number) => void;
     signal?: AbortSignal;
 }
 /** Params of the engine startLLM */
 interface StartLlmParams {
     model: ChatModel;
-    /** Engine-level budgets, read when the model loads */
+    /** Engine load budgets */
     limits: LlmLimits;
-    /** Report download and load progress 0..1 */
+    /** Download progress callback */
     onProgress: (progress: number, phase?: LlmPhase) => void;
-    /** Stop a download or load that is no longer wanted */
+    /** Cancel download or load */
     signal?: AbortSignal;
-    /** Whether engine logs reach the console */
+    /** Engine logging flag */
     logging?: boolean;
     /** CPU engine asset override */
     assets?: Partial<WllamaAssets>;
 }
-/** Unified object returned by the engine startLLM */
+/** Engine start result */
 interface LlmRuntime {
     /** Model this runtime serves */
     model: ChatModel;
     /** Backend that accepted the model */
     backend: LlmBackend;
-    /** Context window requested from the engine */
+    /** Requested context window */
     contextSize: number;
-    /** Stream one reply, returning the final text or undefined when stopped */
+    /** Stream reply text */
     chat: (params: EngineChatParams) => Promise<string | undefined>;
-    /** Release the model from memory, keeping its cache */
+    /** Release model, keep cache */
     unload: () => Promise<void>;
 }
-/** A model runner backed by one inference engine */
+/** Engine-backed model runner */
 interface LlmEngine {
     backend: LlmBackend;
-    /** Download (if needed) and load a model, returning its runtime */
+    /** Load model runtime */
     startLLM: (params: StartLlmParams) => Promise<LlmRuntime>;
-    /** Whether the model files are already fully stored on this device */
+    /** Model files stored check */
     cached: (model: ChatModel) => Promise<boolean>;
-    /** Delete every on-device artifact this engine keeps, including orphans */
+    /** Delete engine artifacts */
     purge: () => Promise<void>;
 }
-/** One text, image or audio segment of a user turn */
+/** User turn content part */
 type EngineContentPart = {
     type: `text`;
     text: string;
@@ -558,7 +599,7 @@ type WllamaMessage = {
     role: `assistant`;
     content: string;
 };
-/** One OpenAI-style message, a user turn may carry media parts */
+/** OpenAI-style chat message */
 type EngineMessage = {
     role: `system`;
     content: string;
@@ -577,31 +618,33 @@ type LitertMessage = import('@litert-lm/core').Message;
 type LitertEngine = import('@litert-lm/core').Engine;
 /** The LiteRT-LM module namespace */
 type LitertModule = typeof import('@litert-lm/core');
-/** Settings handed to the LiteRT-LM engine */
+/** LiteRT engine settings */
 type LitertSettings = import('@litert-lm/core').EngineSettings;
-/** Params of one LiteRT-LM settings build */
+/** LiteRT settings params */
 interface LitertSettingsParams {
     /** Model with the artifact */
     model: ChatModel;
-    /** Image and context budgets */
+    /** Image budgets */
     limits: LlmLimits;
+    /** Requested context window */
+    contextSize: number;
     /** Model file stream */
     source: ReadableStream<Uint8Array>;
     /** Loaded LiteRT module */
     mod: LitertModule;
 }
-/** One reused LiteRT-LM conversation and the turns it already holds */
+/** Reused LiteRT conversation */
 interface LitertSession {
-    /** Live conversation, dropped when a turn cannot be continued */
+    /** Live LiteRT conversation */
     conversation?: import('@litert-lm/core').Conversation;
-    /** Built turns already sent to the conversation */
+    /** Sent conversation turns */
     sent: EngineMessage[];
-    /** Reasoning flag the conversation was created with */
+    /** Conversation reasoning flag */
     reasoning: boolean;
-    /** Output token budget the conversation was created with */
+    /** Conversation output budget */
     maxTokens: number;
 }
-/** Params of one LiteRT-LM chat call */
+/** LiteRT chat params */
 interface LitertChatParams {
     engine: LitertEngine;
     model: ChatModel;
@@ -617,13 +660,13 @@ interface StreamLitertParams {
     messages: EngineMessage[];
     session: LitertSession;
 }
-/** Streamed delta, reasoning may be inline or structured */
+/** Streamed reasoning delta */
 interface EngineDelta {
     content?: string;
     reasoning?: string;
     reasoning_content?: string;
 }
-/** Streamed chunk as the engine shapes it */
+/** Engine stream chunk */
 interface EngineChunk {
     choices?: Array<{
         finish_reason?: string;
@@ -637,35 +680,35 @@ interface StreamReplyParams {
     onReason: (text: string) => void;
     /** Streamed reply delta */
     onText: (text: string) => void;
-    /** Current generation speed in tokens per second */
+    /** Generation speed */
     onSpeed?: (tokensPerSecond: number) => void;
-    /** Open the engine stream for the prepared messages */
+    /** Open engine stream */
     start: () => Promise<AsyncIterable<unknown>>;
-    /** Whether the caller stopped the generation */
+    /** Generation stopped flag */
     stopped: () => boolean;
-    /** Whether engine logs reach the console */
+    /** Engine logging flag */
     logging?: boolean;
-    /** Budget before the first chunk arrives, milliseconds */
+    /** First chunk timeout */
     firstTimeoutMs?: number;
     /** Budget between two chunks, milliseconds */
     idleTimeoutMs?: number;
-    /** Called when a slow stream keeps the text already delivered */
+    /** Slow stream callback */
     onStall?: () => void;
 }
-/** Params of one engine chat call */
+/** Engine chat params */
 interface EngineRunParams {
     model: ChatModel;
     params: EngineChatParams;
-    /** Open the engine stream for the prepared messages */
+    /** Open engine stream */
     start: (messages: EngineMessage[]) => Promise<AsyncIterable<unknown>>;
-    /** Whether the caller stopped the generation */
+    /** Generation stopped flag */
     stopped: () => boolean;
-    /** Called when a slow stream keeps the text already delivered */
+    /** Slow stream callback */
     onStall?: () => void;
 }
-/** Pixel size of one image sent to an engine */
+/** Engine image pixel size */
 interface ImageSize {
     width: number;
     height: number;
 }
-export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, ImageDescription, DescribeImagesInput, DescribeTranslatedInput, WllamaAssets, LitertAssets, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, ImageSize, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, ImageDescription, DescribeImagesInput, DescribeTranslatedInput, WllamaAssets, LitertAssets, GpuBuffer, GpuDevice, GpuWasm, GpuThrottleParams, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, ImageSize, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };

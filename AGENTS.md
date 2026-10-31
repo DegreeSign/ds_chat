@@ -29,8 +29,11 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   `a -> b`). Keep a helper only when it is shared by two or more callers,
   exported, a real processing stage, or a required API method.
 - Audit the code for duplicated logic and consolidate it.
-- Keep plain comments to three or four words and start them with `//`. Use a
-  `/** */` block only to document a specific defined variable or function.
+- Keep every comment at five words or fewer and start a plain comment with
+  `//`. Use a `/** */` block only to document a specific defined variable or
+  function. Leave license, copyright and directive comments unchanged.
+- Check every added or changed comment against the five-word limit before
+  finishing a change.
 - Indent every file with four spaces per level and end it with a single newline.
 - Never use an em dash in a file of this repository.
 - Never import the host app. Every input arrives through `ChatInput`; the
@@ -48,6 +51,9 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   `package.json` node in the same edit as `package.json`.
 - Model weights are never stored in the repository. The engines own their
   caches.
+- The instruct describer stays `qwen3-vl-2b-instruct` at its Q3 build. It is
+  chosen on purpose to fit on mobile devices. Never suggest or swap in a
+  stronger or larger model.
 - Never leave `dist/` in the worktree and never add it to a change. The owner
   generates and adds the build output after validating the source. If a test
   needs the bundles, build, run the check, then delete `dist/`.
@@ -55,6 +61,9 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   between runs.
 - Keep the model weights used for manual testing in `build/models`. They stay
   there between runs, are never committed and are never deleted.
+- Image tests read the full frames kept in `build/test`; never substitute
+  another image, a screenshot, or a crop. The fixtures validate
+  `describeImages` in `src/describe.ts`.
 - Verify with `yarn typecheck`, capped at 60 seconds per run.
 - Never run release, publish or deploy commands.
 - Node >= 24. The source is TypeScript built with webpack and `tsc`, imports
@@ -80,6 +89,17 @@ Headless browser suite, for any runtime change:
 3. Run it: `node test/drive.cjs "$PWD/build"`.
 4. The driver exits 0 only on `"fail": 0`.
 5. Leave `build/` in place. Never commit build output.
+
+Manual instruct server, for the live and image suites only:
+
+- `yarn test:instruct` runs `llama serve` with the Qwen3-VL 2B Instruct Q3_K_M
+  build on `http://127.0.0.1:8080`, on CPU with a 160k context and 4 threads.
+  The fake-engine harness never needs it, and no test may start it.
+- llama.cpp runs about 10x faster than wllama, so prefer the live server
+  whenever a test needs real inference. Keep fake engines for state
+  transitions only.
+- Keep it in its own terminal while the suite runs. llama.cpp downloads and
+  caches the weights outside the repository; never commit them.
 
 Harness rules:
 

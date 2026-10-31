@@ -1,10 +1,10 @@
-/** Who a chat message is from */
+/** Author of a chat message */
 declare enum LlmRole {
     system = "system",
     user = "user",
     assistant = "assistant"
 }
-/** Assistant availability derived from the engine */
+/** Assistant availability from engine */
 declare enum ChatStatus {
     online = 0,
     away = 1,
@@ -18,18 +18,18 @@ declare enum LlmStatus {
     error = 3,
     unsupported = 4
 }
-/** Which engine runs the model on this device */
+/** Engine running the model */
 declare enum LlmBackend {
     cpu = "cpu",
     gpu = "gpu",
     none = "none"
 }
-/** Download or load-into-memory phase of a model load */
+/** Download or load phase */
 declare enum LlmPhase {
     download = "download",
     load = "load"
 }
-/** Catalog ids of the on-device models */
+/** Catalog ids of on-device models */
 declare enum ChatModelId {
     qwen3_vl_2b = "qwen3-vl-2b",
     qwen3_vl_2b_instruct = "qwen3-vl-2b-instruct",
@@ -43,7 +43,7 @@ declare enum BuiltinTool {
     calculate = "calculate",
     currency = "currency"
 }
-/** Search provider behind the websearch tool */
+/** Provider behind the websearch tool */
 declare enum WebSearchProvider {
     wikipedia = "wikipedia",
     duckduckgo = "duckduckgo"

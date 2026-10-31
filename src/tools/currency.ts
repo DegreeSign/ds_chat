@@ -10,29 +10,29 @@ import type {
     PriceSnapshot,
 } from '../types';
 
-/** Public price feed, every section in one file */
+/** Public feed, every section */
 const
     /** Price host */
     feedHost = `https://srv.coinexams.com`,
     /** Price file on the host */
     feedFile = `data.json`,
     feedUrl = `${feedHost}/${feedFile}`;
-/** localStorage key of the cached snapshot */
+/** localStorage key of cached snapshot */
 const storageKey = `degreesign-chat-prices-v1`;
-/** Base of every quote, units per EUR */
+/** Base quote, units per EUR */
 const baseSymbol = `EUR`;
-/** Crypto prices stay valid for five minutes */
+/** Crypto prices valid five minutes */
 const cryptoTtl = 5 * oneMin;
-/** A failed fetch waits this long before the next attempt */
+/** Failed fetch backoff before retry */
 const failureBackoff = 30 * oneSec;
-/** Results at or above this value keep six decimals through pNum */
+/** Threshold for pNum six decimals */
 const exactLimit = 1e5;
-/** Decimals kept by rNum below the exact limit */
+/** rNum decimals below exact limit */
 const resultDigits = 8;
-/** Decimals kept on a percentage change */
+/** Decimals on a percentage change */
 const percentDigits = 4;
 
-/** In-memory price cache, hydrated on the first tool call */
+/** In-memory price cache, filled lazily */
 let
     snapshot: PriceSnapshot = {},
     failedAt = 0,
@@ -40,7 +40,7 @@ let
     hydrated = false,
     inFlight: Promise<void> | undefined;
 
-/** Clear the cache, used by tests */
+/** Clear cache for tests */
 const resetPrices = () => {
     snapshot = {};
     failedAt = 0;
@@ -49,7 +49,7 @@ const resetPrices = () => {
     inFlight = undefined;
 };
 
-/** Read the stored snapshot once, ignoring a broken store */
+/** Read snapshot, ignore broken store */
 const hydrate = () => {
     if (hydrated) return;
     hydrated = true;
@@ -65,7 +65,7 @@ const hydrate = () => {
     } catch { };
 };
 
-/** Write the snapshot, ignoring a store the host refuses */
+/** Write snapshot, ignore refused store */
 const save = () => {
     try {
         if (typeof localStorage == `undefined`) return;
@@ -73,7 +73,7 @@ const save = () => {
     } catch { };
 };
 
-/** Copy the finite entries of one rate table, zero quotes included */
+/** Copy finite rates, keep zeros */
 const rateTable = (values?: Record<string, number>): Record<string, number> => {
     const table: Record<string, number> = {};
     for (const [symbol, value] of Object.entries(values ?? {}))
@@ -82,7 +82,7 @@ const rateTable = (values?: Record<string, number>): Record<string, number> => {
     return table;
 };
 
-/** Build the fiat and metal section of one feed response */
+/** Build fiat and metal section */
 const fiatSection = (
     feed: PriceFeed,
     fetchedAt: number,
@@ -99,7 +99,7 @@ const fiatSection = (
     };
 };
 
-/** Build the crypto section of one feed response */
+/** Build crypto section from feed */
 const cryptoSection = (
     feed: PriceFeed,
     fetchedAt: number,
@@ -127,13 +127,13 @@ const cryptoSection = (
     };
 };
 
-/** Keep the newer of two source timestamps */
+/** Keep newer source timestamp */
 const newest = <T extends { sourceAt: number }>(
     current: T | undefined,
     next: T,
 ): T => current && current.sourceAt > next.sourceAt ? current : next;
 
-/** Fetch the feed and update the requested sections */
+/** Fetch feed, update requested sections */
 const refresh = async ({ fiat, crypto }: PriceSections): Promise<void> => {
     try {
         const response = await fetch(feedUrl);
@@ -157,17 +157,17 @@ const refresh = async ({ fiat, crypto }: PriceSections): Promise<void> => {
     };
 };
 
-/** Whether the crypto section carries one symbol */
+/** Whether crypto section has symbol */
 const hasCrypto = (symbol: string): boolean =>
     !!snapshot.crypto
     && (symbol in snapshot.crypto.prices || symbol in snapshot.crypto.yesterday);
 
-/** Whether the fiat or metal section carries one symbol */
+/** Whether fiat section has symbol */
 const hasFiat = (symbol: string): boolean =>
     !!snapshot.fiat
     && (symbol in snapshot.fiat.rates || symbol in snapshot.fiat.yesterday);
 
-/** Sections one request has to read for these symbols */
+/** Sections needed for these symbols */
 const sectionsFor = (symbols: string[]): PriceSections => {
     const sections: PriceSections = { fiat: false, crypto: false };
     for (const symbol of symbols) {
@@ -179,7 +179,7 @@ const sectionsFor = (symbols: string[]): PriceSections => {
     return sections;
 };
 
-/** Refresh the expired sections one request needs */
+/** Refresh expired sections on demand */
 const ensurePrices = async (symbols: string[]): Promise<void> => {
     const
         sections = sectionsFor(symbols),
@@ -189,7 +189,7 @@ const ensurePrices = async (symbols: string[]): Promise<void> => {
         crypto = sections.crypto
             && now - (snapshot.crypto?.fetchedAt ?? 0) >= cryptoTtl;
     if (!fiat && !crypto) return;
-    // the host knows it is offline
+    // host reports it is offline
     if (typeof navigator != `undefined` && navigator.onLine === false) return;
     if (failedAt && now - failedAt < failureBackoff) return;
     if (!inFlight)
@@ -199,7 +199,7 @@ const ensurePrices = async (symbols: string[]): Promise<void> => {
     await inFlight;
 };
 
-/** EUR price of one unit now */
+/** Current EUR price per unit */
 const eurNow = (symbol: string): number | undefined => {
     if (symbol == baseSymbol) return 1;
     const
@@ -209,7 +209,7 @@ const eurNow = (symbol: string): number | undefined => {
     return rate ? 1 / rate : undefined;
 };
 
-/** EUR price of one unit, 24 hours earlier */
+/** EUR price 24 hours ago */
 const eurPrev = (symbol: string): number | undefined => {
     if (symbol == baseSymbol) return 1;
     const
@@ -219,14 +219,14 @@ const eurPrev = (symbol: string): number | undefined => {
     return rate ? 1 / rate : undefined;
 };
 
-/** Read one required symbol from the tool arguments */
+/** Read required symbol from arguments */
 const readSymbol = (value: ChatToolValue | undefined, label: string): string => {
     if (typeof value != `string` || !value.trim())
         throw new Error(`Missing ${label}`);
     return value.trim().toUpperCase();
 };
 
-/** Read the optional amount, one unit by default */
+/** Read amount, default one unit */
 const readAmount = (value: ChatToolValue | undefined): number => {
     if (value === undefined || value === null) return 1;
     if (typeof value != `number` || !Number.isFinite(value))
@@ -234,11 +234,11 @@ const readAmount = (value: ChatToolValue | undefined): number => {
     return value;
 };
 
-/** Round one price, keeping decimals on large values */
+/** Round price, keep large decimals */
 const moneyRound = (value: number): number =>
     Math.abs(value) >= exactLimit ? pNum(value) ?? value : rNum(value, resultDigits);
 
-/** Source timestamps of the sections that answered these symbols */
+/** Source times of answering sections */
 const sourceTimes = (symbols: string[]): number[] => {
     const times: number[] = [];
     for (const symbol of symbols) {
@@ -252,7 +252,7 @@ const sourceTimes = (symbols: string[]): number[] => {
     return times;
 };
 
-/** Convert one amount between two symbols */
+/** Convert amount between two symbols */
 const convert = async (
     args: Record<string, ChatToolValue>,
 ): Promise<CurrencyResult> => {
@@ -265,7 +265,7 @@ const convert = async (
         amount = readAmount(args.amount);
     await ensurePrices([from, to]);
     const
-        /** Look up a live rate, naming what is missing */
+        /** Look up rate, naming missing */
         rateOf = (symbol: string): number => {
             const value = eurNow(symbol);
             if (value !== undefined) return value;

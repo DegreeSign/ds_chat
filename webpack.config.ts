@@ -3,7 +3,7 @@ import * as webpack from "webpack";
 import TerserPlugin from "terser-webpack-plugin";
 
 const
-    /** engine binaries emitted next to the bundles, shared by every target */
+    /** Shared engine asset rules */
     assetRules: webpack.RuleSetRule[] = [
         {
             test: /@wllama\/wllama-compat\/wasm\/wllama\.wasm$/,
@@ -68,7 +68,7 @@ const
             usedExports: true,
             sideEffects: false,
         },
-        // the engine binaries are large by design
+        // engine binaries are large intentionally
         performance: { hints: false },
         mode: `production`,
     },
@@ -90,7 +90,7 @@ const
             publicPath: `auto`,
         },
     },
-    /** Node resolution, shared by the CommonJS and ESM targets */
+    /** Node resolution shared across targets */
     nodeResolve: webpack.ResolveOptions = {
         ...commonConfig.resolve,
         mainFields: [`module`, `main`],
@@ -98,7 +98,7 @@ const
         aliasFields: [],
         preferRelative: true,
     },
-    /** Node plugins, swapping the browser asset module for a path resolver */
+    /** Node plugins, asset path resolver */
     nodePlugins = (assets: string) => [
         ...(commonConfig.plugins ?? []),
         new webpack.NormalModuleReplacementPlugin(
@@ -106,7 +106,7 @@ const
             path.resolve(__dirname, assets),
         ),
     ],
-    /** Shared Node target, the module output differs per format */
+    /** Node target, format-specific output */
     nodeBase: webpack.Configuration = {
         ...commonConfig,
         entry: `./src/index.ts`,

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0
+
+- Add `imageReplyTokens`, the default reply budget of one image description and
+  translation.
+- Add `DescribeImagesInput.signal` and `DescribeTranslatedInput.signal`, so a
+  host can stop a batch and keep every finished image.
+- Add `DescribeImagesInput.additionalRules`, host rules appended to the
+  describer system message, and `LlmLimits.imageTokens`, the vision token
+  budget of one image.
+
 ## 1.1.0
 
 - Load models on different backends at the same time, so a host can warm the

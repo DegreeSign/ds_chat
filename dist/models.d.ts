@@ -1,26 +1,28 @@
 import { ChatModelId } from './enums';
 import type { ChatModel, MobileNavigator } from './types';
 declare const llmModels: ChatModel[], 
-/** Context window requested from the CPU engine, a 32k KV cache needs 3.5 GB */
+/** CPU context window, 8k tokens */
 cpuContextWindow = 8192, // max 262_400
-/** CPU window on a phone, the smaller cache keeps the tab alive */
+/** Phone CPU window, 4096 tokens */
 mobileCpuContextWindow = 4096, // max 32_768
-/** Context window requested from the GPU engine, the wasm heap holds the model */
-litertContextWindow = 4096, // max 32_768
-/** Whether this client is a phone or tablet */
+/** GPU context window, 32k tokens */
+litertContextWindow = 32768, // max 32_768
+/** Phone GPU window, 16k tokens */
+mobileLitertContextWindow = 16384, // max 32_768
+/** Whether this client is mobile */
 mobileDevice: (nav?: MobileNavigator) => boolean, 
-/** Build of a Gemma request that this device loads */
+/** Gemma build this device loads */
 deviceModelId: (id?: ChatModelId, mobile?: boolean) => ChatModelId | undefined, 
-/** Look up a catalog entry by id */
+/** Find catalog entry by id */
 findLlmModel: (id?: string) => ChatModel | undefined, 
-/** Whether this browser provides a WebGPU adapter */
+/** Whether browser has WebGPU adapter */
 gpuAdapter: () => Promise<boolean>, 
-/** Default model, the GPU one when a WebGPU adapter exists */
+/** Default model, GPU when available */
 defaultLlmModel: () => Promise<ChatModelId | undefined>, 
-/** Resolve the requested model or the default of this device */
+/** Resolve requested model or default */
 resolveLlmModel: (id?: ChatModelId) => Promise<ChatModel | undefined>, 
 /** Whether a model accepts images */
 supportsImages: (model: ChatModel) => boolean, 
 /** Whether a model accepts audio */
 supportsAudio: (model: ChatModel) => boolean;
-export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileDevice, deviceModelId, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };
+export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileLitertContextWindow, mobileDevice, deviceModelId, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };

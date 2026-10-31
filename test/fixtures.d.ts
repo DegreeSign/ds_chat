@@ -18,11 +18,11 @@ export interface FakeEngineOptions {
     failChat?: boolean;
     onStart?: (model: ChatModel) => void;
     onChat?: (params: EngineChatParams) => void;
-    /** Replace the scripted reply with a real engine run */
+    /** Use a real engine reply */
     chatImpl?: (params: EngineChatParams) => Promise<string | undefined>;
 }
 
-/** One fake engine and its call log. */
+/** Fake engine with call log */
 export interface FakeEngine {
     engine: LlmEngine;
     calls: {

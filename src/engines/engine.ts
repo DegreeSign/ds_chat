@@ -1,6 +1,10 @@
 import { LlmRole } from '../enums';
 import { mobileDevice } from '../models';
-import { gpuImageSize, resizeImages } from './images';
+import {
+    gpuImageSize,
+    imageTokens as defaultImageTokens,
+    resizeImages,
+} from './images';
 import type {
     ChatMessage,
     ChatModel,
@@ -13,22 +17,23 @@ import type {
 } from '../types';
 import { rNum } from '@degreesign/utils';
 
-/** Default token, prompt and thread budgets of the CPU engine */
+/** Default CPU engine budgets */
 const defaultLlmLimits: LlmLimits = {
     maxReplyTokens: 250,
     maxThinkingTokens: 128,
     maxReasoningTokens: 320,
     maxImages: 2,
+    imageTokens: defaultImageTokens,
     maxAudio: 1,
     maxContentLength: 1000,
     promptCharBudget: 10000,
     maxThreads: 32,
 };
 
-/** Reasoning budget of the GPU engine, thought plus answer */
+/** GPU reasoning and answer budget */
 const gpuReasoningTokens = 1200;
 
-/** Clamp a budget at or above a floor, falling back on an unusable value */
+/** Clamp a budget, with fallback */
 const budgetLimit = (
     value: number | undefined,
     fallback: number,
@@ -38,7 +43,7 @@ const budgetLimit = (
         ? Math.floor(value)
         : fallback;
 
-/** Merge developer budgets over the backend defaults */
+/** Merge budgets over backend defaults */
 const resolveLlmLimits = (
     overrides: Partial<LlmLimits> = {},
     gpu = false,
@@ -65,6 +70,11 @@ const resolveLlmLimits = (
             defaults.maxImages,
             0,
         ),
+        imageTokens: budgetLimit(
+            overrides.imageTokens,
+            defaults.imageTokens,
+            1,
+        ),
         maxAudio: budgetLimit(
             overrides.maxAudio,
             defaults.maxAudio,
@@ -88,10 +98,14 @@ const resolveLlmLimits = (
     };
 };
 
-/** Sampling options shared by every engine stream */
-const replyOptions = (limits: LlmLimits, reasoning: boolean) => ({
+/** Sampling options for every stream */
+const replyOptions = (
+    limits: LlmLimits,
+    reasoning: boolean,
+    temperature = 0.7,
+) => ({
     stream: true as const,
-    temperature: 0.7,
+    temperature,
     max_tokens: reasoning
         ? limits.maxReasoningTokens
         : limits.maxReplyTokens,
@@ -100,13 +114,13 @@ const replyOptions = (limits: LlmLimits, reasoning: boolean) => ({
 const
     /** Model host */
     hfBase = `https://huggingface.co`,
-    /** Resolve one model file on the model host */
+    /** Resolve one model file URL */
     modelUrl = (repo: string, file: string): string =>
         `${hfBase}/${repo}/resolve/main/${file}`,
-    /** Declared size of one download, zero when the host hides it */
+    /** Declared download size or zero */
     contentLength = (response: Response): number =>
         Number(response.headers.get(`content-length`)) || 0,
-    /** Whether any turn carries a part of one type */
+    /** Any turn carries this part */
     hasPart = (
         messages: EngineMessage[],
         type: EngineContentPart[`type`],
@@ -114,7 +128,7 @@ const
         messages.some(message =>
             Array.isArray(message.content)
             && message.content.some(part => part.type == type)),
-    /** Whether any turn carries an image */
+    /** Any turn carries an image */
     hasImages = (messages: EngineMessage[]): boolean =>
         hasPart(messages, `image`),
     /** Whether any turn carries audio */
@@ -122,14 +136,14 @@ const
         hasPart(messages, `audio`);
 
 const
-    /** Reasoning markers emitted inline in the streamed content */
+    /** Inline reasoning markers in content */
     thinkOpenTags = [
         `<|channel>thought\n`,
         `<|channel>thought`,
         `...`,
     ],
     thinkCloseTags = [`<channel|>`, `...`],
-    /** Content parts of one user turn */
+    /** Content parts of user turn */
     userContent = (
         text: string,
         images: string[],
@@ -142,14 +156,14 @@ const
                 ...audio.map(url => ({ type: `audio` as const, url })),
             ]
             : text,
-    /** Flatten one message content to parts */
+    /** Flatten message content to parts */
     contentParts = (
         content: string | EngineContentPart[],
     ): EngineContentPart[] =>
         typeof content == `string`
             ? content ? [{ type: `text`, text: content }] : []
             : content,
-    /** Merge two same-role turns, keeping text adjacent */
+    /** Merge same-role turns, text adjacent */
     mergeContent = (
         first: string | EngineContentPart[],
         next: string | EngineContentPart[],
@@ -168,7 +182,7 @@ const
         };
         return parts;
     },
-    /** Map the host messages to OpenAI-style turns, bounded for local context */
+    /** Map host messages to turns */
     buildMessages = (
         messages: ChatMessage[],
         limits: LlmLimits = defaultLlmLimits,
@@ -214,9 +228,9 @@ const
                 content: userContent(text, images, audio),
             });
         };
-        // drop leading assistant turns, the transcript starts with user
+        // drop leading assistant turns
         while (history.length && history[0].role != `user`) history.shift();
-        // merge consecutive same-role turns, engines need strict alternation
+        // merge same-role turns for alternation
         const merged: EngineMessage[] = [];
         for (const msg of history) {
             const last = merged[merged.length - 1];
@@ -235,7 +249,7 @@ const
         result.push(...merged);
         return result;
     },
-    /** Split inline reasoning markers out of the streamed content */
+    /** Split reasoning markers from content */
     createThinkSplitter = (
         onReason: (text: string) => void,
         onText: (text: string) => void,
@@ -243,7 +257,7 @@ const
         let
             carry = ``,
             inReason = false;
-        /** Earliest occurrence of any tag in `data` */
+        /** Earliest tag occurrence in data */
         const findTag = (data: string, tags: string[]) => {
             let at = -1, tag = ``;
             for (const item of tags) {
@@ -255,7 +269,7 @@ const
             };
             return { at, tag };
         };
-        /** Longest suffix of `data` that starts any tag, held back */
+        /** Longest suffix starting any tag */
         const holdPartial = (data: string, tags: string[]): string => {
             let hold = ``;
             for (const tag of tags) {
@@ -310,17 +324,17 @@ const
     };
 
 const
-    /** Longest wait for the first chunk, 5 min desktop, 50 min mobile */
+    /** Longest wait for first chunk */
     firstReplyTimeout = mobileDevice() ? 3_000_000 : 300_000,
-    /** Longest wait for the first chunk of an image turn, milliseconds */
+    /** Longest vision prefill wait */
     firstVisionReplyTimeout = Math.max(firstReplyTimeout, 840_000),
-    /** Longest silence between two streamed chunks, milliseconds */
+    /** Longest silence between streamed chunks */
     idleReplyTimeout = 30000;
 
-/** A stream that stopped producing chunks */
+/** Stream that stopped producing chunks */
 class StallError extends Error { }
 
-/** Resolve a promise or fail once its budget runs out */
+/** Resolve or fail on timeout */
 const withTimeout = async <T>(
     work: Promise<T>,
     ms: number,
@@ -339,14 +353,21 @@ const withTimeout = async <T>(
     };
 };
 
-/** Close one stream without waiting for a stalled engine */
+/** Drain then close stream */
 const closeStream = (iterator: AsyncIterator<unknown>) => {
-    try { void Promise.resolve(iterator.return?.()).catch(() => { }); }
-    catch { };
+    try {
+        // drain the abort rejection
+        void Promise.resolve(iterator.next?.())
+            .catch(() => { })
+            .finally(() => {
+                try { void Promise.resolve(iterator.return?.()).catch(() => { }); }
+                catch { };
+            });
+    } catch { };
 };
 
 const
-    /** Log an engine chat call with all message text censored */
+    /** Log chat call, text censored */
     logChatCall = (model: ChatModel, messages: EngineMessage[]) =>
         console.log(
             `Local chat call`,
@@ -362,7 +383,7 @@ const
                     : {}),
             })),
         ),
-    /** Stream one reply, logging it and returning undefined when stopped */
+    /** Stream reply, undefined when stopped */
     streamReply = async ({
         model,
         logging,
@@ -387,9 +408,12 @@ const
             text => { reply += text; onText(text); },
         );
         try {
+            const opened = start();
+            // timed out start stays handled
+            void Promise.resolve(opened).catch(() => { });
             const
                 chunks = await withTimeout(
-                    start(),
+                    opened,
                     firstTimeoutMs,
                     `Model did not start`,
                 ),
@@ -401,13 +425,16 @@ const
                 };
                 let step: IteratorResult<unknown>;
                 try {
+                    const next = iterator.next();
+                    // timed out next stays handled
+                    void Promise.resolve(next).catch(() => { });
                     step = await withTimeout(
-                        iterator.next(),
+                        next,
                         seen ? idleTimeoutMs : firstTimeoutMs,
                         seen ? `Model stopped responding` : `Model did not reply`,
                     );
                 } catch (error) {
-                    // keep the text already delivered by a slow stream
+                    // keep text already delivered
                     if (error instanceof StallError && (reply || thought)) {
                         onStall?.();
                         closeStream(iterator);
@@ -443,7 +470,7 @@ const
             splitter.flush();
         } catch (error) {
             if (logging) console.log(`Local chat failed`, error);
-            // a stalled engine must reach the host
+            // stalled engine must reach host
             if (error instanceof StallError && !stopped()) throw error;
         };
         const result = stopped() ? undefined : reply || undefined;
@@ -461,7 +488,7 @@ const
     };
 
 const
-    /** Build the prompt and stream one reply through an engine */
+    /** Build prompt, stream through engine */
     runEngineChat = async ({
         model,
         params,
@@ -472,6 +499,7 @@ const
         const messages = await resizeImages(
             buildMessages(params.messages, params.limits),
             model.litert ? gpuImageSize : undefined,
+            params.limits.imageTokens,
         );
         if (params.logging) logChatCall(model, messages);
         return await streamReply({
@@ -483,7 +511,7 @@ const
             start: () => start(messages),
             stopped,
             onStall,
-            // vision prefill on the CPU engine needs minutes for one image
+            // vision prefill needs minutes
             firstTimeoutMs: hasImages(messages)
                 ? firstVisionReplyTimeout
                 : firstReplyTimeout,

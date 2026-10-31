@@ -24,7 +24,7 @@ import type {
     Runtime,
 } from './types';
 
-/** Build one model and request status snapshot */
+/** Build one status snapshot */
 const statusSnapshot = (
     service: Runtime,
     model: ChatModelId | undefined,
@@ -55,18 +55,18 @@ const statusSnapshot = (
     };
 };
 
-/** Build a one-shot chat function over one runtime */
+/** Build chat over one runtime */
 const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
     let
         token = 0,
         active: ActiveCall | undefined;
 
     const
-        /** Report the current model and request state */
+        /** Report model and request state */
         emitStatus = (call: ActiveCall) =>
             call.input.onStatus?.(
                 statusSnapshot(service, call.model ?? call.input.model, call)),
-        /** Run one request: load the model, then stream one reply */
+        /** Load model, then stream reply */
         run = async (call: ActiveCall): Promise<void> => {
             const
                 { input } = call,
@@ -104,7 +104,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 acceptsAudio = supportsAudio(model),
                 keepsImages = hasImages && acceptsImages,
                 keepsAudio = hasAudio && acceptsAudio;
-            // reject media-only prompts before downloading a text model
+            // reject media-only prompts before loading
             if (!hasText && !keepsImages && !keepsAudio) {
                 if (hasAudio && !acceptsAudio)
                     call.error = `Model does not accept audio`;
@@ -132,7 +132,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     return false;
                 });
             if (call.token != token) return;
-            // a cancel reports the outcome itself
+            // cancel reports its own outcome
             if (call.cancelled) return;
             if (!loaded) {
                 if (!call.error)
@@ -185,15 +185,22 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 if (call.token != token) return;
                 call.requesting = false;
                 call.error = `${(error as Error)?.message || `${error}`}`;
+                // fresh context on retry
+                if (!call.cancelled)
+                    await service.unload(model.id).catch(() => undefined);
                 emitStatus(call);
                 return;
             };
             if (call.token != token) return;
             call.requesting = false;
-            if (!result && !call.cancelled) call.error = `No reply`;
+            if (!result && !call.cancelled) {
+                call.error = `No reply`;
+                // fresh context on retry
+                await service.unload(model.id).catch(() => undefined);
+            };
             emitStatus(call);
         },
-        /** Stop this call, its load, or the loaded model */
+        /** Stop call, load or model */
         cancel = (call: ActiveCall) => {
             if (call.token != token) return;
             call.cancelled = true;
@@ -202,7 +209,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                 void service.unload(call.model).then(() => emitStatus(call));
                 return;
             };
-            // a load another caller waits for keeps going
+            // shared load keeps running
             queueMicrotask(() => emitStatus(call));
         };
 
@@ -227,7 +234,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
     };
 };
 
-/** Build a model preload over one runtime */
+/** Build preload over one runtime */
 const createPreloadOn = (service: Runtime) => async (
     input: ChatPreloadInput = {},
 ): Promise<boolean> => {
@@ -281,7 +288,7 @@ const createChat = createChatOn(runtime);
 
 const preloadModel = createPreloadOn(runtime);
 
-/** Delete every model file cached on this device */
+/** Delete every cached model file */
 const clearModelCache = async (): Promise<void> => {
     await runtime.clear();
 };

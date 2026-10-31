@@ -5,11 +5,11 @@ import type {
     MobileNavigator,
 } from './types';
 
-/** Resolved default model, probed once per session */
+/** Default model probed once */
 let defaultModel: Promise<ChatModelId | undefined> | undefined;
 
 const
-    /** Milliseconds allowed for the WebGPU adapter probe */
+    /** WebGPU adapter probe timeout */
     gpuProbeTimeout = 1500,
     llmModels: ChatModel[] = [
         {
@@ -59,7 +59,7 @@ const
             },
         },
         {
-            // a phone tab cannot load the multimodal build
+            // phone tab skips multimodal build
             id: ChatModelId.gemma4_e2b_limited,
             reasoning: true,
             litert: {
@@ -70,13 +70,15 @@ const
             },
         },
     ],
-    /** Context window requested from the CPU engine, a 32k KV cache needs 3.5 GB */
+    /** CPU context window, 8k tokens */
     cpuContextWindow = 8192, // max 262_400
-    /** CPU window on a phone, the smaller cache keeps the tab alive */
+    /** Phone CPU window, 4096 tokens */
     mobileCpuContextWindow = 4096, // max 32_768
-    /** Context window requested from the GPU engine, the wasm heap holds the model */
-    litertContextWindow = 4096, // max 32_768
-    /** Whether this client is a phone or tablet */
+    /** GPU context window, 32k tokens */
+    litertContextWindow = 32768, // max 32_768
+    /** Phone GPU window, 16k tokens */
+    mobileLitertContextWindow = 16384, // max 32_768
+    /** Whether this client is mobile */
     mobileDevice = (nav?: MobileNavigator): boolean => {
         const client = nav ?? (typeof navigator == `undefined`
             ? undefined
@@ -88,7 +90,7 @@ const
         return /Android|iPhone|iPad|iPod|Mobile/i.test(agent)
             || (/Macintosh/.test(agent) && client.maxTouchPoints > 1);
     },
-    /** Build of a Gemma request that this device loads */
+    /** Gemma build this device loads */
     deviceModelId = (
         id?: ChatModelId,
         mobile: boolean = mobileDevice(),
@@ -97,10 +99,10 @@ const
             return ChatModelId.gemma4_e2b_limited;
         return id;
     },
-    /** Look up a catalog entry by id */
+    /** Find catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
         id ? llmModels.find(model => model.id == id) : undefined,
-    /** Whether this browser provides a WebGPU adapter */
+    /** Whether browser has WebGPU adapter */
     gpuAdapter = async (): Promise<boolean> => {
         const gpu = typeof navigator == `undefined`
             ? undefined
@@ -120,7 +122,7 @@ const
         } catch { return false; }
         finally { if (timer) clearTimeout(timer); };
     },
-    /** Default model, the GPU one when a WebGPU adapter exists */
+    /** Default model, GPU when available */
     defaultLlmModel = async (): Promise<ChatModelId | undefined> => {
         if (!defaultModel)
             defaultModel = (async () => (await gpuAdapter()
@@ -128,7 +130,7 @@ const
                 : ChatModelId.qwen3_vl_2b))();
         return await defaultModel;
     },
-    /** Resolve the requested model or the default of this device */
+    /** Resolve requested model or default */
     resolveLlmModel = async (id?: ChatModelId): Promise<ChatModel | undefined> =>
         findLlmModel(deviceModelId(id ?? await defaultLlmModel())),
     /** Whether a model accepts images */
@@ -143,6 +145,7 @@ export {
     cpuContextWindow,
     mobileCpuContextWindow,
     litertContextWindow,
+    mobileLitertContextWindow,
     mobileDevice,
     deviceModelId,
     findLlmModel,

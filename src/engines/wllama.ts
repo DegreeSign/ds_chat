@@ -27,12 +27,12 @@ import type {
 } from '../types';
 
 const
-    /** Native log emitted when the CPU engine probes for a GPU adapter it never uses */
+    /** GPU probe log to ignore */
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
-    /** Resumable file store of the CPU engine */
+    /** Resumable store of CPU engine */
     store = createModelStore(`wllama-store`);
 
-/** Ids that set the instruct vision window */
+/** Ids with instruct vision window */
 const instructIds = [
     ChatModelId.qwen3_vl_2b_instruct,
     ChatModelId.qwen3_vl_2b_instruct_q3,
@@ -48,14 +48,14 @@ let
     wllama: Wllama | undefined,
     assets: WllamaAssets | undefined,
     assetsKey = ``,
-    /** Whether the current call wants engine logs */
+    /** Whether this call wants logs */
     loggingOn = false;
 
 const
-    /** Stable key of one asset set */
+    /** Stable key for asset set */
     assetsKeyOf = (value: WllamaAssets): string =>
         `${value.wasm}|${value.compatWasm}|${value.compatWorker}`,
-    /** Merge asset overrides over the auto-resolved defaults */
+    /** Merge asset overrides over defaults */
     resolveAssets = (overrides?: Partial<WllamaAssets>): WllamaAssets => {
         const defaults = defaultWllamaAssets();
         return {
@@ -64,9 +64,9 @@ const
             compatWorker: overrides?.compatWorker || defaults.compatWorker,
         };
     },
-    /** wllama logger that follows the per-call logging flag */
+    /** Logger follows per-call logging flag */
     cpuLogger = (base: WllamaLogger): WllamaLogger => {
-        // the compat build forwards native logs at every level
+        // compat build forwards native logs
         const quiet = (write: (...args: unknown[]) => void) =>
             (...args: unknown[]) => {
                 if (!loggingOn) return;
@@ -81,7 +81,7 @@ const
             error: quiet(base.error),
         };
     },
-    /** Lazily create the single wllama instance */
+    /** Lazily create single wllama instance */
     getWllama = async (): Promise<Wllama> => {
         if (wllama) return wllama;
         const
@@ -102,17 +102,17 @@ const
         wllama = instance;
         return instance;
     },
-    /** Drop the worker, a crashed or exited one cannot be reused */
+    /** Drop worker, cannot be reused */
     dropWllama = async () => {
         const instance = wllama;
         wllama = undefined;
         try { await instance?.exit(); } catch { };
     },
-    /** Whether a cache entry holds the requested file */
+    /** Whether cache entry holds file */
     entryOf = (entry: CacheEntry, file: string): boolean =>
         entry.name.includes(file)
         || !!entry.metadata?.originalURL?.includes(file),
-    /** Every CPU file of one model, its name and remote URL */
+    /** CPU file names and URLs */
     cpuFiles = (model: ChatModel): Array<{ name: string, url: string }> => {
         const cpu = model.cpu;
         if (!cpu) return [];
@@ -126,7 +126,7 @@ const
                 : []),
         ];
     },
-    /** Whether every CPU file is complete in the resumable store */
+    /** Whether all CPU files stored */
     filesStored = async (model: ChatModel): Promise<boolean> => {
         const files = cpuFiles(model);
         if (!files.length) return false;
@@ -136,7 +136,7 @@ const
         };
         return true;
     },
-    /** Whether every CPU file is complete in the wllama cache manager */
+    /** Whether all CPU files cached */
     filesCached = async (
         instance: Wllama,
         model: ChatModel,
@@ -145,7 +145,7 @@ const
         return cpuFiles(model).every(file =>
             entries.some(entry => entryOf(entry, file.name)));
     },
-    /** Every CPU file as a Blob, from the store or a resumable download */
+    /** CPU files as stored blobs */
     storedBlobs = async ({
         model,
         signal,
@@ -166,13 +166,13 @@ const
                 onProgress: (progress, phase) =>
                     onProgress((index + progress) / files.length, phase),
             });
-            // a host without a file system streams the files instead
+            // no file system streams files
             if (!saved) return undefined;
             blobs.push(saved.file);
         };
         return blobs.length ? blobs : undefined;
     },
-    /** Map built messages to wllama turns */
+    /** Map messages to wllama turns */
     toWllamaMessages = async (
         messages: EngineMessage[],
     ): Promise<WllamaMessage[]> => {
@@ -199,7 +199,7 @@ const
         };
         return result;
     },
-    /** Stream one reply on a started CPU runtime */
+    /** Stream reply on started CPU */
     chatOn = async (
         instance: Wllama,
         model: ChatModel,
@@ -218,7 +218,10 @@ const
                     throw new Error(`Model does not accept audio`);
                 return await instance.createChatCompletion({
                     messages: await toWllamaMessages(messages),
-                    ...replyOptions(params.limits, params.reasoning),
+                    ...replyOptions(params.limits, params.reasoning, params.temperature),
+                    ...(params.repeatPenalty
+                        ? { penalty_repeat: params.repeatPenalty }
+                        : {}),
                     abortSignal: params.signal,
                     ...(model.reasoning
                         ? { chat_template_kwargs: { enable_thinking: params.reasoning } }
@@ -227,7 +230,7 @@ const
             },
         });
     },
-    /** Start the CPU runtime, the unified engine entry */
+    /** Start CPU runtime engine entry */
     startLLM = async ({
         model,
         limits,
@@ -238,14 +241,14 @@ const
     }: StartLlmParams): Promise<LlmRuntime> => {
         loggingOn = logging === true;
         const
-            /** Context window for this device, a phone keeps a smaller cache */
+            /** Context window for this device */
             contextSize = mobileDevice() ? mobileCpuContextWindow : cpuContextWindow,
             cpu = model.cpu;
         if (!cpu) throw new Error(`Model has no CPU artifact`);
         const
             next = resolveAssets(overrides),
             key = assetsKeyOf(next);
-        // a different asset set needs a fresh worker
+        // different assets need fresh worker
         if (wllama && key != assetsKey) await dropWllama();
         assets = next;
         assetsKey = key;
@@ -263,7 +266,7 @@ const
             await dropWllama();
             throw new Error(`Cancelled`);
         };
-        // an older text-only cache cannot accept the projector
+        // text-only cache rejects projector
         if (!complete && projectorFile) {
             const
                 entries = await instance.cacheManager.list(),
@@ -280,13 +283,16 @@ const
             n_parallel: 1,
             // warm graphs at load
             warmup: true,
-            reasoning_budget_tokens: limits.maxThinkingTokens, // cap chain-of-thought tokens, long thinking makes replies slow
-            n_gpu_layers: 0, // this engine is the CPU fallback, never offload to a GPU
+            reasoning_budget_tokens: limits.maxThinkingTokens, // cap thinking tokens for speed
+            n_gpu_layers: 0, // CPU fallback, never use GPU
             jinja: true,
+            // shift a full context
+            ctx_shift: true,
+            n_keep: Math.max(64, Math.round(contextSize / 16)),
             ...visionLimits(model),
         };
         try {
-            // a complete store or an older cache skips the network
+            // complete store skips network
             let blobs = complete
                 ? await storedBlobs({ model, signal, onProgress })
                 : undefined;
@@ -295,7 +301,7 @@ const
                 blobs = await storedBlobs({ model, signal, onProgress })
                     .catch(error => {
                         if (signal?.aborted) throw new Error(`Cancelled`);
-                        // a store the browser cannot write still streams the file
+                        // unwritable store streams file
                         if (!isStoreError(error)) throw error;
                         if (logging) console.log(`Local model store failed`, error);
                         return undefined;
@@ -311,11 +317,11 @@ const
                     {
                         ...loadParams,
                         useCache: true,
-                        // abort the in-flight model download when cancelled
+                        // abort download when cancelled
                         signal,
                         progressCallback: ({ loaded, total }) => {
                             const progress = total ? loaded / total : 0;
-                            // the final progress means the download is done and loading begins
+                            // final progress starts loading
                             onProgress(
                                 progress,
                                 progress >= 1 ? LlmPhase.load : LlmPhase.download,
@@ -325,7 +331,7 @@ const
                 );
             };
         } catch (error) {
-            // a failed download can leave the worker unusable
+            // failed download leaves worker unusable
             await dropWllama();
             throw error;
         };
@@ -334,8 +340,8 @@ const
             throw new Error(`Cancelled`);
         };
         const info = instance.getLoadedContextInfo();
-        // a failed context init is still reported as loaded, the first chat
-        // call would abort the wasm module
+        // failed context init reports loaded
+        // chat would abort wasm module
         if (!info.n_ctx) {
             await dropWllama();
             throw new Error(`Failed to create model context`);

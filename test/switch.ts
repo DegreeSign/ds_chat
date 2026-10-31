@@ -1,6 +1,6 @@
 // Real-weight model switch check.
-// Bundled by test/webpack.switch.config.cjs and driven by test/switch.cjs.
-// Proves that requesting a second model releases the first one.
+// Bundled, driven by switch configs
+// Both backends resident until unload
 import { litertEngine } from '../src/engines/litert';
 import { wllamaEngine } from '../src/engines/wllama';
 import { resolveLlmLimits } from '../src/engines/engine';
@@ -37,7 +37,7 @@ const
     },
     same = (actual: unknown, expected: unknown): boolean =>
         JSON.stringify(actual) == JSON.stringify(expected),
-    /** Wrap one engine so each load and release is visible to the run */
+    /** Wrapper logs engine loads, releases */
     counted = (name: string, engine: LlmEngine): LlmEngine => ({
         ...engine,
         startLLM: async (params: StartLlmParams): Promise<LlmRuntime> => {
@@ -64,14 +64,14 @@ const
     });
 
 const
-    /** Reply budget, short turns keep the run quick */
+    /** Reply budget keeps runs quick */
     limitsFor = (model: ChatModel): LlmLimits =>
         resolveLlmLimits({
             maxReplyTokens: 512,
             maxThinkingTokens: 512,
             maxReasoningTokens: 512,
         }, !!model.litert),
-    /** GPU device counters, patched in by the driver page */
+    /** GPU counters from driver page */
     gpuState = () => {
         const state = (globalThis as unknown as {
             __gpu?: { adapters: number, devices: number, lost: string[] },
@@ -82,7 +82,7 @@ const
             lost: [...state.lost],
         } : undefined;
     },
-    /** Load one catalog model, returning the progress it reported */
+    /** Load model, return reported progress */
     load = async (id: ChatModelId) => {
         const
             model = findLlmModel(id)!,
@@ -111,7 +111,7 @@ const
             gpu: gpuState(),
         };
     },
-    /** Ask one short factual question on the loaded runtime */
+    /** Ask short question on runtime */
     ask = async (id: ChatModelId) => {
         const model = findLlmModel(id)!;
         let
@@ -134,7 +134,7 @@ const
             thinkingLength: thinking.length,
         };
     },
-    /** Sample the browser heap, only where the API is exposed */
+    /** Sample browser heap where available */
     memory = async (label: string) => {
         const measure = (performance as unknown as {
             measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>,
@@ -164,32 +164,32 @@ const run = async () => {
         && gemma.model == ChatModelId.gemma4_e2b
         && !!gemmaReply?.reply, { gemma, ask: gemmaReply });
 
-    // 2. Qwen on the CPU replaces Gemma
+    // 2. Qwen CPU joins Gemma
     const
         qwen = await load(ChatModelId.qwen3_vl_2b),
         qwenReply = qwen.loaded ? await ask(ChatModelId.qwen3_vl_2b) : undefined;
     snapshots.push(await memory(`qwen loaded`));
-    record(`qwen replaces gemma`, qwen.loaded
+    record(`qwen joins gemma`, qwen.loaded
         && qwen.status == LlmStatus.ready
         && qwen.model == ChatModelId.qwen3_vl_2b
         && qwen.backend == `cpu`
         && !!qwenReply?.reply
-        && events.includes(`unload gpu:${ChatModelId.gemma4_e2b}`),
+        && !events.includes(`unload gpu:${ChatModelId.gemma4_e2b}`),
     { qwen, ask: qwenReply });
 
-    // 3. Gemma replaces Qwen again, from the cache
+    // 3. Gemma stays beside Qwen
     const
         back = await load(ChatModelId.gemma4_e2b),
         backReply = back.loaded ? await ask(ChatModelId.gemma4_e2b) : undefined;
     snapshots.push(await memory(`gemma reloaded`));
-    record(`gemma replaces qwen`, back.loaded
+    record(`gemma stays resident`, back.loaded
         && back.model == ChatModelId.gemma4_e2b
         && back.backend == `gpu`
         && !!backReply?.reply
-        && events.includes(`unload cpu:${ChatModelId.qwen3_vl_2b}`),
+        && !events.includes(`unload cpu:${ChatModelId.qwen3_vl_2b}`),
     { back, ask: backReply });
 
-    // 4. The same model is reused, not reloaded
+    // 4. Same model is reused
     const
         before = events.length,
         repeat = runtime.ready() ? await load(ChatModelId.gemma4_e2b) : undefined;
@@ -197,7 +197,7 @@ const run = async () => {
         && events.length == before
         && repeat.elapsed < 1000, { repeat, addedEvents: events.slice(before) });
 
-    // 5. An unsupported request keeps the current model resident
+    // 5. Unsupported request keeps model
     const
         keptBefore = events.length,
         keptModel = runtime.model()?.id,
@@ -210,16 +210,17 @@ const run = async () => {
             onProgress: () => { },
         });
     record(`unsupported keeps current model`, unsupported == false
-        && runtime.status() == LlmStatus.unsupported
+        && runtime.ready() == true
         && runtime.model()?.id == keptModel
         && events.length == keptBefore, {
         status: runtime.status(),
+        ready: runtime.ready(),
         model: runtime.model()?.id,
         error: runtime.error(),
         addedEvents: events.slice(keptBefore),
     });
 
-    // 6. A final unload releases whatever is still loaded
+    // 6. Final unload releases leftovers
     await runtime.unload();
     record(`unload releases model`, runtime.status() == LlmStatus.idle
         && runtime.ready() == false
@@ -229,13 +230,11 @@ const run = async () => {
         events,
     });
 
-    record(`switches release previous model`, same(events, [
+    record(`unload releases both backends`, same(events, [
         `start gpu:${ChatModelId.gemma4_e2b}`,
-        `unload gpu:${ChatModelId.gemma4_e2b}`,
         `start cpu:${ChatModelId.qwen3_vl_2b}`,
-        `unload cpu:${ChatModelId.qwen3_vl_2b}`,
-        `start gpu:${ChatModelId.gemma4_e2b}`,
         `unload gpu:${ChatModelId.gemma4_e2b}`,
+        `unload cpu:${ChatModelId.qwen3_vl_2b}`,
     ]), { events });
     record(`no cache purged`, !events.some(event => event.startsWith(`purge`)),
         { events });

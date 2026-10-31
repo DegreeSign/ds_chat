@@ -1,4 +1,4 @@
-/** Named HTML entities found in search markup */
+/** Named HTML entities in markup */
 const namedEntities: Record<string, string> = {
     amp: `&`,
     apos: `'`,
@@ -15,10 +15,10 @@ const namedEntities: Record<string, string> = {
     rsquo: `'`,
 };
 
-/** Largest code point a string can carry */
+/** Maximum Unicode code point */
 const maxCodePoint = 0x10ffff;
 
-/** Clamp one numeric setting into a range */
+/** Clamp numeric setting into range */
 const clampNumber = (
     value: number | undefined,
     min: number,
@@ -29,7 +29,7 @@ const clampNumber = (
         ? Math.min(max, Math.max(min, value))
         : fallback;
 
-/** Decode one entity reference, keeping it when it is unknown */
+/** Decode entity, keep unknown ones */
 const decodeEntity = (entity: string): string => {
     if (entity.startsWith(`#`)) {
         const
@@ -42,7 +42,7 @@ const decodeEntity = (entity: string): string => {
     return namedEntities[entity.toLowerCase()] ?? entity;
 };
 
-/** Strip tags, decode entities, collapse whitespace and cap the text */
+/** Strip tags, decode, collapse, cap */
 const plainText = (text: string, max: number): string => {
     const
         decoded = text

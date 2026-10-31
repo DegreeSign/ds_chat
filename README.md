@@ -1,8 +1,14 @@
 # @degreesign/chat
 
-One-shot on-device AI chat for browsers, workers and Node, running a wllama CPU
-engine or a LiteRT-LM WebGPU engine. The host owns the messages and the UI; the
-package loads one model, streams one reply and reports status.
+One-shot on-device AI chat for browsers, workers and Node, using wllama CPU
+engine and LiteRT-LM WebGPU engine.
+The package is an A-Z solution for local AI chat and more.
+Includes voice transcription to many languages
+and a super accurate image vision function.
+The package manages download of AI models automatically,
+with auto resume for low network connections.
+
+`@degreesign/chat` is plug and play solution for any UI.
 
 [![npm version](https://img.shields.io/npm/v/@degreesign/chat.svg)](https://www.npmjs.com/package/@degreesign/chat)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](#licensing)
@@ -25,6 +31,7 @@ package loads one model, streams one reply and reports status.
 - [Node.js](#nodejs)
 - [React](#react)
 - [Types](#types)
+- [Testing](#testing)
 - [Architecture](#architecture)
 - [FAQ](#faq)
 - [Licensing](#licensing)
@@ -224,6 +231,13 @@ model. A lost device needs a page or model reload; later calls cannot reuse it.
 A phone or tablet resolves Gemma to the text-only browser build, so it never
 starts the vision or audio encoder.
 
+While a reply streams, the GPU engine rests after every token readback, so the
+card stays near 70% of wall time instead of pegging at 100% and starving the
+desktop compositor. The rest applies after the prefill, so the first token is
+not delayed. Unloading releases the WebGPU device and resets the LiteRT wasm,
+because a deleted engine leaves both unusable; a later load rebuilds them from
+the stored model file without downloading it again.
+
 ## Public API
 
 ```ts
@@ -232,6 +246,7 @@ preloadModel(input?: ChatPreloadInput): Promise<boolean>
 describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
 describeModelId: ChatModelId
+imageReplyTokens: number
 clearModelCache(): Promise<void>
 ```
 
@@ -318,15 +333,17 @@ adapter exists and `targetLanguage` is not English, the English descriptions
 are then translated one by one with `gemma4_e2b_limited`. Without a GPU, when
 the translation model cannot load, or when the translator replies
 `CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. Both the
-description and translation calls use a 600-token reply budget unless
-`limits.maxReplyTokens` overrides it. The describer sets an explicit 16 to
-128 vision-token window, the same target the package resizes images to; other
-models leave the engine image limits unset.
+description and translation calls use the `imageReplyTokens` budget of 128
+tokens unless `limits.maxReplyTokens` overrides it. The describer requests
+192 vision tokens for its image resize; the CPU engine keeps its instruct
+window at 16 to 128 tokens, and other models leave the engine image limits
+unset.
 
-The describer and translator each receive a system message that puts accuracy
-first: the describer reports only visible detail, and the translator translates
-its own previous reply, never the user's instruction, preserving meaning, names
-and numbers without adding or omitting anything.
+The describer receives a system message that asks for every element of the
+image and adds rules against lying, verdicts and vague referrals.
+`DescribeImagesInput.additionalRules` appends host rules to that message. The
+translator translates its own previous reply, never the user's instruction,
+preserving meaning, names and numbers without adding or omitting anything.
 
 `DescribeImagesInput`:
 
@@ -498,6 +515,11 @@ instead downloads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm`, the precompiled
 GPU_ARTISAN build Google ships for browsers. The smaller file is what keeps a
 mobile tab alive at the end of the model load, and a desktop can ask for it
 too, trading vision and audio for 600 MB less download.
+
+The WebGPU engine asks for a 32768 token context on a desktop and 16384 on a
+phone, both multiples of 1024. Its int8 KV cache holds the full desktop window
+in about 300 MB, so the larger window stays a small part of the 2 GB model
+footprint.
 
 The WebGPU engine keeps one LiteRT conversation for consecutive turns. When the
 next prompt continues that history, only the new user turn is sent. A changed
@@ -711,6 +733,34 @@ const useReply = () => {
 
 The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,
 `LlmBackend` and `LlmPhase`.
+
+## Testing
+
+The suites live in `test/` and run against the local checkout.
+
+`yarn test:instruct` starts a local llama.cpp server with the Qwen3-VL 2B
+Instruct Q3_K_M build:
+
+```bash
+yarn test:instruct
+```
+
+It runs `llama serve` on `http://127.0.0.1:8080` with a 160k context, 4
+threads and CPU inference. llama.cpp
+downloads the weights on first run and caches them outside the repository.
+llama.cpp runs about 10x faster than wllama, so prefer the live server
+whenever a test needs real inference. Keep the server in its own terminal
+while the live and image suites run.
+
+The image suite bundles the browser harness, serves it from `test/drive.cjs`
+and proxies `/llama/` to the server on port 8080, so start `test:instruct`
+first:
+
+```bash
+yarn test:images
+```
+
+The fake-engine harness needs no server and never reaches the network.
 
 ## Architecture
 

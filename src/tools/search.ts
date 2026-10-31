@@ -11,21 +11,21 @@ import type {
     WikipediaResponse,
 } from '../types';
 
-/** Wikipedia host, the language edition is a subdomain */
+/** Wikipedia host, language is subdomain */
 const wikipediaHost = `wikipedia.org`;
 /** DuckDuckGo instant answer endpoint */
 const duckDuckGoEndpoint =
     `https://api.duckduckgo.com/?format=json&no_html=1&skip_disambig=1`;
-/** Language editions a Wikipedia host accepts */
+/** Language editions Wikipedia accepts */
 const languagePattern = /^[a-z]{2,3}(-[a-z]{2,4})?$/i;
-/** Default and bounded request budget, milliseconds */
+/** Default and bounded request timeout */
 const defaultTimeout = 8000;
-/** Characters kept in a result title */
+/** Characters kept in result title */
 const titleLength = 200;
-/** Default and bounded snippet length, characters */
+/** Default and bounded snippet length */
 const defaultSnippetLength = 400;
 
-/** Resolve every search setting and clamp the caller values */
+/** Resolve settings, clamp caller values */
 const searchSettings = (config: WebSearchConfig = {}): WebSearchSettings => {
     const language = config.language?.trim() ?? ``;
     return {
@@ -40,7 +40,7 @@ const searchSettings = (config: WebSearchConfig = {}): WebSearchSettings => {
     };
 };
 
-/** Fetch one JSON document within a timeout */
+/** Fetch JSON within a timeout */
 const fetchJson = async <T>(url: string, timeout: number): Promise<T> => {
     const
         controller = new AbortController(),
@@ -58,7 +58,7 @@ const fetchJson = async <T>(url: string, timeout: number): Promise<T> => {
     };
 };
 
-/** Search Wikipedia and map the matching pages */
+/** Search Wikipedia, map matching pages */
 const wikipediaResults = async (
     settings: WebSearchSettings,
     query: string,
@@ -84,7 +84,7 @@ const wikipediaResults = async (
     return results;
 };
 
-/** Search DuckDuckGo and map the instant answer and topics */
+/** Search DuckDuckGo, map answers */
 const duckDuckGoResults = async (
     settings: WebSearchSettings,
     query: string,

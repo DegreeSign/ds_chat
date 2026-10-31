@@ -14,6 +14,8 @@ const DEBUG_PORT = Number(process.argv[4] || 9334);
 const PROFILE =
     process.argv[5] || `${os.homedir()}/snap/chromium/common/ds_chat_chrome`;
 const TIMEOUT_MS = Number(process.argv[6] || 60000);
+const SCRIPT = process.argv[7] || "harness.js";
+const LLAMA = "http://127.0.0.1:8080";
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -38,7 +40,7 @@ const PAGE = `<!doctype html>
         }
       });
     </script>
-    <script src="harness.js"></script>
+    <script src="${SCRIPT}"></script>
   </body>
 </html>
 `;
@@ -49,6 +51,9 @@ const MIME = {
     ".json": "application/json",
     ".wav": "audio/wav",
     ".bin": "application/octet-stream",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,6 +79,23 @@ const serve = () =>
     new Promise((resolve) => {
         const server = http.createServer((req, res) => {
             const url = decodeURIComponent((req.url || "/").split("?")[0]);
+            // forward the manual image harness to the local llama.cpp server
+            if (url.startsWith("/llama/")) {
+                const target = new URL(url.slice("/llama".length), LLAMA);
+                const upstream = http.request(target, {
+                    method: req.method,
+                    headers: { ...req.headers, host: "127.0.0.1:8080" },
+                }, (response) => {
+                    res.writeHead(response.statusCode || 502, response.headers);
+                    response.pipe(res);
+                });
+                upstream.on("error", () => {
+                    res.writeHead(502);
+                    res.end("bad gateway");
+                });
+                req.pipe(upstream);
+                return;
+            }
             const file = path.join(ROOT, url.replace(/^\/+/, ""));
             if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
                 res.writeHead(404);
@@ -197,7 +219,7 @@ const main = async () => {
     ws.close();
     chrome.kill();
     server.close();
-    process.exit(text && text.includes('"fail": 0') ? 0 : 1);
+    process.exit(text && /"fail"\s*:\s*0/.test(text) ? 0 : 1);
 };
 
 main().catch((error) => {

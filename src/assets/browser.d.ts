@@ -1,4 +1,4 @@
-/** Type declarations for the bundled engine asset resolvers */
+/** Types for bundled asset resolvers */
 import type { LitertAssets, WllamaAssets } from '../types';
 
 declare const defaultWllamaAssets: () => WllamaAssets;

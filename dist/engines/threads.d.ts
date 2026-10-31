@@ -1,3 +1,3 @@
-/** Logical cores minus a fifth, one kept free for the page */
+/** Reserve one fifth for page */
 declare const heuristicThreads: (cores: number) => number;
 export { heuristicThreads };

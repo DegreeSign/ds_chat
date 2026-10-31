@@ -12,21 +12,21 @@ import type {
 } from '../types';
 
 const
-    /** Bytes stored in one part, a cut costs at most one part */
+    /** Bytes per part, small loss */
     partBytes = 32 * 1024 * 1024,
-    /** Attempts without new bytes before a download gives up */
+    /** Attempts with no new bytes */
     maxStalls = 4,
-    /** Milliseconds without a body chunk before a request restarts */
+    /** Idle milliseconds before request restarts */
     idleTimeout = 30000,
-    /** Every model download in flight, shared by every caller */
+    /** Shared downloads in flight */
     downloads = new Map<string, Promise<StoredModel | undefined>>();
 
 let
-    /** Whether this process has no writable file system */
+    /** Whether no writable file system */
     unsupported = false;
 
 const
-    /** Directory name of one model URL */
+    /** Directory name of model URL */
     storeName = (url: string): string => {
         const file = (url.split(`/`).pop() || `model`)
             .replace(/[^\w.-]+/g, `_`);
@@ -35,14 +35,14 @@ const
             hash = (hash * 31 + url.charCodeAt(i)) >>> 0;
         return `${hash.toString(16)}-${file}`;
     },
-    /** File name of one part, its byte offset in the model */
+    /** Part file name and offset */
     partName = (start: number): string => `part-${start}`,
-    /** Byte offset in one part file name, -1 for any other entry */
+    /** Part offset, -1 for others */
     partOffset = (name: string): number => {
         const match = /^part-(\d+)$/.exec(name);
         return match ? Number(match[1]) : -1;
     },
-    /** Contiguous parts from offset zero, stopping at the first gap */
+    /** Contiguous parts until first gap */
     chainParts = (parts: StoredFilePart[]): StoredFilePart[] => {
         const chain: StoredFilePart[] = [];
         let size = 0;
@@ -54,7 +54,7 @@ const
         };
         return chain;
     },
-    /** Open the root of the origin private file system */
+    /** Open private file system root */
     storeRoot = async (): Promise<FileSystemDirectoryHandle | undefined> => {
         if (unsupported) return undefined;
         if (typeof navigator == `undefined` || !navigator.storage?.getDirectory) {
@@ -65,7 +65,7 @@ const
             return await navigator.storage.getDirectory();
         } catch { return undefined; };
     },
-    /** Open one model directory, absent before the first part */
+    /** Open model directory if present */
     modelDir = async (
         dir: FileSystemDirectoryHandle,
         name: string,
@@ -74,7 +74,7 @@ const
             return await dir.getDirectoryHandle(name);
         } catch { return undefined; };
     },
-    /** Parse the metadata stored in one file */
+    /** Parse metadata in one file */
     parseMeta = async (
         handle: FileSystemFileHandle | undefined,
     ): Promise<StoredModelMeta | undefined> => {
@@ -90,12 +90,12 @@ const
             };
         } catch { return undefined; };
     },
-    /** Read the metadata stored beside the parts */
+    /** Read metadata beside parts */
     readMeta = async (
         dir: FileSystemDirectoryHandle,
     ): Promise<StoredModelMeta | undefined> =>
         await parseMeta(await dir.getFileHandle(`meta.json`).catch(() => undefined)),
-    /** Write the metadata beside the parts, a failure only costs a resume */
+    /** Write metadata beside parts */
     writeMeta = async (
         dir: FileSystemDirectoryHandle,
         meta: StoredModelMeta,
@@ -108,7 +108,7 @@ const
             await writable.close();
         } catch { };
     },
-    /** Every entry of one directory, as the browser iterates it */
+    /** Every directory entry, browser order */
     storeEntries = async function* (
         dir: FileSystemDirectoryHandle,
     ): AsyncGenerator<[string, FileSystemHandle]> {
@@ -116,7 +116,7 @@ const
             AsyncIterable<[string, FileSystemHandle]>)
             yield entry;
     },
-    /** Delete every part, keeping the metadata */
+    /** Delete parts, keep metadata */
     removeParts = async (dir: FileSystemDirectoryHandle): Promise<void> => {
         try {
             for await (const [name, handle] of storeEntries(dir))
@@ -124,7 +124,7 @@ const
                     await dir.removeEntry(name).catch(() => { });
         } catch { };
     },
-    /** Read every part and compose the contiguous prefix */
+    /** Read parts into contiguous prefix */
     readParts = async (
         dir: FileSystemDirectoryHandle,
     ): Promise<{ file: Blob, size: number } | undefined> => {
@@ -150,7 +150,7 @@ const
             size: chain.reduce((sum, part) => sum + part.size, 0),
         };
     },
-    /** Read a model stored as one file by an older version */
+    /** Read legacy single-file model */
     readLegacy = async (
         dir: FileSystemDirectoryHandle,
         name: string,
@@ -172,7 +172,7 @@ const
             };
         } catch { return undefined; };
     },
-    /** Delete one model directory, its parts and its metadata */
+    /** Delete model directory and metadata */
     removeFrom = async (
         dir: FileSystemDirectoryHandle,
         name: string,
@@ -180,7 +180,7 @@ const
         await dir.removeEntry(name, { recursive: true }).catch(() => { });
         await dir.removeEntry(`${name}.json`).catch(() => { });
     },
-    /** Stored bytes and metadata of one model file */
+    /** Stored bytes and metadata */
     readStored = async (
         dir: FileSystemDirectoryHandle,
         name: string,
@@ -203,7 +203,7 @@ const
         };
         return await readLegacy(dir, name);
     },
-    /** Where one response continues the parts, undefined restarts them */
+    /** Where response continues parts */
     resumePlan = (
         response: Response,
         part: StoredPart,
@@ -215,16 +215,16 @@ const
             etag = response.headers.get(`etag`) || ``;
         if (response.status == 206) {
             const
-                // a host that hides the range still continues the parts
+                // hidden range still continues parts
                 offset = start ? Number(start[1]) : part.size,
                 length = total ? Number(total[1]) : part.total;
-            // the body must continue exactly where the stored part ends
+            // body continues where part ends
             if (offset != part.size) return undefined;
             if (part.total && length && part.total != length) return undefined;
             if (part.etag && etag && part.etag != etag) return undefined;
             return { start: offset, total: length || part.total, etag: etag || part.etag };
         };
-        // a full body restarts a partial file, and may ignore the range
+        // full body restarts partial file
         if (part.etag && etag && part.etag != etag) return undefined;
         return {
             start: 0,
@@ -232,7 +232,7 @@ const
             etag: etag || part.etag,
         };
     },
-    /** Write one response body into parts, committing every part */
+    /** Write response body into parts */
     storeBody = async ({
         dir,
         start,
@@ -255,7 +255,7 @@ const
             inPart = 0,
             left = skip,
             writable: FileSystemWritableFileStream | undefined;
-        /** Open the next part, or keep the one in flight */
+        /** Open next part or keep */
         const open = async () => {
             const handle = await dir.getFileHandle(partName(written), { create: true });
             writable = await handle.createWritable();
@@ -274,7 +274,7 @@ const
                 if (done) break;
                 onChunk();
                 let offset = 0;
-                // a full body over stored parts only replays the prefix
+                // full body replays stored prefix
                 if (left) {
                     offset = Math.min(left, value.byteLength);
                     left -= offset;
@@ -300,13 +300,13 @@ const
             };
             await close();
         } catch (error) {
-            // keep every complete part and the tail of the open one
+            // keep complete parts and tail
             await close();
             throw error;
         };
         return written;
     },
-    /** Download and store one model file in resumable parts */
+    /** Download model file as parts */
     downloadInto = async (
         dir: FileSystemDirectoryHandle,
         url: string,
@@ -319,7 +319,7 @@ const
         if (legacy?.complete) return legacy;
         let sub = await modelDir(dir, name);
         if (!sub) {
-            // a single file from an older version cannot hold parts
+            // legacy file cannot hold parts
             await dir.removeEntry(name).catch(() => { });
             await dir.removeEntry(`${name}.json`).catch(() => { });
             sub = await dir.getDirectoryHandle(name, { create: true });
@@ -335,14 +335,14 @@ const
                 size = stored?.size ?? 0,
                 total = stored?.total || 0,
                 etag = stored?.etag || ``;
-            // only bytes past the previous high water mark are progress
+            // bytes past high water mark
             if (size > high) {
                 high = size;
                 stalls = 0;
             } else if (++stalls > maxStalls) {
                 throw new Error(`Model download failed`);
             };
-            // show the stored prefix as soon as a retry resumes
+            // show stored prefix on resume
             if (size && total) onProgress(size / total, LlmPhase.download);
             const
                 end = total
@@ -362,7 +362,7 @@ const
                 });
                 if (response.status == 416) {
                     await response.body?.cancel().catch(() => { });
-                    // the stored bytes already reach the end of the remote file
+                    // stored bytes reach remote end
                     if (total && size >= total) {
                         await writeMeta(sub, { total, etag, complete: true });
                         continue;
@@ -377,7 +377,7 @@ const
                 };
                 const plan = resumePlan(response, part);
                 if (!plan) {
-                    // a changed file starts over from zero
+                    // changed file restarts from zero
                     await response.body.cancel().catch(() => { });
                     await removeParts(sub);
                     await writeMeta(sub, { total: 0, etag: ``, complete: false });
@@ -389,7 +389,7 @@ const
                     complete: false,
                 });
                 const
-                    // a full body over stored parts replays the prefix
+                    // full body replays stored prefix
                     skip = plan.start == 0 ? size : 0,
                     written = await storeBody({
                         dir: sub,
@@ -414,13 +414,13 @@ const
                 };
             } catch (error) {
                 if (signal?.aborted) throw new Error(`Cancelled`);
-                // a file system failure keeps the parts it already stored
+                // file system failure keeps parts
                 if (error instanceof DOMException
                     && [`QuotaExceededError`, `NotAllowedError`, `NotSupportedError`,
                         `InvalidStateError`, `TypeMismatchError`, `SecurityError`]
                         .includes(error.name))
                     throw error;
-                // the next loop resumes from the committed parts
+                // next loop resumes committed parts
                 await new Promise(resolve =>
                     setTimeout(resolve, 250 + stalls * 500));
             } finally {
@@ -429,14 +429,14 @@ const
             };
         };
     },
-    /** Whether a failed store write means this host cannot use a file store */
+    /** Whether store failure disables storage */
     isStoreError = (error: unknown): boolean =>
         [`NotAllowedError`, `NotSupportedError`]
             .includes((error as DOMException)?.name || ``);
 
-/** Create the resumable file store of one engine */
+/** Create engine resumable file store */
 const createModelStore = (dirName: string): ModelStore => {
-    /** Open this engine's store directory, created on demand */
+    /** Open this engine's store directory */
     const dir = async (): Promise<FileSystemDirectoryHandle | undefined> => {
         const root = await storeRoot();
         if (!root) return undefined;
@@ -445,12 +445,12 @@ const createModelStore = (dirName: string): ModelStore => {
         } catch { return undefined; };
     };
     return {
-        /** Stored bytes and metadata of one model file */
+        /** Stored bytes and metadata */
         stored: async (url: string): Promise<StoredModel | undefined> => {
             const root = await dir();
             return root ? await readStored(root, storeName(url)) : undefined;
         },
-        /** Download one model file, resuming the parts already stored */
+        /** Download file, resuming stored parts */
         download: async ({
             url,
             signal,
@@ -467,13 +467,13 @@ const createModelStore = (dirName: string): ModelStore => {
             downloads.set(key, pending);
             return await pending;
         },
-        /** Delete one stored model file and its metadata */
+        /** Delete stored file and metadata */
         remove: async (url: string): Promise<void> => {
             const root = await dir();
             if (!root) return;
             await removeFrom(root, storeName(url));
         },
-        /** Delete the whole store directory and every model file in it */
+        /** Delete whole store directory */
         purge: async (): Promise<void> => {
             const root = await storeRoot();
             if (!root) return;

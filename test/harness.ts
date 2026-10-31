@@ -10,6 +10,10 @@ import {
     createTranslateOn,
     describeImages,
     describeTranslated,
+    imageNote,
+    imageReplyTokens,
+    imageRules,
+    imageSystem,
 } from "../src/describe";
 import { createRuntime } from "../src/service";
 import {
@@ -34,6 +38,7 @@ import {
     llmModels,
     mobileCpuContextWindow,
     mobileDevice,
+    mobileLitertContextWindow,
     resolveLlmModel,
     supportsAudio,
     supportsImages,
@@ -48,8 +53,13 @@ import { heuristicThreads } from "../src/engines/threads";
 import {
     cacheModel,
     continuesHistory,
+    gpuShare,
     litertSettings,
+    maxRestMs,
+    releaseDevice,
+    restFor,
     streamLitert,
+    throttledDevice,
     toLitertMessages,
     visionTokens,
 } from "../src/engines/litert";
@@ -133,7 +143,7 @@ const
     testStore = createModelStore(`ds-chat-test-store`),
     cpuStore = createModelStore(`wllama-store`),
     sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
-    /** Run one test and record its outcome. */
+    /** Run one test, record outcome */
     test = async (name: string, run: () => void | Promise<void>) => {
         try {
             await run();
@@ -150,13 +160,13 @@ const
         if (actual !== expected)
             throw new Error(`${label}: expected ${String(expected)} got ${String(actual)}`);
     },
-    /** A promise resolved by the test. */
+    /** Promise the test resolves */
     deferred = () => {
         let resolve = () => { };
         const promise = new Promise<void>(result => { resolve = result; });
         return { promise, resolve };
     },
-    /** Poll a condition until it holds. */
+    /** Poll until a condition holds */
     waitFor = async (check: () => boolean, label: string) => {
         for (let i = 0; i < 100; i++) {
             if (check()) return;
@@ -164,13 +174,13 @@ const
         };
         throw new Error(`${label}: timed out`);
     },
-    /** Resolve one catalog model or fail the test. */
+    /** Resolve one catalog model */
     modelOf = (id: ChatModelId): ChatModel => {
         const model = findLlmModel(id);
         if (!model) throw new Error(`missing model ${id}`);
         return model;
     },
-    /** Build a runtime over one fake engine. */
+    /** Build runtime over fake engine */
     runtimeWith = (options: FakeEngineOptions = {}) => {
         const
             backend = options.backend ?? LlmBackend.cpu,
@@ -183,7 +193,7 @@ const
             });
         return { ...engine, runtime };
     },
-    /** Build a one-shot chat over one fake CPU engine. */
+    /** One-shot chat, fake CPU engine */
     chatWith = (options: FakeEngineOptions = {}) => {
         const base = runtimeWith(options);
         return { ...base, chat: createChatOn(base.runtime) };
@@ -196,7 +206,7 @@ const
     streamOf = (...chunks: unknown[]) => (async function* () {
         for (const chunk of chunks) yield chunk;
     })(),
-    /** A real JPEG with a centered square */
+    /** Real JPEG, centered square */
     paintImage = (width: number, height: number): string => {
         const canvas = document.createElement(`canvas`);
         canvas.width = width;
@@ -215,7 +225,7 @@ const
         );
         return canvas.toDataURL(`image/jpeg`, 0.95);
     },
-    /** Run one test with a stubbed fetch, restoring the original. */
+    /** Run test with stubbed fetch */
     withFetch = async (
         impl: typeof fetch,
         run: () => Promise<void>,
@@ -224,13 +234,13 @@ const
         globalThis.fetch = impl;
         try { await run(); } finally { globalThis.fetch = original; };
     },
-    /** One JSON response for a stubbed fetch. */
+    /** One JSON response, stubbed fetch */
     jsonResponse = (body: unknown, status = 200): Response =>
         new Response(JSON.stringify(body), {
             status,
             headers: { 'content-type': `application/json` },
         }),
-    /** The message of one failure, empty when it resolved. */
+    /** Failure message, empty when resolved */
     errorOf = async (run: () => Promise<unknown>): Promise<string> => {
         try {
             await run();
@@ -239,7 +249,7 @@ const
             return (error as Error).message;
         };
     },
-    /** Stub the clock and restore it when the test ends. */
+    /** Stub clock, restore after test */
     withClock = (start: number): {
         now: () => number,
         at: (value: number) => void,
@@ -255,20 +265,20 @@ const
             done: () => { Date.now = original; },
         };
     },
-    /** The storage key of the currency cache. */
+    /** Price cache storage key */
     priceStorageKey = `degreesign-chat-prices-v1`,
     /** Drop the stored price cache. */
     clearPriceStorage = () => {
         try { localStorage.removeItem(priceStorageKey); } catch { };
     },
-    /** One tool for the registry tests. */
+    /** One registry test tool */
     toolNamed = (name: string, execute?: ChatTool[`execute`]): ChatTool => ({
         name,
         description: `${name} tool`,
         parameters: { type: `object`, properties: {} },
         execute: execute ?? (() => `ok`),
     }),
-    /** Run one test with a stubbed WebGPU adapter, null removes it. */
+    /** Test with stubbed WebGPU adapter */
     withGpu = async (
         run: () => Promise<void>,
         adapter: unknown = {},
@@ -311,6 +321,7 @@ const definitions: Array<{
                     `function`,
                     `describeTranslated`,
                 );
+                assertEqual(imageReplyTokens, 128, `imageReplyTokens`);
                 assertEqual(typeof createChatOn, `function`, `createChatOn`);
                 assertEqual(typeof createPreloadOn, `function`, `createPreloadOn`);
                 assertEqual(typeof createRuntime, `function`, `createRuntime`);
@@ -334,6 +345,7 @@ const definitions: Array<{
                         `describeImages`,
                         `describeModelId`,
                         `describeTranslated`,
+                        `imageReplyTokens`,
                         `preloadModel`,
                         `webSearchTool`,
                     ].join(`,`),
@@ -390,7 +402,12 @@ const definitions: Array<{
             run: () => {
                 assertEqual(llmModels.length, 5, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
-                assertEqual(litertContextWindow, 4096, `gpu window`);
+                assertEqual(litertContextWindow, 32768, `gpu window`);
+                assertEqual(
+                    litertContextWindow % 1024,
+                    0,
+                    `gpu window step`,
+                );
                 assertEqual(
                     modelOf(ChatModelId.qwen3_vl_2b).reasoning,
                     true,
@@ -639,6 +656,16 @@ const definitions: Array<{
                     `client hint wins`,
                 );
                 assertEqual(mobileCpuContextWindow, 4096, `mobile window`);
+                assertEqual(
+                    mobileLitertContextWindow,
+                    16384,
+                    `mobile gpu window`,
+                );
+                assertEqual(
+                    mobileLitertContextWindow % 1024,
+                    0,
+                    `mobile gpu window step`,
+                );
                 assertEqual(
                     deviceModelId(ChatModelId.gemma4_e2b),
                     ChatModelId.gemma4_e2b,
@@ -1231,6 +1258,7 @@ const definitions: Array<{
                     vision = litertSettings({
                         model,
                         limits: defaultLlmLimits,
+                        contextSize: litertContextWindow,
                         source,
                         mod,
                     }),
@@ -1246,6 +1274,7 @@ const definitions: Array<{
                             },
                         },
                         limits: defaultLlmLimits,
+                        contextSize: litertContextWindow,
                         source,
                         mod,
                     }),
@@ -1261,10 +1290,16 @@ const definitions: Array<{
                             },
                         },
                         limits: defaultLlmLimits,
+                        contextSize: litertContextWindow,
                         source,
                         mod,
                     });
                 assertEqual(visionTokens, 70, `smallest budget`);
+                assertEqual(
+                    vision.mainExecutorSettings?.maxNumTokens,
+                    litertContextWindow,
+                    `gpu context`,
+                );
                 assertEqual(vision.maxVisionTokensPerImage, 70, `max tokens`);
                 assertEqual(vision.minVisionTokensPerImage, 70, `min tokens`);
                 assertEqual(vision.visionBackend, 3, `vision backend`);
@@ -1280,6 +1315,70 @@ const definitions: Array<{
                 assertEqual(text.audioBackend, undefined, `no text audio`);
                 assertEqual(audio.visionBackend, undefined, `no audio vision`);
                 assertEqual(audio.audioBackend, 1, `audio only backend`);
+            },
+        },
+        {
+            name: `litert/gpu rest`,
+            run: async () => {
+                let
+                    mapped = 0,
+                    paced = 0;
+                const
+                    device = {
+                        createBuffer: () => ({
+                            mapAsync: async () => { mapped += 1; },
+                        }),
+                    },
+                    wrapped = throttledDevice({
+                        device,
+                        pace: async () => { paced += 1; },
+                    }),
+                    buffer = wrapped.createBuffer?.();
+                assertEqual(restFor(0), 0, `no rest`);
+                assertEqual(restFor(maxRestMs * 10), maxRestMs, `rest capped`);
+                assertEqual(
+                    Math.round(restFor(40)),
+                    Math.round(40 * (1 / gpuShare - 1)),
+                    `rest share`,
+                );
+                if (!buffer) throw new Error(`missing buffer`);
+                await buffer.mapAsync();
+                assertEqual(mapped, 1, `buffer mapped`);
+                assertEqual(paced, 1, `buffer paced`);
+            },
+        },
+        {
+            name: `litert/device release`,
+            run: () => {
+                let
+                    destroyed = 0,
+                    unloaded = 0;
+                const
+                    device = {
+                        queue: { onSubmittedWorkDone: async () => { } },
+                        destroy: () => { destroyed += 1; },
+                    },
+                    wasm = {
+                        preinitializedWebGPUDevice: device,
+                        WebGPU: { preinitializedDeviceId: 7 as number | undefined },
+                    },
+                    mod = {
+                        getGlobalLiteRtLm: () => ({ liteRtLmWasm: wasm }),
+                        unloadLiteRtLm: () => { unloaded += 1; },
+                    } as unknown as LitertModule;
+                releaseDevice(mod);
+                assertEqual(
+                    wasm.preinitializedWebGPUDevice,
+                    undefined,
+                    `device cleared`,
+                );
+                assertEqual(
+                    wasm.WebGPU.preinitializedDeviceId,
+                    undefined,
+                    `id cleared`,
+                );
+                assertEqual(destroyed, 1, `device destroyed`);
+                assertEqual(unloaded, 1, `wasm unloaded`);
             },
         },
         {
@@ -2245,24 +2344,6 @@ const definitions: Array<{
             name: `describe/english`,
             run: async () => {
                 const
-                    imageSystem = [
-                        `Write fully detailed, factual image descriptions for`
-                            + ` low-vision readers.`,
-                        `Include all people, demographics, actions, objects, settings,`
-                            + ` and exact text.`,
-                        `Output only the raw description with no intro, title, or`
-                            + ` disclaimer.`,
-                        `Even if the main subject in the image is controversial`
-                            + ` mention it first.`,
-                        `Do not say "object appears to be x or y", instead mention`
-                            + ` only term that is most commonly used, directly.`,
-                        `Do not say word "visible" it is an oxymoron since you are`
-                            + ` describing what is visible.`,
-                        `Use direct, plain English without filtering or vague words.`,
-                    ].join(` `),
-                    imageNote = [
-                        `describe this image in one sentence starting with the main subject`,
-                    ].join(` `),
                     events: Array<[number, string?, string?, number?]> = [],
                     statuses: ChatStatusSnapshot[] = [];
                 let described = 0;
@@ -2287,7 +2368,7 @@ const definitions: Array<{
                     });
                 assertEqual(cpu.calls.start, 1, `describer load`);
                 assertEqual(cpu.calls.chat, 2, `one chat per image`);
-                assertEqual(cpu.requests[0].limits.maxReplyTokens, 400, `budget`);
+                assertEqual(cpu.requests[0].limits.maxReplyTokens, 128, `budget`);
                 assertEqual(results.length, 2, `two results`);
                 assertEqual(results[0].descriptionEN, `A red square 1`, `first english`);
                 assertEqual(results[1].descriptionEN, `A red square 2`, `second english`);
@@ -2317,11 +2398,18 @@ const definitions: Array<{
                     `second final duration`,
                 );
                 assertEqual(cpu.requests[0].messages.length, 2, `two turns`);
+                assertEqual(cpu.requests[0].temperature, 0.3, `describer temperature`);
+                assertEqual(cpu.requests[0].repeatPenalty, 1, `describer penalty`);
+                assertEqual(cpu.requests[0].limits.imageTokens, 192, `vision budget`);
                 assertEqual(cpu.requests[0].messages[1].role, LlmRole.user, `user role`);
                 assertEqual(cpu.requests[0].messages[1].images?.[0], `one`, `first image`);
                 assertEqual(cpu.requests[1].messages[1].images?.[0], `two`, `second image`);
                 assertEqual(cpu.requests[0].messages[0].role, LlmRole.system, `system role`);
-                assertEqual(cpu.requests[0].messages[0].content, imageSystem, `system note`);
+                assertEqual(
+                    cpu.requests[0].messages[0].content,
+                    `${imageSystem} ${imageRules}`,
+                    `system note`,
+                );
                 assertEqual(
                     cpu.requests[0].messages[1].content,
                     imageNote,
@@ -2414,9 +2502,19 @@ const definitions: Array<{
                         + ` without any addition or explanation`;
                     assertEqual(cpu.calls.start, 1, `describer start`);
                     assertEqual(gpu.calls.start, 1, `translator start`);
-                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 400, `describer budget`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 400, `budget`);
+                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 128, `describer budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 128, `budget`);
                     assertEqual(cpu.requests[0].messages.length, 2, `describer turns`);
+                    assertEqual(cpu.requests[0].temperature, 0.3, `describer temperature`);
+                    assertEqual(cpu.requests[0].repeatPenalty, 1, `describer penalty`);
+                    assertEqual(cpu.requests[0].limits.imageTokens, 192, `vision budget`);
+                    assertEqual(
+                        cpu.requests[0].messages[0].content,
+                        `${imageSystem} ${imageRules}`,
+                        `describer system`,
+                    );
+                    assertEqual(cpu.requests[0].messages[1].role, LlmRole.user, `ask turn`);
+                    assertEqual(cpu.requests[0].messages[1].content, imageNote, `ask note`);
                     assertEqual(gpu.requests[0].messages.length, 4, `translation turns`);
                     assertEqual(gpu.requests[0].messages[0].role, LlmRole.system, `system turn`);
                     assertEqual(
@@ -2516,7 +2614,7 @@ const definitions: Array<{
                         });
                     assertEqual(gpu.calls.start, 1, `translator start`);
                     assertEqual(gpu.calls.chat, 2, `one chat per description`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 400, `budget`);
+                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 128, `budget`);
                     assertEqual(gpu.requests[0].messages.length, 4, `four turns`);
                     assertEqual(results[0], `translated plain one`, `first translation`);
                     assertEqual(results[1], `translated plain two`, `second translation`);
@@ -2753,7 +2851,7 @@ const definitions: Array<{
                     false,
                     `load done`,
                 );
-                // an empty reply keeps its place and only reports the error
+                // empty reply kept, error reported
                 assertEqual(silentResults.length, 1, `empty kept`);
                 assertEqual(silentResults[0].descriptionEN, ``, `empty english`);
                 assertEqual(
@@ -2789,7 +2887,7 @@ const definitions: Array<{
                             events.push([index, descriptionEN, description]),
                         onStatus: value => statuses.push(value),
                     });
-                // the second image fails, the first one is kept
+                // second image fails, first kept
                 assertEqual(results.length, 2, `two results`);
                 assertEqual(results[0].descriptionEN, `A red square`, `first kept`);
                 assertEqual(results[1].descriptionEN, ``, `second empty`);
@@ -2846,6 +2944,27 @@ const definitions: Array<{
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
                 assertEqual(replies[replies.length - 1], `hello`, `accumulated reply`);
                 assertEqual(reasoned[reasoned.length - 1], `why`, `accumulated thinking`);
+            },
+        },
+        {
+            name: `chat/failure unloads`,
+            run: async () => {
+                const
+                    { chat, calls } = chatWith({ failChat: true }),
+                    statuses: ChatStatusSnapshot[] = [];
+                chat({
+                    model: ChatModelId.qwen3_vl_2b,
+                    messages: [userMessage(`hi`)],
+                    onResponse: () => { },
+                    onStatus: value => statuses.push(value),
+                });
+                await waitFor(
+                    () => statuses[statuses.length - 1]?.error == `chat failed`,
+                    `chat error`,
+                );
+                // failed turns start cold
+                assertEqual(calls.unload, 1, `failed turn unloads`);
+                assertEqual(statuses[statuses.length - 1].ready, false, `cold retry`);
             },
         },
         {
@@ -3584,7 +3703,7 @@ const definitions: Array<{
                         stored = await cache.match(url),
                         size = (await stored?.arrayBuffer())?.byteLength;
                     assertEqual(size, bytes.byteLength, `stored bytes`);
-                    // a settled download is not remembered
+                    // settled download is not cached
                     await cacheModel(url, cache, undefined, () => { });
                     assertEqual(fetches.length, 2, `fresh download after settle`);
                     await caches.delete(name);
@@ -3714,7 +3833,7 @@ const definitions: Array<{
                     requests.push(headers);
                     if (!dropped) {
                         dropped = true;
-                        // a connection cut short delivers a prefix, then ends
+                        // cut connection delivers a prefix
                         const short = new ReadableStream<Uint8Array>({
                             start(controller) {
                                 controller.enqueue(body.slice(0, 1000));
@@ -3785,7 +3904,7 @@ const definitions: Array<{
                     full = new Uint8Array(body),
                     requests: Array<Record<string, string>> = [],
                     original = globalThis.fetch;
-                // a full body that replays the prefix with wrong bytes
+                // full body replays wrong prefix
                 full.fill(9, 0, 1000);
                 let dropped = false;
                 globalThis.fetch = (async (
@@ -3806,7 +3925,7 @@ const definitions: Array<{
                             headers: { 'content-length': `3000` },
                         });
                     };
-                    // the host ignores the range and sends the whole file
+                    // host ignores range, whole file
                     return new Response(full, {
                         status: 200,
                         headers: { 'content-length': `3000` },
@@ -3849,7 +3968,7 @@ const definitions: Array<{
                     requests.push(headers);
                     if (first) {
                         first = false;
-                        // the connection stays open until the caller stops
+                        // connection stays open until aborted
                         return new Response(new ReadableStream<Uint8Array>({
                             start(controller) {
                                 controller.enqueue(body.slice(0, 1000));
@@ -3921,7 +4040,7 @@ const definitions: Array<{
                     requests.push(headers);
                     step += 1;
                     if (step == 1) {
-                        // the first version ends early, a prefix is kept
+                        // early first version keeps prefix
                         const short = new ReadableStream<Uint8Array>({
                             start(controller) {
                                 controller.enqueue(first);
@@ -3999,7 +4118,7 @@ const definitions: Array<{
                     requests.push(headers);
                     if (!dropped) {
                         dropped = true;
-                        // a cut after more than one part commits both
+                        // later cut commits both parts
                         return new Response(new ReadableStream<Uint8Array>({
                             start(controller) {
                                 controller.enqueue(body.slice(0, firstBytes));
@@ -4131,7 +4250,7 @@ const definitions: Array<{
                         range = headers.Range || ``;
                     requests.push({ url, range });
                     if (cuts.delete(url)) {
-                        // a cut connection delivers a prefix, then ends
+                        // cut connection delivers a prefix
                         return new Response(new ReadableStream<Uint8Array>({
                             start(controller) {
                                 controller.enqueue(body.slice(0, 1000));
@@ -4196,7 +4315,7 @@ const definitions: Array<{
                         true,
                         `cpu partial progress`,
                     );
-                    // a second call reads the store without touching the network
+                    // second call reads store offline
                     const before = requests.length;
                     const again = await storedBlobs({ model, onProgress: () => { } });
                     assertEqual(again?.length, 2, `stored cpu blobs`);
@@ -5009,7 +5128,7 @@ const definitions: Array<{
         },
     ];
 
-/** Run every test and publish the report. */
+/** Run all tests, publish report */
 const main = async (): Promise<void> => {
     for (const definition of definitions)
         await test(definition.name, definition.run);

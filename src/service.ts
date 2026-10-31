@@ -24,29 +24,29 @@ interface RuntimeLoad {
 
 const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
     const
-        /** The CPU engine this runtime can reach, real unless overridden */
+        /** CPU engine, overridable by tests */
         cpuEngine: LlmEngine = deps.engines?.cpu || wllamaEngine,
-        /** The GPU engine this runtime can reach, real unless overridden */
+        /** GPU engine, overridable by tests */
         gpuEngine: LlmEngine = deps.engines?.litert || litertEngine,
-        /** Whether this device keeps one model per backend, tests override */
+        /** Mobile device keeps one model */
         mobile = deps.mobile || mobileDevice,
-        /** Every loaded model, one per backend on a desktop */
+        /** Loaded models, one per backend */
         runtimes = new Map<ChatModelId, LlmRuntime>(),
-        /** Loads in flight, a desktop may run one per backend at a time */
+        /** In-flight loads by backend */
         loads = new Map<ChatModelId, RuntimeLoad>(),
-        /** Aborted loads that still unwind their engine work */
+        /** Aborted loads still unwinding engine */
         settling = new Map<ChatModelId, RuntimeLoad>(),
-        /** Callers waiting on the load of one model */
+        /** Waiters of one model load */
         waiters = new Map<ChatModelId, RuntimeLoadWaiter[]>(),
-        /** Latest progress of one in-flight load */
+        /** Latest progress of one load */
         progress = new Map<ChatModelId, { percent: number, phase: LlmPhase }>(),
-        /** Abort handle of one in-flight load */
+        /** Abort handle of one load */
         aborts = new Map<ChatModelId, AbortController>(),
-        /** Last attempt of one model, a newer attempt invalidates the older */
+        /** Attempt token, newer invalidates older */
         tokens = new Map<ChatModelId, number>(),
-        /** Last engine status of one model */
+        /** Last engine status per model */
         statuses = new Map<ChatModelId, LlmStatus>(),
-        /** Last failure of one model, cleared when its next load starts */
+        /** Last failure per model */
         errors = new Map<ChatModelId, string>();
     let
         activeModel: ChatModel | undefined,
@@ -55,18 +55,18 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         streaming: Promise<string | undefined> | undefined;
 
     const
-        /** Whether this process can run the CPU (wasm) engine */
+        /** Whether wasm engine can run */
         wasmSupported = (): boolean =>
             (typeof window != `undefined`
                 || typeof self != `undefined`
                 || typeof Worker != `undefined`)
             && typeof WebAssembly != `undefined`,
-        /** Whether this process can run the GPU (WebGPU) engine */
+        /** Whether WebGPU engine can run */
         webgpuSupported = (): boolean =>
             typeof navigator != `undefined`
             && !!(navigator as GpuNavigator).gpu
             && typeof WebAssembly != `undefined`,
-        /** Pick the engine for one model, overridable by tests */
+        /** Engine choice per model */
         engineFor = (model: ChatModel): LlmEngine | undefined => {
             if (deps.backend == LlmBackend.none) return undefined;
             if (deps.backend == LlmBackend.cpu)
@@ -77,25 +77,25 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             if (model.cpu && wasmSupported()) return cpuEngine;
             return undefined;
         },
-        /** Ask the browser to keep the model cache across eviction */
+        /** Keep model cache across eviction */
         persistStorage = async () => {
             try {
                 if (typeof navigator == `undefined`) return;
                 await navigator.storage?.persist?.();
             } catch { };
         },
-        /** The runtime of one model, or the active one */
+        /** Loaded runtime of one model */
         runtimeFor = (model?: ChatModelId): LlmRuntime | undefined =>
             model
                 ? runtimes.get(model)
                 : activeModel
                     ? runtimes.get(activeModel.id)
                     : undefined,
-        /** Set the engine status, read by the next status snapshot */
+        /** Set status read by snapshot */
         setStatus = (next: LlmStatus) => {
             status = next;
         },
-        /** Drop one loaded model, keeping its files */
+        /** Drop loaded model, keep files */
         release = async (model: ChatModelId) => {
             const current = runtimes.get(model);
             if (!current) return;
@@ -105,7 +105,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             if (!runtimes.size && !loads.size) setStatus(LlmStatus.idle);
             await current.unload();
         },
-        /** Drop every model of one backend, every model on a phone */
+        /** Release backend models; mobile, all */
         releaseBackend = async (backend: LlmBackend) => {
             for (const [model, current] of [...runtimes])
                 if (mobile() || current.backend == backend)
@@ -115,7 +115,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         releaseAll = async () => {
             for (const model of [...runtimes.keys()]) await release(model);
         },
-        /** Report load progress to every waiting caller of one model */
+        /** Report progress to every waiter */
         reportProgress = (
             model: ChatModelId,
             value: number,
@@ -129,33 +129,33 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             for (const waiter of waiters.get(model) ?? [])
                 waiter.report(next.percent, next.phase);
         },
-        /** Stop a load that is no longer wanted */
+        /** Stop an unwanted load */
         abortLoad = (model: ChatModelId) => {
             tokens.set(model, (tokens.get(model) ?? 0) + 1);
             aborts.get(model)?.abort();
             aborts.delete(model);
-            // a stopped load leaves its slot at once, a new load may take it
+            // stopped load frees its slot
             const current = loads.get(model);
             if (current) settling.set(model, current);
             loads.delete(model);
             waiters.delete(model);
             progress.delete(model);
             statuses.set(model, LlmStatus.idle);
-            // a stopped load no longer owns the reported status
+            // stopped load owns no status
             if (status == LlmStatus.downloading && !loads.size && !runtimes.size)
                 setStatus(LlmStatus.idle);
         },
-        /** Drop one caller, aborting the load once nobody waits for it */
+        /** Drop waiter, abort unclaimed load */
         releaseWaiter = (model: ChatModelId, waiter: RuntimeLoadWaiter) => {
             const list = waiters.get(model);
             if (list) waiters.set(model, list.filter(item => item != waiter));
-            // a newer caller may join in the same tick
+            // caller may join same tick
             queueMicrotask(() => {
                 if (!waiters.get(model)?.length && loads.has(model))
                     abortLoad(model);
             });
         },
-        /** Follow one in-flight load until it ends or this caller leaves */
+        /** Follow load until caller leaves */
         followLoad = (
             model: ChatModelId,
             onProgress: RuntimeLoadParams[`onProgress`],
@@ -190,9 +190,9 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 );
             });
         },
-        /** Whether a model is loaded and ready for local chat */
+        /** Whether a model is loaded */
         ready = (model?: ChatModelId): boolean => !!runtimeFor(model),
-        /** Load a model, or join a load of the same model already in flight */
+        /** Load model or join load */
         load = async ({
             model,
             limits,
@@ -220,8 +220,8 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 setStatus(LlmStatus.unsupported);
                 return false;
             };
-            // a backend holds one model, a phone holds one model in total, so
-            // only a load on another backend may keep running beside this one
+            // one model per backend
+            // another backend load may overlap
             const conflicts = [...loads.values(), ...settling.values()]
                 .filter(load => mobile()
                     || engineFor(load.model)?.backend == engine.backend);
@@ -229,13 +229,13 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             const token = (tokens.get(model.id) ?? 0) + 1;
             tokens.set(model.id, token);
             const attempt = (async (): Promise<boolean> => {
-                // the replaced builds let go before this one takes the backend
+                // replaced builds release before takeover
                 await Promise.all(conflicts.map(load =>
                     load.attempt.catch(() => false)));
                 if (token != tokens.get(model.id)) return false;
                 await persistStorage();
                 if (token != tokens.get(model.id)) return false;
-                // a backend holds one model, a phone holds one model in total
+                // a backend holds one model
                 await releaseBackend(engine.backend);
                 if (token != tokens.get(model.id)) return false;
                 const cached = await engine.cached(model);
@@ -245,7 +245,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 statuses.set(model.id, LlmStatus.downloading);
                 setStatus(LlmStatus.downloading);
                 reportProgress(model.id, 0, LlmPhase.download);
-                // nothing to download, the model loads straight from the cache
+                // cached model loads without download
                 if (cached) reportProgress(model.id, 1, LlmPhase.load);
                 const controller = new AbortController();
                 aborts.set(model.id, controller);
@@ -256,7 +256,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                         logging,
                         signal: controller.signal,
                         assets,
-                        // only the current attempt may report progress
+                        // only current attempt reports progress
                         onProgress: (value, phase) => {
                             if (token == tokens.get(model.id))
                                 reportProgress(model.id, value, phase);
@@ -302,7 +302,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             waiters.set(model.id, []);
             return await followLoad(model.id, onProgress, signal);
         },
-        /** Release one loaded model, or every model */
+        /** Release one model or all */
         unload = async (model?: ChatModelId) => {
             if (model) {
                 await release(model);
@@ -316,7 +316,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
             setStatus(LlmStatus.idle);
             await releaseAll();
         },
-        /** Release every model, then delete every cached model file */
+        /** Release all, delete cached files */
         clear = async () => {
             const pending = [...loads.values(), ...settling.values()]
                 .map(load => load.attempt);
@@ -325,10 +325,10 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 attempt.catch(() => undefined)));
             await Promise.all([cpuEngine.purge(), gpuEngine.purge()]);
         },
-        /** Run one chat completion on the model runtime */
+        /** Run one chat completion */
         chat = async (params: RuntimeChatParams): Promise<string | undefined> => {
             if (!runtimeFor(params.model)) return undefined;
-            // the engine takes one turn at a time
+            // one turn at a time
             while (streaming) await streaming.catch(() => undefined);
             const runtime = runtimeFor(params.model);
             if (!runtime) return undefined;
@@ -341,7 +341,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 if (streaming == turn) streaming = undefined;
             };
         },
-        /** Whether a model download or load is in flight */
+        /** Whether a load is pending */
         isLoading = (model?: ChatModelId): boolean =>
             model ? loads.has(model) : loads.size > 0;
 
@@ -363,7 +363,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         },
         backend: (model?: ChatModelId): LlmBackend =>
             runtimeFor(model)?.backend ?? LlmBackend.none,
-        /** Last model load error, of one model or of the latest load */
+        /** Last load error per model */
         error: (model?: ChatModelId): string | undefined =>
             model ? errors.get(model) : lastError,
         model: () => activeModel,
