@@ -1,14 +1,13 @@
 # @degreesign/chat
 
-One-shot on-device AI chat for browsers, workers and Node, using wllama CPU
-engine and LiteRT-LM WebGPU engine.
-The package is an A-Z solution for local AI chat and more.
-Includes voice transcription to many languages
-and a super accurate image vision function.
-The package manages download of AI models automatically,
-with auto resume for low network connections.
+One-shot on-device AI chat for browsers, workers and Node, using a wllama CPU
+engine and a LiteRT-LM WebGPU engine. It streams text, describes images,
+manages model downloads with automatic resume, and renders no UI.
 
-`@degreesign/chat` is plug and play solution for any UI.
+Voice notes are transcribed on device by `@degreesign/voice`, a companion
+package, then passed to `@degreesign/chat` as text.
+
+`@degreesign/chat` is a plug and play engine for any UI.
 
 [![npm version](https://img.shields.io/npm/v/@degreesign/chat.svg)](https://www.npmjs.com/package/@degreesign/chat)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](#licensing)
@@ -22,6 +21,7 @@ with auto resume for low network connections.
 - [Why](#why)
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Case study: DoListy](#case-study-dolisty)
 - [Enable WebGPU](#enable-webgpu)
 - [Public API](#public-api)
 - [Tools](#tools)
@@ -39,6 +39,8 @@ with auto resume for low network connections.
 
 ## Why
 
+- Proven: [DoListy](https://dolisty.com/#chat), a no-signup PWA, answers
+  with the network off.
 - On device: model weights download once, then every reply is generated locally.
 - Headless: the package returns text through callbacks and renders no UI.
 - Stateless: the host passes the whole message list and keeps its own history.
@@ -146,6 +148,62 @@ audio encoder, so a text turn drops the clip and an audio-only turn reports
 
 The package never writes storage, so the host appends the user message before
 the call and appends the assistant message after the last `onResponse`.
+
+## Case study: DoListy
+
+[DoListy](https://dolisty.com/#chat) is a DegreeSign project: a private
+to-do list PWA with no sign-up. It ships `@degreesign/chat` for replies
+and image descriptions, and `@degreesign/voice` for voice notes.
+
+I wanted an assistant that could read my daily tasks, but I did not want
+to give 100% of my data to big tech. I was also working on a new project
+that had to stay under wraps until its soft launch, so I could not send
+that work to a hosted model. The assistant had to run on the device, and
+it had to be easy for any developer to drop into an app. Most days I have
+that conversation on my phone: a voice note, a transcript, a few tasks,
+all local. DoListy is where that engine got its first real use.
+
+![DoListy assistant answering a question on a phone][dolisty-shot]
+
+[dolisty-shot]: https://degreesign.github.io/ds_chat/case-study-dolisty.png
+
+*A real session on dolisty.com. The green dot is the local model, not a
+server.*
+
+### What it does
+
+- Describes a photo and tags it without uploading it.
+- Turns a voice note into a task through `@degreesign/voice`.
+- Writes titles, tags and a running summary in 19 languages. The persona
+  is the app's; the package adds no identity text.
+- Answers with the network off, from the model already on disk.
+
+### What it costs
+
+- No per-reply cost, no API key, no rate limit. The only bill is the
+  one-time download: about 1.5 GB for Qwen3-VL, 2.0 GB for Gemma 4.
+- An image waits about 70 seconds for its first token on an 8-thread
+  desktop CPU. That is the cost of the CPU vision path, chosen so images
+  work on phones without WebGPU; text takes the GPU path when the browser
+  has one.
+- A 2 GB download resumes from the last committed part. A reload costs at
+  most one part, never the whole file.
+- The gallery describes images in the background while you work.
+
+### How it is wired
+
+- One `createChat` per send, over a prompt assembled from the app's
+  encrypted stores.
+- The reply is committed when `onStatus` reports the end; a newer send
+  drops the stale one.
+- `gpuAdapter()` picks Gemma on WebGPU and Qwen everywhere else.
+- One model stays resident, so a switch reloads the engine but never the
+  file.
+
+**See it work:** open [dolisty.com](https://dolisty.com/#chat) on a phone,
+let the model download once, then turn off the network and ask for a
+summary. Speed numbers are in the
+[web-llm comparison](https://degreesign.github.io/ds_chat/vs_web_llm.html).
 
 ## Enable WebGPU
 
