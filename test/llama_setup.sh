@@ -11,7 +11,7 @@ fi
 # curl -LsSf https://llama.app/install.sh | sh
 
 # Model
-MODEL_BASE="unsloth/Qwen3-VL-2B-Instruct-GGUF:Q3_K_M"
+MODEL_BASE="unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_K_M"
 CONTEXT_LENGTH=160000
 # HF_TOKEN="hf_..." # Optional Hugging Face token
 

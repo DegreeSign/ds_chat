@@ -2,9 +2,8 @@
 // Build the package first: yarn build
 // Usage: CHROME_BIN=chromium node test/live.cjs [port] [debugPort] [model]
 // Optional: LIVE_ONLY=text,image,audio LIVE_TIMEOUT_MS=...
-// The Gemma 4 GPU model covers text, image and audio. The Qwen CPU model
-// covers text and images; its projector shares the model thread budget.
-// The limited Gemma build covers text only.
+// The Gemma 4 GPU model covers text only. The Qwen CPU model covers text and
+// images; its projector shares the model thread budget. Neither covers audio.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -193,16 +192,14 @@ const run = async () => {
     const adapter = await navigator.gpu?.requestAdapter();
     write("adapter=" + (adapter ? adapter.info.vendor + " " + adapter.info.architecture : "none"));
 
-    const model = query.get("model") || "gemma4_e2b";
+    const model = query.get("model") || "gemma4_e2b_limited";
     const chosen = model == "qwen3_vl_2b"
         ? ChatModelId.qwen3_vl_2b
         : model == "qwen3_vl_2b_instruct"
             ? ChatModelId.qwen3_vl_2b_instruct
             : model == "qwen3_vl_2b_instruct_q3"
                 ? ChatModelId.qwen3_vl_2b_instruct_q3
-                : model == "gemma4_e2b_limited"
-                    ? ChatModelId.gemma4_e2b_limited
-                    : ChatModelId.gemma4_e2b;
+                : ChatModelId.gemma4_e2b_limited;
     const state = {};
     write("model=" + model);
     const loaded = await preloadModel({
@@ -517,7 +514,7 @@ const main = async () => {
     });
     await send("Runtime.enable");
     await send("Page.enable");
-    const model = process.argv[4] || "gemma4_e2b";
+    const model = process.argv[4] || "gemma4_e2b_limited";
     const only = process.env.LIVE_ONLY || "";
     const page = process.env.LIVE_PAGE || "index.html";
     await send("Page.navigate", {

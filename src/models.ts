@@ -49,17 +49,7 @@ const
             },
         },
         {
-            id: ChatModelId.gemma4_e2b,
-            reasoning: true,
-            litert: {
-                repo: `litert-community/gemma-4-E2B-it-litert-lm`,
-                file: `gemma-4-E2B-it.litertlm`,
-                vision: true,
-                audio: true,
-            },
-        },
-        {
-            // phone tab skips multimodal build
+            // text-only GPU build
             id: ChatModelId.gemma4_e2b_limited,
             reasoning: true,
             litert: {
@@ -90,15 +80,6 @@ const
         return /Android|iPhone|iPad|iPod|Mobile/i.test(agent)
             || (/Macintosh/.test(agent) && client.maxTouchPoints > 1);
     },
-    /** Gemma build this device loads */
-    deviceModelId = (
-        id?: ChatModelId,
-        mobile: boolean = mobileDevice(),
-    ): ChatModelId | undefined => {
-        if (id == ChatModelId.gemma4_e2b && mobile)
-            return ChatModelId.gemma4_e2b_limited;
-        return id;
-    },
     /** Find catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
         id ? llmModels.find(model => model.id == id) : undefined,
@@ -126,13 +107,13 @@ const
     defaultLlmModel = async (): Promise<ChatModelId | undefined> => {
         if (!defaultModel)
             defaultModel = (async () => (await gpuAdapter()
-                ? deviceModelId(ChatModelId.gemma4_e2b)
+                ? ChatModelId.gemma4_e2b_limited
                 : ChatModelId.qwen3_vl_2b))();
         return await defaultModel;
     },
     /** Resolve requested model or default */
     resolveLlmModel = async (id?: ChatModelId): Promise<ChatModel | undefined> =>
-        findLlmModel(deviceModelId(id ?? await defaultLlmModel())),
+        findLlmModel(id ?? await defaultLlmModel()),
     /** Whether a model accepts images */
     supportsImages = (model: ChatModel): boolean =>
         !!model.cpu?.mmproj || model.litert?.vision === true,
@@ -147,7 +128,6 @@ export {
     litertContextWindow,
     mobileLitertContextWindow,
     mobileDevice,
-    deviceModelId,
     findLlmModel,
     gpuAdapter,
     defaultLlmModel,

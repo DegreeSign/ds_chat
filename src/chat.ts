@@ -1,5 +1,4 @@
 import {
-    deviceModelId,
     findLlmModel,
     resolveLlmModel,
     supportsAudio,
@@ -31,23 +30,22 @@ const statusSnapshot = (
     state: ChatState,
 ): ChatStatusSnapshot => {
     const
-        effective = deviceModelId(model),
-        status = service.status(effective),
-        catalog = findLlmModel(effective),
+        status = service.status(model),
+        catalog = findLlmModel(model),
         availability = status == LlmStatus.ready
             ? ChatStatus.online
             : status == LlmStatus.error || status == LlmStatus.unsupported
                 ? ChatStatus.offline
                 : ChatStatus.away;
     return {
-        ...(effective ? { model: effective } : {}),
+        ...(model ? { model } : {}),
         availability,
         status,
-        backend: service.backend(effective),
+        backend: service.backend(model),
         supportsImages: catalog ? supportsImages(catalog) : false,
         supportsAudio: catalog ? supportsAudio(catalog) : false,
-        ready: service.ready(effective),
-        loading: service.loading(effective),
+        ready: service.ready(model),
+        loading: service.loading(model),
         requesting: state.requesting,
         phase: state.phase,
         percent: state.percent,
@@ -215,9 +213,7 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
 
     return input => {
         active?.controller.abort();
-        const
-            target = deviceModelId(input.model),
-            ready = service.ready(target);
+        const ready = service.ready(input.model);
         const call: ActiveCall = {
             token: ++token,
             input,

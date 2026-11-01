@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0
+
+- Add `gpuAdapter`, the WebGPU probe behind the default model, so a host can
+  check the device before it names a model.
+- Describe with `qwen3_vl_2b_instruct`, the Q4_K_M build, by default;
+  `qwen3_vl_2b_instruct_q3` stays in the catalog as the smaller file.
+- Keep one model in memory. A new load replaces the resident model on either
+  backend, so the CPU describer and the GPU text model no longer stay warm
+  together.
+- Remove `ChatModelId.gemma4_e2b`, the multimodal Gemma build.
+  `gemma4_e2b_limited`, the 2.0 GB text-only build, is the only Gemma model and
+  it loads on a desktop and a phone alike.
+- Drop audio from the catalog, so an audio-only turn reports
+  `Model does not accept audio` and a text turn drops its clip.
+
 ## 1.2.0
 
 - Add `imageReplyTokens`, the default reply budget of one image description and

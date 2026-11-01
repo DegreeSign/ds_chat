@@ -17,7 +17,7 @@ import type {
 const endpoint = `/llama/v1/chat/completions`;
 
 /** Exact model on local server */
-const serverModel = `unsloth/Qwen3-VL-2B-Instruct-GGUF:Q3_K_M`;
+const serverModel = `unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_K_M`;
 
 /** JSON report in results element */
 const report = (value: unknown) => {

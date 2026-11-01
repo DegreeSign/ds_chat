@@ -48,8 +48,8 @@ const imageTemperature = 0.3;
 /** Vision tokens for one image */
 const imageVisionTokens = 192;
 
-/** Describer model, Q3 CPU build */
-const describeModelId = ChatModelId.qwen3_vl_2b_instruct_q3;
+/** Describer model, Q4 CPU build */
+const describeModelId = ChatModelId.qwen3_vl_2b_instruct;
 
 /** System message of the translator */
 const translateSystem = [

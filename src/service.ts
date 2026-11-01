@@ -1,6 +1,5 @@
 import { litertEngine } from './engines/litert';
 import { wllamaEngine } from './engines/wllama';
-import { mobileDevice } from './models';
 import { ChatModelId, LlmBackend, LlmPhase, LlmStatus } from './enums';
 import type {
     ChatModel,
@@ -28,9 +27,7 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
         cpuEngine: LlmEngine = deps.engines?.cpu || wllamaEngine,
         /** GPU engine, overridable by tests */
         gpuEngine: LlmEngine = deps.engines?.litert || litertEngine,
-        /** Mobile device keeps one model */
-        mobile = deps.mobile || mobileDevice,
-        /** Loaded models, one per backend */
+        /** Loaded models, one at a time */
         runtimes = new Map<ChatModelId, LlmRuntime>(),
         /** In-flight loads by backend */
         loads = new Map<ChatModelId, RuntimeLoad>(),
@@ -104,12 +101,6 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 activeModel = [...runtimes.values()].pop()?.model;
             if (!runtimes.size && !loads.size) setStatus(LlmStatus.idle);
             await current.unload();
-        },
-        /** Release backend models; mobile, all */
-        releaseBackend = async (backend: LlmBackend) => {
-            for (const [model, current] of [...runtimes])
-                if (mobile() || current.backend == backend)
-                    await release(model);
         },
         /** Drop every loaded model */
         releaseAll = async () => {
@@ -220,11 +211,8 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 setStatus(LlmStatus.unsupported);
                 return false;
             };
-            // one model per backend
-            // another backend load may overlap
-            const conflicts = [...loads.values(), ...settling.values()]
-                .filter(load => mobile()
-                    || engineFor(load.model)?.backend == engine.backend);
+            // one model at a time
+            const conflicts = [...loads.values(), ...settling.values()];
             for (const conflict of conflicts) abortLoad(conflict.model.id);
             const token = (tokens.get(model.id) ?? 0) + 1;
             tokens.set(model.id, token);
@@ -235,8 +223,8 @@ const createRuntime = (deps: RuntimeDeps = {}): Runtime => {
                 if (token != tokens.get(model.id)) return false;
                 await persistStorage();
                 if (token != tokens.get(model.id)) return false;
-                // a backend holds one model
-                await releaseBackend(engine.backend);
+                // one model stays resident
+                await releaseAll();
                 if (token != tokens.get(model.id)) return false;
                 const cached = await engine.cached(model);
                 if (token != tokens.get(model.id)) return false;

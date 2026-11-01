@@ -31,7 +31,6 @@ import {
 import {
     cpuContextWindow,
     defaultLlmModel,
-    deviceModelId,
     findLlmModel,
     gpuAdapter,
     litertContextWindow,
@@ -345,6 +344,7 @@ const definitions: Array<{
                         `describeImages`,
                         `describeModelId`,
                         `describeTranslated`,
+                        `gpuAdapter`,
                         `imageReplyTokens`,
                         `preloadModel`,
                         `webSearchTool`,
@@ -376,7 +376,6 @@ const definitions: Array<{
                     `qwen3-vl-2b-instruct-q3`,
                     `qwen instruct q3 id`,
                 );
-                assertEqual(ChatModelId.gemma4_e2b, `gemma4-e2b`, `gemma id`);
                 assertEqual(
                     ChatModelId.gemma4_e2b_limited,
                     `gemma4-e2b-limited`,
@@ -400,7 +399,7 @@ const definitions: Array<{
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 5, `catalog size`);
+                assertEqual(llmModels.length, 4, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
                 assertEqual(litertContextWindow, 32768, `gpu window`);
                 assertEqual(
@@ -474,21 +473,12 @@ const definitions: Array<{
                     `q3 projector`,
                 );
                 assertEqual(supportsImages(instructQ3), true, `q3 images`);
-                const gemma = modelOf(ChatModelId.gemma4_e2b);
-                assertEqual(gemma.reasoning, true, `gemma reasoning`);
-                assertEqual(
-                    gemma.litert?.file,
-                    `gemma-4-E2B-it.litertlm`,
-                    `gemma file`,
-                );
-                assertEqual(gemma.litert?.vision, true, `gemma vision`);
-                assertEqual(gemma.litert?.audio, true, `gemma audio`);
                 const limited = modelOf(ChatModelId.gemma4_e2b_limited);
                 assertEqual(limited.reasoning, true, `limited reasoning`);
                 assertEqual(
                     limited.litert?.repo,
-                    gemma.litert?.repo,
-                    `limited shared repo`,
+                    `litert-community/gemma-4-E2B-it-litert-lm`,
+                    `limited repo`,
                 );
                 assertEqual(
                     limited.litert?.file,
@@ -497,8 +487,6 @@ const definitions: Array<{
                 );
                 assertEqual(limited.litert?.vision, false, `limited vision`);
                 assertEqual(limited.litert?.audio, false, `limited audio`);
-                assertEqual(supportsImages(gemma), true, `gpu images`);
-                assertEqual(supportsAudio(gemma), true, `gpu audio`);
                 assertEqual(supportsImages(limited), false, `limited images`);
                 assertEqual(supportsAudio(limited), false, `limited audio support`);
                 const textOnly: ChatModel = {
@@ -523,7 +511,7 @@ const definitions: Array<{
                 };
                 assertEqual(supportsAudio(cpuAudio), true, `cpu audio`);
                 const textOnlyGpu: ChatModel = {
-                    id: ChatModelId.gemma4_e2b,
+                    id: ChatModelId.gemma4_e2b_limited,
                     reasoning: false,
                     litert: {
                         repo: `text-only`,
@@ -539,7 +527,7 @@ const definitions: Array<{
                 );
                 assertEqual(supportsAudio(textOnlyGpu), false, `gpu text audio`);
                 const audioGpu: ChatModel = {
-                    id: ChatModelId.gemma4_e2b,
+                    id: ChatModelId.gemma4_e2b_limited,
                     reasoning: false,
                     litert: {
                         repo: `audio`,
@@ -565,7 +553,7 @@ const definitions: Array<{
                 assertEqual(
                     picked,
                     await gpuAdapter()
-                        ? deviceModelId(ChatModelId.gemma4_e2b)
+                        ? ChatModelId.gemma4_e2b_limited
                         : ChatModelId.qwen3_vl_2b,
                     `default device pick`,
                 );
@@ -574,11 +562,6 @@ const definitions: Array<{
                     (await resolveLlmModel(ChatModelId.qwen3_vl_2b))?.id,
                     ChatModelId.qwen3_vl_2b,
                     `asked model`,
-                );
-                assertEqual(
-                    (await resolveLlmModel(ChatModelId.gemma4_e2b))?.id,
-                    deviceModelId(ChatModelId.gemma4_e2b),
-                    `asked gemma`,
                 );
                 assertEqual(
                     (await resolveLlmModel(ChatModelId.gemma4_e2b_limited))?.id,
@@ -666,32 +649,6 @@ const definitions: Array<{
                     0,
                     `mobile gpu window step`,
                 );
-                assertEqual(
-                    deviceModelId(ChatModelId.gemma4_e2b),
-                    ChatModelId.gemma4_e2b,
-                    `desktop gemma`,
-                );
-                assertEqual(
-                    deviceModelId(ChatModelId.gemma4_e2b_limited),
-                    ChatModelId.gemma4_e2b_limited,
-                    `desktop limited build`,
-                );
-                assertEqual(
-                    deviceModelId(ChatModelId.gemma4_e2b, true),
-                    ChatModelId.gemma4_e2b_limited,
-                    `mobile gemma swap`,
-                );
-                assertEqual(
-                    deviceModelId(ChatModelId.gemma4_e2b_limited, true),
-                    ChatModelId.gemma4_e2b_limited,
-                    `mobile limited`,
-                );
-                assertEqual(
-                    deviceModelId(ChatModelId.qwen3_vl_2b, true),
-                    ChatModelId.qwen3_vl_2b,
-                    `mobile qwen`,
-                );
-                assertEqual(deviceModelId(undefined, true), undefined, `no model`);
                 assertEqual(
                     supportsImages(modelOf(ChatModelId.gemma4_e2b_limited)),
                     false,
@@ -1252,7 +1209,16 @@ const definitions: Array<{
             name: `litert/vision budget`,
             run: () => {
                 const
-                    model = modelOf(ChatModelId.gemma4_e2b),
+                    model: ChatModel = {
+                        id: ChatModelId.gemma4_e2b_limited,
+                        reasoning: false,
+                        litert: {
+                            repo: `vision`,
+                            file: `vision.litertlm`,
+                            vision: true,
+                            audio: true,
+                        },
+                    },
                     mod = { Backend: { GPU: 3, CPU: 1 } } as unknown as LitertModule,
                     source = new ReadableStream<Uint8Array>(),
                     vision = litertSettings({
@@ -1264,7 +1230,7 @@ const definitions: Array<{
                     }),
                     text = litertSettings({
                         model: {
-                            id: ChatModelId.gemma4_e2b,
+                            id: ChatModelId.gemma4_e2b_limited,
                             reasoning: false,
                             litert: {
                                 repo: `text-only`,
@@ -1280,7 +1246,7 @@ const definitions: Array<{
                     }),
                     audio = litertSettings({
                         model: {
-                            id: ChatModelId.gemma4_e2b,
+                            id: ChatModelId.gemma4_e2b_limited,
                             reasoning: false,
                             litert: {
                                 repo: `audio-only`,
@@ -1385,7 +1351,7 @@ const definitions: Array<{
             name: `stream/stall`,
             run: async () => {
                 const
-                    model = modelOf(ChatModelId.gemma4_e2b),
+                    model = modelOf(ChatModelId.gemma4_e2b_limited),
                     silent = async function* () {
                         await new Promise(() => { });
                     },
@@ -1616,7 +1582,7 @@ const definitions: Array<{
                     }),
                     progress: number[] = [],
                     loaded = await runtime.load({
-                        model: modelOf(ChatModelId.gemma4_e2b),
+                        model: modelOf(ChatModelId.gemma4_e2b_limited),
                         limits: resolveLlmLimits(),
                         onProgress: value => progress.push(value),
                     });
@@ -1624,7 +1590,7 @@ const definitions: Array<{
                 assertEqual(runtime.ready(), true, `gpu ready`);
                 assertEqual(runtime.backend(), LlmBackend.gpu, `gpu backend`);
                 assertEqual(calls.start, 1, `gpu started`);
-                assertEqual(models[0].id, ChatModelId.gemma4_e2b, `gpu model`);
+                assertEqual(models[0].id, ChatModelId.gemma4_e2b_limited, `gpu model`);
                 assertEqual(progress[progress.length - 1], 1, `gpu progress`);
                 const
                     reasoned: string[] = [],
@@ -1644,8 +1610,10 @@ const definitions: Array<{
             name: `runtime/switch keeps caches`,
             run: async () => {
                 const
-                    { runtime, calls, models } = runtimeWith({
-                        backend: LlmBackend.gpu,
+                    cpu = createFakeEngine({ backend: LlmBackend.cpu }),
+                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine, litert: gpu.engine },
                     }),
                     load = (id: ChatModelId) => runtime.load({
                         model: modelOf(id),
@@ -1653,31 +1621,29 @@ const definitions: Array<{
                         onProgress: () => { },
                     });
                 assertEqual(
-                    await load(ChatModelId.gemma4_e2b),
+                    await load(ChatModelId.qwen3_vl_2b),
                     true,
-                    `desktop loaded`,
+                    `cpu loaded`,
                 );
                 assertEqual(
                     await load(ChatModelId.gemma4_e2b_limited),
                     true,
-                    `limited loaded`,
+                    `gpu loaded`,
                 );
                 assertEqual(
-                    await load(ChatModelId.gemma4_e2b),
+                    await load(ChatModelId.qwen3_vl_2b),
                     true,
-                    `desktop reloaded`,
+                    `cpu reloaded`,
                 );
-                assertEqual(calls.start, 3, `three builds started`);
-                assertEqual(calls.unload, 2, `previous builds released`);
-                assertEqual(calls.purge, 0, `no cache deleted`);
-                assertEqual(
-                    models[2].id,
-                    ChatModelId.gemma4_e2b,
-                    `desktop build`,
-                );
+                assertEqual(cpu.calls.start, 2, `two cpu builds started`);
+                assertEqual(gpu.calls.start, 1, `one gpu build started`);
+                assertEqual(cpu.calls.unload, 1, `cpu released once`);
+                assertEqual(gpu.calls.unload, 1, `gpu released once`);
+                assertEqual(cpu.calls.purge, 0, `no cpu cache deleted`);
+                assertEqual(gpu.calls.purge, 0, `no gpu cache deleted`);
                 assertEqual(
                     runtime.model()?.id,
-                    ChatModelId.gemma4_e2b,
+                    ChatModelId.qwen3_vl_2b,
                     `active build`,
                 );
             },
@@ -1740,7 +1706,7 @@ const definitions: Array<{
             run: async () => {
                 const cpuOnly = runtimeWith({ backend: LlmBackend.cpu });
                 const cpuLoaded = await cpuOnly.runtime.load({
-                    model: modelOf(ChatModelId.gemma4_e2b),
+                    model: modelOf(ChatModelId.gemma4_e2b_limited),
                     limits: resolveLlmLimits(),
                     onProgress: () => { },
                 });
@@ -1757,39 +1723,36 @@ const definitions: Array<{
             },
         },
         {
-            name: `runtime/resident backends`,
+            name: `runtime/single resident`,
             run: async () => {
                 const
                     cpu = createFakeEngine({ backend: LlmBackend.cpu }),
                     gpu = createFakeEngine({ backend: LlmBackend.gpu }),
                     runtime = createRuntime({
                         engines: { cpu: cpu.engine, litert: gpu.engine },
-                        mobile: () => false,
                     }),
                     cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
-                    gpuModel = modelOf(ChatModelId.gemma4_e2b);
-                assertEqual(await runtime.load({
-                    model: cpuModel,
-                    limits: resolveLlmLimits(),
-                    onProgress: () => { },
-                }), true, `cpu loaded`);
-                assertEqual(await runtime.load({
-                    model: gpuModel,
-                    limits: resolveLlmLimits(),
-                    onProgress: () => { },
-                }), true, `gpu loaded`);
-                assertEqual(cpu.calls.unload, 0, `cpu stays resident`);
-                assertEqual(runtime.ready(cpuModel.id), true, `cpu ready`);
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b_limited),
+                    load = (model: typeof cpuModel) => runtime.load({
+                        model,
+                        limits: resolveLlmLimits(),
+                        onProgress: () => { },
+                    });
+                assertEqual(await load(cpuModel), true, `cpu loaded`);
+                assertEqual(await load(gpuModel), true, `gpu loaded`);
+                assertEqual(cpu.calls.unload, 1, `cpu released`);
+                assertEqual(runtime.ready(cpuModel.id), false, `cpu gone`);
                 assertEqual(runtime.ready(gpuModel.id), true, `gpu ready`);
                 assertEqual(
-                    runtime.backend(cpuModel.id), LlmBackend.cpu, `cpu backend`);
-                assertEqual(
-                    runtime.backend(gpuModel.id), LlmBackend.gpu, `gpu backend`);
-                assertEqual(
-                    runtime.status(cpuModel.id),
-                    LlmStatus.ready,
-                    `cpu status`,
+                    runtime.model()?.id,
+                    gpuModel.id,
+                    `gpu active`,
                 );
+                assertEqual(await load(cpuModel), true, `cpu reloaded`);
+                assertEqual(gpu.calls.unload, 1, `gpu released`);
+                assertEqual(cpu.calls.unload, 1, `cpu stayed until reload`);
+                assertEqual(runtime.ready(cpuModel.id), true, `cpu ready`);
+                assertEqual(runtime.ready(gpuModel.id), false, `gpu gone`);
                 await runtime.chat({
                     model: cpuModel.id,
                     messages: [userMessage(`hi`)],
@@ -1801,17 +1764,12 @@ const definitions: Array<{
                 assertEqual(cpu.calls.chat, 1, `cpu chat`);
                 assertEqual(gpu.calls.chat, 0, `gpu untouched`);
                 await runtime.unload(cpuModel.id);
-                assertEqual(cpu.calls.unload, 1, `cpu released`);
-                assertEqual(runtime.ready(gpuModel.id), true, `gpu survives`);
-                assertEqual(runtime.model()?.id, gpuModel.id, `gpu active`);
-                assertEqual(runtime.status(), LlmStatus.ready, `still ready`);
-                await runtime.unload();
-                assertEqual(gpu.calls.unload, 1, `gpu released`);
+                assertEqual(cpu.calls.unload, 2, `cpu released`);
                 assertEqual(runtime.status(), LlmStatus.idle, `idle at last`);
             },
         },
         {
-            name: `runtime/parallel backend loads`,
+            name: `runtime/serialized backend loads`,
             run: async () => {
                 const
                     gate = { cpu: deferred(), gpu: deferred() },
@@ -1825,41 +1783,33 @@ const definitions: Array<{
                     }),
                     runtime = createRuntime({
                         engines: { cpu: cpu.engine, litert: gpu.engine },
-                        mobile: () => false,
                     }),
                     cpuModel = modelOf(ChatModelId.qwen3_vl_2b_instruct_q3),
-                    gpuModel = modelOf(ChatModelId.gemma4_e2b),
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b_limited),
                     cpuLoad = runtime.load({
                         model: cpuModel,
                         limits: resolveLlmLimits(),
                         onProgress: () => { },
-                    }),
-                    gpuLoad = runtime.load({
-                        model: gpuModel,
-                        limits: resolveLlmLimits(),
-                        onProgress: () => { },
                     });
-                await waitFor(
-                    () => cpu.calls.start == 1 && gpu.calls.start == 1,
-                    `both loads started`,
-                );
+                await waitFor(() => cpu.calls.start == 1, `cpu load started`);
+                const gpuLoad = runtime.load({
+                    model: gpuModel,
+                    limits: resolveLlmLimits(),
+                    onProgress: () => { },
+                });
                 gate.cpu.resolve();
+                assertEqual(await cpuLoad, false, `cpu replaced`);
+                await waitFor(() => gpu.calls.start == 1, `gpu load started`);
                 gate.gpu.resolve();
-                assertEqual(await cpuLoad, true, `cpu loaded`);
                 assertEqual(await gpuLoad, true, `gpu loaded`);
-                assertEqual(runtime.ready(cpuModel.id), true, `cpu ready`);
+                assertEqual(runtime.ready(cpuModel.id), false, `cpu gone`);
                 assertEqual(runtime.ready(gpuModel.id), true, `gpu ready`);
-                assertEqual(
-                    runtime.status(cpuModel.id),
-                    LlmStatus.ready,
-                    `cpu status`,
-                );
                 assertEqual(
                     runtime.status(gpuModel.id),
                     LlmStatus.ready,
                     `gpu status`,
                 );
-                assertEqual(cpu.calls.unload, 0, `cpu stays resident`);
+                assertEqual(cpu.calls.unload, 0, `cpu never loaded`);
                 assertEqual(gpu.calls.unload, 0, `gpu stays resident`);
             },
         },
@@ -1913,8 +1863,8 @@ const definitions: Array<{
                         mobile: () => false,
                     }),
                     cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
-                    first = modelOf(ChatModelId.gemma4_e2b),
-                    second = modelOf(ChatModelId.gemma4_e2b_limited);
+                    first = modelOf(ChatModelId.gemma4_e2b_limited),
+                    second = modelOf(ChatModelId.qwen3_vl_2b);
                 await runtime.load({
                     model: cpuModel,
                     limits: resolveLlmLimits(),
@@ -1930,7 +1880,7 @@ const definitions: Array<{
                     limits: resolveLlmLimits(),
                     onProgress: () => { },
                 });
-                assertEqual(cpu.calls.unload, 0, `cpu stays`);
+                assertEqual(cpu.calls.unload, 1, `cpu released`);
                 assertEqual(gpu.calls.unload, 1, `first gpu released`);
                 assertEqual(runtime.ready(first.id), false, `first gone`);
                 assertEqual(runtime.ready(second.id), true, `second ready`);
@@ -1948,7 +1898,7 @@ const definitions: Array<{
                         mobile: () => true,
                     }),
                     cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
-                    gpuModel = modelOf(ChatModelId.gemma4_e2b);
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b_limited);
                 await runtime.load({
                     model: cpuModel,
                     limits: resolveLlmLimits(),
@@ -2259,17 +2209,17 @@ const definitions: Array<{
                     }),
                     statuses: ChatStatusSnapshot[] = [],
                     loaded = await createPreloadOn(runtime)({
-                        model: ChatModelId.gemma4_e2b,
+                        model: ChatModelId.gemma4_e2b_limited,
                         onStatus: value => statuses.push(value),
                     });
                 assertEqual(loaded, true, `gpu preloaded`);
                 assertEqual(calls.start, 1, `gpu start`);
                 const last = statuses[statuses.length - 1];
                 assertEqual(last.ready, true, `gpu ready`);
-                assertEqual(last.model, ChatModelId.gemma4_e2b, `gpu model`);
+                assertEqual(last.model, ChatModelId.gemma4_e2b_limited, `gpu model`);
                 assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
-                assertEqual(last.supportsImages, true, `gpu images`);
-                assertEqual(last.supportsAudio, true, `gpu audio`);
+                assertEqual(last.supportsImages, false, `gpu images`);
+                assertEqual(last.supportsAudio, false, `gpu audio`);
                 assertEqual(last.error, undefined, `gpu no error`);
             },
         },
@@ -2417,7 +2367,7 @@ const definitions: Array<{
                 );
                 assertEqual(
                     statuses[0].model,
-                    ChatModelId.qwen3_vl_2b_instruct_q3,
+                    ChatModelId.qwen3_vl_2b_instruct,
                     `describer status`,
                 );
                 assertEqual(statuses[0].requesting, false, `idle status`);
@@ -2478,7 +2428,7 @@ const definitions: Array<{
                         });
                     assertEqual(
                         cpu.models[0].id,
-                        ChatModelId.qwen3_vl_2b_instruct_q3,
+                        ChatModelId.qwen3_vl_2b_instruct,
                         `describer model`,
                     );
                     assertEqual(
@@ -2741,7 +2691,7 @@ const definitions: Array<{
                     );
                     assertEqual(
                         statuses[statuses.length - 1].model,
-                        ChatModelId.qwen3_vl_2b_instruct_q3,
+                        ChatModelId.qwen3_vl_2b_instruct,
                         `describer final`,
                     );
                 }, null);
@@ -3037,24 +2987,24 @@ const definitions: Array<{
                         chatText: `seen`,
                     });
                 chat({
-                    model: ChatModelId.gemma4_e2b,
+                    model: ChatModelId.gemma4_e2b_limited,
                     messages: [{ role: LlmRole.user, content: `what`, images: [image] }],
                     onResponse: value => replies.push(value),
                     onStatus: value => statuses.push(value),
                 });
                 await waitFor(() => replies[replies.length - 1] == `seen`, `gpu reply`);
                 assertEqual(requests.length, 1, `gpu chat`);
-                assertEqual(requests[0].messages[0].images?.[0], image, `gpu image`);
+                assertEqual(requests[0].messages[0].images, undefined, `gpu image dropped`);
                 const last = statuses[statuses.length - 1];
-                assertEqual(statuses[0].model, ChatModelId.gemma4_e2b, `gpu model start`);
+                assertEqual(statuses[0].model, ChatModelId.gemma4_e2b_limited, `gpu model start`);
                 assertEqual(last.backend, LlmBackend.gpu, `gpu backend`);
-                assertEqual(last.supportsImages, true, `gpu supports images`);
-                assertEqual(last.supportsAudio, true, `gpu supports audio`);
+                assertEqual(last.supportsImages, false, `gpu supports images`);
+                assertEqual(last.supportsAudio, false, `gpu supports audio`);
                 assertEqual(last.error, undefined, `gpu no error`);
             },
         },
         {
-            name: `chat/mobile gemma build`,
+            name: `chat/mobile build`,
             run: async () => {
                 const
                     nav = navigator as Navigator & {
@@ -3080,7 +3030,7 @@ const definitions: Array<{
                             chatText: `seen`,
                         });
                     chat({
-                        model: ChatModelId.gemma4_e2b,
+                        model: ChatModelId.gemma4_e2b_limited,
                         messages: [userMessage(`hi`)],
                         onResponse: () => { },
                         onStatus: value => statuses.push(value),
@@ -3194,7 +3144,7 @@ const definitions: Array<{
                     gpuStatuses: ChatStatusSnapshot[] = [],
                     gpuReplies: string[] = [];
                 gpu.chat({
-                    model: ChatModelId.gemma4_e2b,
+                    model: ChatModelId.gemma4_e2b_limited,
                     messages: [{ role: LlmRole.user, content: `listen`, audio: [audio] }],
                     onResponse: value => gpuReplies.push(value),
                     onStatus: value => gpuStatuses.push(value),
@@ -3204,27 +3154,33 @@ const definitions: Array<{
                     `gpu audio reply`,
                 );
                 assertEqual(gpu.requests.length, 1, `gpu audio chat`);
-                assertEqual(
-                    gpu.requests[0].messages[0].audio?.[0],
-                    audio,
-                    `gpu audio passed`,
-                );
+                assertEqual(gpu.requests[0].messages[0].audio, undefined, `gpu audio dropped`);
                 assertEqual(gpu.requests[0].messages[0].content, `listen`, `gpu audio text`);
-                assertEqual(gpuStatuses[0].supportsAudio, true, `gpu audio status`);
+                assertEqual(gpuStatuses[0].supportsAudio, false, `gpu audio status`);
                 assertEqual(
                     gpuStatuses[gpuStatuses.length - 1].error,
                     undefined,
                     `gpu audio no error`,
                 );
-                const only = chatWith({ backend: LlmBackend.gpu, chatText: `heard` });
+                const
+                    only = chatWith({ backend: LlmBackend.gpu, chatText: `heard` }),
+                    onlyStatuses: ChatStatusSnapshot[] = [];
                 only.chat({
-                    model: ChatModelId.gemma4_e2b,
+                    model: ChatModelId.gemma4_e2b_limited,
                     messages: [{ role: LlmRole.user, content: ``, audio: [audio] }],
                     onResponse: () => { },
+                    onStatus: value => onlyStatuses.push(value),
                 });
-                await waitFor(() => only.requests.length == 1, `audio only chat`);
-                assertEqual(only.requests[0].messages[0].audio?.length, 1, `only audio passed`);
-                assertEqual(only.requests[0].messages[0].content, ``, `audio no text`);
+                await waitFor(
+                    () => onlyStatuses.some(value => !!value.error),
+                    `audio only rejected`,
+                );
+                assertEqual(only.requests.length, 0, `no audio only chat`);
+                assertEqual(
+                    onlyStatuses[onlyStatuses.length - 1].error,
+                    `Model does not accept audio`,
+                    `audio only error`,
+                );
                 const
                     cpu = chatWith(),
                     cpuStatuses: ChatStatusSnapshot[] = [];
@@ -3428,7 +3384,7 @@ const definitions: Array<{
                         mobile: () => false,
                     }),
                     cpuModel = modelOf(ChatModelId.qwen3_vl_2b),
-                    gpuModel = modelOf(ChatModelId.gemma4_e2b);
+                    gpuModel = modelOf(ChatModelId.gemma4_e2b_limited);
                 await runtime.load({
                     model: cpuModel,
                     limits: resolveLlmLimits(),
@@ -3665,7 +3621,7 @@ const definitions: Array<{
                     instructQ3 = visionLimits(
                         modelOf(ChatModelId.qwen3_vl_2b_instruct_q3)),
                     thinking = visionLimits(modelOf(ChatModelId.qwen3_vl_2b)),
-                    text = visionLimits(modelOf(ChatModelId.gemma4_e2b));
+                    text = visionLimits(modelOf(ChatModelId.gemma4_e2b_limited));
                 assertEqual(instruct.image_min_tokens, 16, `instruct min`);
                 assertEqual(instruct.image_max_tokens, 128, `instruct max`);
                 assertEqual(instructQ3.image_min_tokens, 16, `q3 min`);

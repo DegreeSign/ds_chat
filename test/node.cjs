@@ -62,7 +62,7 @@ const main = async () => {
     const gpuStatuses = [];
     const gpuReplies = [];
     createChat({
-        model: ChatModelId.gemma4_e2b,
+        model: ChatModelId.gemma4_e2b_limited,
         messages: [user(`hello`)],
         onResponse: text => gpuReplies.push(text),
         onStatus: snapshot => gpuStatuses.push(snapshot),
@@ -125,7 +125,7 @@ const main = async () => {
 
     const gpuPreloadStatuses = [];
     const gpuPreloaded = await preloadModel({
-        model: ChatModelId.gemma4_e2b,
+        model: ChatModelId.gemma4_e2b_limited,
         onStatus: snapshot => gpuPreloadStatuses.push(snapshot),
     });
     assertEqual(gpuPreloaded, false, `no gpu preload without webgpu`);
@@ -157,11 +157,10 @@ const main = async () => {
     assertEqual(esm.LlmRole.user, LlmRole.user, `esm named export`);
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);
     assertEqual(esm.ChatModelId.qwen3_vl_2b, ChatModelId.qwen3_vl_2b, `esm model id`);
-    assertEqual(esm.ChatModelId.gemma4_e2b, ChatModelId.gemma4_e2b, `esm gemma id`);
     assertEqual(
         esm.ChatModelId.gemma4_e2b_limited,
         ChatModelId.gemma4_e2b_limited,
-        `esm limited gemma id`,
+        `esm gemma id`,
     );
 
     assertEqual(typeof builtinTools, `function`, `builtin tools`);

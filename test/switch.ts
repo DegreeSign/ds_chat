@@ -156,43 +156,43 @@ const run = async () => {
 
     // 1. Gemma on WebGPU
     const
-        gemma = await load(ChatModelId.gemma4_e2b),
-        gemmaReply = gemma.loaded ? await ask(ChatModelId.gemma4_e2b) : undefined;
+        gemma = await load(ChatModelId.gemma4_e2b_limited),
+        gemmaReply = gemma.loaded ? await ask(ChatModelId.gemma4_e2b_limited) : undefined;
     snapshots.push(await memory(`gemma loaded`));
     record(`gemma loads`, gemma.loaded
         && gemma.status == LlmStatus.ready
-        && gemma.model == ChatModelId.gemma4_e2b
+        && gemma.model == ChatModelId.gemma4_e2b_limited
         && !!gemmaReply?.reply, { gemma, ask: gemmaReply });
 
-    // 2. Qwen CPU joins Gemma
+    // 2. Qwen CPU replaces Gemma
     const
         qwen = await load(ChatModelId.qwen3_vl_2b),
         qwenReply = qwen.loaded ? await ask(ChatModelId.qwen3_vl_2b) : undefined;
     snapshots.push(await memory(`qwen loaded`));
-    record(`qwen joins gemma`, qwen.loaded
+    record(`qwen replaces gemma`, qwen.loaded
         && qwen.status == LlmStatus.ready
         && qwen.model == ChatModelId.qwen3_vl_2b
         && qwen.backend == `cpu`
         && !!qwenReply?.reply
-        && !events.includes(`unload gpu:${ChatModelId.gemma4_e2b}`),
+        && events.includes(`unload gpu:${ChatModelId.gemma4_e2b_limited}`),
     { qwen, ask: qwenReply });
 
-    // 3. Gemma stays beside Qwen
+    // 3. Gemma replaces Qwen
     const
-        back = await load(ChatModelId.gemma4_e2b),
-        backReply = back.loaded ? await ask(ChatModelId.gemma4_e2b) : undefined;
+        back = await load(ChatModelId.gemma4_e2b_limited),
+        backReply = back.loaded ? await ask(ChatModelId.gemma4_e2b_limited) : undefined;
     snapshots.push(await memory(`gemma reloaded`));
-    record(`gemma stays resident`, back.loaded
-        && back.model == ChatModelId.gemma4_e2b
+    record(`gemma replaces qwen`, back.loaded
+        && back.model == ChatModelId.gemma4_e2b_limited
         && back.backend == `gpu`
         && !!backReply?.reply
-        && !events.includes(`unload cpu:${ChatModelId.qwen3_vl_2b}`),
+        && events.includes(`unload cpu:${ChatModelId.qwen3_vl_2b}`),
     { back, ask: backReply });
 
     // 4. Same model is reused
     const
         before = events.length,
-        repeat = runtime.ready() ? await load(ChatModelId.gemma4_e2b) : undefined;
+        repeat = runtime.ready() ? await load(ChatModelId.gemma4_e2b_limited) : undefined;
     record(`same model reuses runtime`, !!repeat?.loaded
         && events.length == before
         && repeat.elapsed < 1000, { repeat, addedEvents: events.slice(before) });
@@ -230,11 +230,13 @@ const run = async () => {
         events,
     });
 
-    record(`unload releases both backends`, same(events, [
-        `start gpu:${ChatModelId.gemma4_e2b}`,
+    record(`unload releases every backend`, same(events, [
+        `start gpu:${ChatModelId.gemma4_e2b_limited}`,
         `start cpu:${ChatModelId.qwen3_vl_2b}`,
-        `unload gpu:${ChatModelId.gemma4_e2b}`,
+        `unload gpu:${ChatModelId.gemma4_e2b_limited}`,
+        `start gpu:${ChatModelId.gemma4_e2b_limited}`,
         `unload cpu:${ChatModelId.qwen3_vl_2b}`,
+        `unload gpu:${ChatModelId.gemma4_e2b_limited}`,
     ]), { events });
     record(`no cache purged`, !events.some(event => event.startsWith(`purge`)),
         { events });

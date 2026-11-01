@@ -9,8 +9,8 @@ imageRules: string,
 imageNote = "Describe all elements of the image.";
 /** Reply budget, about 100 words */
 declare const imageReplyTokens = 128;
-/** Describer model, Q3 CPU build */
-declare const describeModelId = ChatModelId.qwen3_vl_2b_instruct_q3;
+/** Describer model, Q4 CPU build */
+declare const describeModelId = ChatModelId.qwen3_vl_2b_instruct;
 /** Build descriptions over one runtime */
 declare const createDescribeOn: (service: Runtime) => (input: DescribeImagesInput) => Promise<ImageDescription[]>;
 /** Build translations over one runtime */

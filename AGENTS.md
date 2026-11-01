@@ -51,9 +51,9 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   `package.json` node in the same edit as `package.json`.
 - Model weights are never stored in the repository. The engines own their
   caches.
-- The instruct describer stays `qwen3-vl-2b-instruct` at its Q3 build. It is
-  chosen on purpose to fit on mobile devices. Never suggest or swap in a
-  stronger or larger model.
+- `describeImages` describes with `qwen3-vl-2b-instruct`, its Q4_K_M build.
+  `qwen3-vl-2b-instruct-q3` stays in the catalog as the smaller Q3_K_M file
+  for hosts that need it. Never suggest or swap in a larger model.
 - Never leave `dist/` in the worktree and never add it to a change. The owner
   generates and adds the build output after validating the source. If a test
   needs the bundles, build, run the check, then delete `dist/`.
@@ -92,7 +92,7 @@ Headless browser suite, for any runtime change:
 
 Manual instruct server, for the live and image suites only:
 
-- `yarn test:instruct` runs `llama serve` with the Qwen3-VL 2B Instruct Q3_K_M
+- `yarn test:instruct` runs `llama serve` with the Qwen3-VL 2B Instruct Q4_K_M
   build on `http://127.0.0.1:8080`, on CPU with a 160k context and 4 threads.
   The fake-engine harness never needs it, and no test may start it.
 - llama.cpp runs about 10x faster than wllama, so prefer the live server

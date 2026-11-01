@@ -15,6 +15,7 @@ with auto resume for low network connections.
 [![node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](#faq)
 [![types](https://img.shields.io/badge/types-included-brightgreen.svg)](#faq)
 [![architecture](https://img.shields.io/badge/architecture-view-blue.svg)](https://degreesign.github.io/ds_chat/architecture.html)
+[![comparison](https://img.shields.io/badge/comparison-web--llm-blue.svg)](https://degreesign.github.io/ds_chat/vs_web_llm.html)
 
 ## Table of contents
 
@@ -46,7 +47,7 @@ with auto resume for low network connections.
 - Images: a user turn can carry image URLs, sent only to a vision model and
   capped by the prompt budgets.
 - Audio: a user turn can carry an audio URL, sent only to a model with audio
-  support and capped by the prompt budgets.
+  support. No model in the catalog has an audio encoder.
 - Reusable: the loaded model stays in memory for the next call.
 - Typed: written in TypeScript with declarations for every export.
 - Portable: importing and calling works in browsers, workers, React and Node.
@@ -133,38 +134,28 @@ second, measured from the first token so prompt processing is excluded.
 Attach images to a user turn with `images: [dataUrl]`. The package sends them
 only to a model with vision support, fits each image to 128 to 136 vision
 tokens, snaps both sides to multiples of 32 px, crops the remainder, and caps
-the number with `limits.maxImages`. The WebGPU engine asks LiteRT for the
-smallest Gemma 4 vision budget (70 tokens, 630 patches), so it center-crops to a
-384 x 384 square instead. On a phone or tablet a Gemma request resolves to
-`gemma4_e2b_limited`, the text-only browser build, so images there go through
-`qwen3_vl_2b` instead.
+the number with `limits.maxImages`. `qwen3_vl_2b` is the vision model in the
+catalog, and it runs on the CPU engine. A turn sent to a model without vision
+drops its images when the turn also has text, and an image-only turn reports
+`Model does not accept images`.
 
-Attach a recording with `audio: [dataUrl]`. Gemma 4 E2B accepts WAV, MP3 and
-FLAC on the desktop WebGPU engine and loads its audio encoder on demand. A short
-16 kHz mono WAV is the best input. `limits.maxAudio` caps the clips (default 1).
-A model without audio drops the clip when the turn also has text; an audio-only
-turn reports `Model does not accept audio`. On a phone or tablet
-`gemma4_e2b_limited` is text only, so audio follows the same rule as images
-there. The package does not transcode, so the host supplies one of those
-formats.
+Attach a recording with `audio: [dataUrl]`. No model in the catalog has an
+audio encoder, so a text turn drops the clip and an audio-only turn reports
+`Model does not accept audio`. `limits.maxAudio` still caps the clips
+(default 1).
 
 The package never writes storage, so the host appends the user message before
 the call and appends the assistant message after the last `onResponse`.
 
 ## Enable WebGPU
 
-A request without `model` picks Gemma when the browser exposes a WebGPU adapter
-and `qwen3_vl_2b` when it does not. A phone or tablet asking for Gemma gets
-`gemma4_e2b_limited`, the 2.0 GB text-only browser build
-(`gemma-4-E2B-it-gpu.litertlm`); a desktop gets `gemma4_e2b`, the 2.6 GB
-multimodal build with vision and audio. The downgrade applies to `gemma4_e2b`
-alone: an explicit `gemma4_e2b_limited` loads the smaller build on every
-device, so a desktop can keep the text-only file too. Once a model is requested
-or resolved, every status snapshot reports the build that runs in `model`, so a
-host that asks for `gemma4_e2b` on a phone reads `gemma4-e2b-limited` back.
-Hosts that need images on mobile pass `qwen3_vl_2b`; audio is desktop only. The
-GPU engine is far faster on a desktop, so check the browser before blaming the
-package:
+A request without `model` picks `gemma4_e2b_limited` when the browser exposes a
+WebGPU adapter and `qwen3_vl_2b` when it does not. The Gemma build is the 2.0 GB
+text-only `gemma-4-E2B-it-gpu.litertlm`, and it is the only WebGPU model in the
+catalog, so it loads on a desktop and on a phone alike. Every status snapshot
+reports the build that runs in `model`. Hosts that need images pass
+`qwen3_vl_2b`. The GPU engine is far faster on a desktop, so check the browser
+before blaming the package:
 
 ```js
 // Run in the console of the page that loads the package
@@ -217,19 +208,14 @@ CPU, not the GPU. Remove it when measuring speed. Headless Chromium hides
 `--enable-features=Vulkan,WebGPU` and `--use-angle=vulkan`; check the adapter
 there too, because a missing adapter silently selects the CPU model.
 
-### GPU memory, images and audio
+### GPU memory
 
-The WebGPU engine keeps the model, its KV cache and the vision encoder in GPU
-memory. The vision encoder loads on the first image turn. The audio encoder
-runs on the CPU backend the Gemma 4 build requires and loads on the first audio
-turn. A card that is already busy can lose the device (`VK_ERROR_DEVICE_LOST`)
-on the first image turn. The package requests the smallest Gemma 4 vision
-budget, 70 tokens and 630 patches, so the encoder runs one small signature and
-the crop is resized to 384 x 384 rather than the full 768 x 768. If the error
-still appears, close other GPU tabs, unload the model, or switch to the CPU
-model. A lost device needs a page or model reload; later calls cannot reuse it.
-A phone or tablet resolves Gemma to the text-only browser build, so it never
-starts the vision or audio encoder.
+The WebGPU engine keeps the model and its KV cache in GPU memory. The Gemma
+build carries no vision or audio encoder, so it never starts one and never
+resizes an image. A card that is already busy can lose the device
+(`VK_ERROR_DEVICE_LOST`) during a long generation. If the error appears, close
+other GPU tabs, unload the model, or switch to the CPU model. A lost device
+needs a page or model reload; later calls cannot reuse it.
 
 While a reply streams, the GPU engine rests after every token readback, so the
 card stays near 70% of wall time instead of pegging at 100% and starving the
@@ -247,16 +233,16 @@ describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
 describeModelId: ChatModelId
 imageReplyTokens: number
+gpuAdapter(): Promise<boolean>
 clearModelCache(): Promise<void>
 ```
 
 Call it once per response. A new call aborts the previous stream. When the
-requested model is already loaded, no download or load happens. On a desktop a
-loaded model stays resident, one per backend, so the CPU describer and the GPU
-translator never reload each other; a new model of the same backend replaces the
-old one. A phone keeps one model in total. Files stay on disk, and
-`clearModelCache` releases every loaded model and deletes every cached model
-file from this device.
+requested model is already loaded, no download or load happens. One model stays
+resident on every device, so a new model replaces the old one, including a move
+between the CPU describer and the GPU translator. Files stay on disk, and
+`clearModelCache` releases the loaded model and deletes every cached model file
+from this device.
 
 `ChatInput`:
 
@@ -273,10 +259,11 @@ file from this device.
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every state change. |
 
 Without `model` the package picks the GPU build when the browser provides a
-WebGPU adapter and the CPU build when it does not. The budget defaults are 250
-reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning tokens (320 on the
-CPU), 2 images, 1 audio clip, 1000 characters per message, 10000 prompt
-characters and 32 CPU threads.
+WebGPU adapter and the CPU build when it does not. `gpuAdapter` runs the same
+probe, so a host can check the device before it names a model. The budget
+defaults are 250 reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning
+tokens (320 on the CPU), 2 images, 1 audio clip, 1000 characters per message,
+10000 prompt characters and 32 CPU threads.
 
 `CancelChat` is `() => void`. Its meaning depends on the current state:
 
@@ -286,10 +273,9 @@ characters and 32 CPU threads.
 | Ready | Aborts the reply and unloads the model that answered. |
 | An older call | Nothing, because a newer call owns the runtime. |
 
-The model stays loaded between calls until a cancel frees it, and a newer
-model of the same backend replaces it. One model download serves every caller:
-a chat that joins a preload shares its progress and never starts a second
-download.
+The model stays loaded between calls until a cancel frees it, and a newer model
+replaces it. One model download serves every caller: a chat that joins a preload
+shares its progress and never starts a second download.
 
 ### Preload
 
@@ -304,9 +290,8 @@ runtime, and either call joins a load already in flight. A preload owns no cance
 function, so a chat that joins its download and is cancelled leaves the download
 running.
 
-Preloads on different backends run together, so a host may warm the GPU text
-model and the CPU media model inside one `Promise.all`. Each call reports only
-its own model, and a load on the same backend still replaces the one in flight.
+A preload of another model replaces the resident one, because one model stays
+in memory at a time. A load of the same model still joins the one in flight.
 
 `ChatPreloadInput` is the subset of `ChatInput` that a preload needs:
 
@@ -327,7 +312,7 @@ on failure. A preload owns no cancel function; a new load replaces it.
 describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
 ```
 
-Describe every image in English with `qwen3_vl_2b_instruct_q3`, the Q3_K_M
+Describe every image in English with `qwen3_vl_2b_instruct`, the Q4_K_M
 build of Unsloth Qwen3-VL 2B Instruct, one image at a time. When a WebGPU
 adapter exists and `targetLanguage` is not English, the English descriptions
 are then translated one by one with `gemma4_e2b_limited`. Without a GPU, when
@@ -438,7 +423,7 @@ search and currency tools fetch over the network; `calculate` does not.
 
 | Field | Description |
 | ----- | ----------- |
-| `model?` | The build that runs after the mobile swap. |
+| `model?` | The model that runs, or the requested build before it resolves. |
 | `availability` | `ChatStatus.online`, `.away` or `.offline`, derived from `status`. |
 | `status` | `LlmStatus`: `idle`, `downloading`, `ready`, `error` or `unsupported`. |
 | `backend` | `LlmBackend.cpu`, `.gpu` or `.none`. |
@@ -453,7 +438,7 @@ search and currency tools fetch over the network; `calculate` does not.
 
 The first snapshot fires synchronously inside `createChat`. A final snapshot
 with `requesting: false` marks the end of the call. `describeImages` reports the
-same snapshot for each model it loads: `qwen3_vl_2b_instruct_q3` while it
+same snapshot for each model it loads: `qwen3_vl_2b_instruct` while it
 describes, then `gemma4_e2b_limited` while it translates.
 
 A stream that never produces its first chunk ends with an error after 5
@@ -478,43 +463,34 @@ without it goes quiet again.
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
 | `qwen3_vl_2b_instruct` | Qwen3-VL 2B Instruct | No | Yes | No | Yes | No |
 | `qwen3_vl_2b_instruct_q3` | Qwen3-VL 2B Instruct Q3 | No | Yes | No | Yes | No |
-| `gemma4_e2b` | Gemma 4 E2B | Yes | Yes | Yes | No | Yes |
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 
-A phone or tablet asking for `gemma4_e2b` gets `gemma4_e2b_limited`,
-`gemma-4-E2B-it-gpu.litertlm`, which is text only. An explicit
-`gemma4_e2b_limited` loads that same file on a desktop. The build that actually
-runs is always the one in `ChatStatusSnapshot.model`. The limited build has no
+`gemma4_e2b_limited` loads `gemma-4-E2B-it-gpu.litertlm` on every device. The
+build that runs is always the one in `ChatStatusSnapshot.model`. It has no
 vision or audio encoder, so `supportsImages` and `supportsAudio` report `false`
-there. Use `qwen3_vl_2b` for images on mobile.
+there. Use `qwen3_vl_2b` for images.
 
 The first call downloads the model before its engine loads it. Later calls
-reuse the loaded runtime. A desktop keeps one model per backend in memory, so
-the CPU describer and the GPU text model stay resident together. An interrupted
-download keeps every part it committed and resumes from the last one on the
-next attempt, including after a reload.
+reuse the loaded runtime. One model stays resident, and a new model replaces it.
+An interrupted download keeps every part it committed and resumes from the last
+one on the next attempt, including after a reload.
 
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
 context on a phone and 8192 on a desktop. Its projector uses the same CPU thread
-budget as the text pass, so image turns are slower than the Gemma 4 WebGPU path.
-Use the GPU model when images need to be fast.
+budget as the text pass, so image turns wait behind the CPU queue.
 
-`qwen3_vl_2b_instruct_q3` is the Unsloth Qwen3-VL 2B Instruct build that
-`describeImages` loads for the English pass, its Q3_K_M file. Both instruct
+`qwen3_vl_2b_instruct` is the Unsloth Qwen3-VL 2B Instruct build that
+`describeImages` loads for the English pass, its Q4_K_M file. Both instruct
 builds use Qwen's Q8_0 projector, about 445 MB, so the describer totals about
-1.4 GB on the CPU engine. It has no reasoning pass, so it answers an image
-prompt directly. `qwen3_vl_2b_instruct` is the same model in Q4_K_M, about
-200 MB larger, for a host that prefers the higher precision describer and
-names it explicitly.
+1.5 GB on the CPU engine. It has no reasoning pass, so it answers an image
+prompt directly. `qwen3_vl_2b_instruct_q3` is the same model in Q3_K_M, about
+160 MB smaller, for a host that prefers the smaller file and names it
+explicitly.
 
-Gemma 4 E2B downloads `gemma-4-E2B-it.litertlm`, about 2.6 GB, on a desktop. It
-runs on the WebGPU engine with its vision and audio encoders in the same file,
-so an image or audio prompt does not download a projector. `gemma4_e2b_limited`
-instead downloads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm`, the precompiled
-GPU_ARTISAN build Google ships for browsers. The smaller file is what keeps a
-mobile tab alive at the end of the model load, and a desktop can ask for it
-too, trading vision and audio for 600 MB less download.
+Gemma 4 E2B downloads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm`, the
+precompiled GPU_ARTISAN build Google ships for browsers. It runs on the WebGPU
+engine, carries no vision or audio encoder, and needs no projector download.
 
 The WebGPU engine asks for a 32768 token context on a desktop and 16384 on a
 phone, both multiples of 1024. Its int8 KV cache holds the full desktop window
@@ -551,11 +527,9 @@ user:      {next turn}
   (default 2). Older image parts are dropped and their text stays.
 - Every image part keeps its full frame and targets 128 vision tokens, with at
   most 136. Both sides are snapped to multiples of 32 px and the remainder is
-  cropped. The WebGPU engine instead center-crops to a 384 x 384 square, the
-  smallest Gemma 4 encoder signature.
+  cropped.
 - Audio is collected from the newest turns first and capped by `maxAudio`
-  (default 1). Older audio parts are dropped and their text stays. WAV, MP3 and
-  FLAC are accepted, and a short 16 kHz mono WAV is the best input.
+  (default 1). Older audio parts are dropped and their text stays.
 - Image and audio payloads do not count against `promptCharBudget`.
 - An image-only turn with a text model reports `Model does not accept images`,
   and an audio-only turn reports `Model does not accept audio`.
@@ -618,11 +592,9 @@ self hosted. Chromium also accepts
 changed. A page inside an iframe is isolated only when every ancestor sets the
 same headers.
 
-Each engine keeps its own cache. A desktop keeps one loaded model per backend,
-so a switch between the CPU and GPU models skips both the download and the
-load; a model of the same backend replaces the previous one. A phone keeps one
-model in total. The previous model's files always stay, so a switch back skips
-the download.
+Each engine keeps its own cache. One model stays loaded, so a switch between
+the CPU and GPU models skips the download but still loads the new engine. The
+previous model's files always stay, so a switch back skips the download.
 `clearModelCache()` deletes them all and frees the storage. Both engines store
 model files in the origin private file system as numbered parts, under
 `wllama-store` for the CPU engine and `litert-store` for the GPU engine. The GPU
@@ -650,7 +622,7 @@ wasm under `dist/assets/litert`; model weights remain external.
 
 LiteRT-LM needs WebGPU and the JSPI and relaxed SIMD wasm features, currently
 available in Chromium. It loads a 22.7 MB wasm binary from `dist/assets/litert`
-and the 2.6 GB model file. The GPU engine reports progress while the file
+and the 2.0 GB model file. The GPU engine reports progress while the file
 downloads and 100% of the load phase while the model compiles.
 
 wllama needs the compat worker on the same origin. When the app serves the
@@ -739,7 +711,7 @@ The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,
 The suites live in `test/` and run against the local checkout.
 
 `yarn test:instruct` starts a local llama.cpp server with the Qwen3-VL 2B
-Instruct Q3_K_M build:
+Instruct Q4_K_M build:
 
 ```bash
 yarn test:instruct
@@ -769,6 +741,9 @@ An interactive map of the package lives at
 the two entries, every source module with line numbers, the helper edges and the
 send flow.
 
+A side-by-side comparison with `@mlc-ai/web-llm` for Gemma 4 E2B on WebGPU lives
+at [degreesign.github.io/ds_chat/vs_web_llm.html](https://degreesign.github.io/ds_chat/vs_web_llm.html).
+
 ## FAQ
 
 ### What is @degreesign/chat?
@@ -783,25 +758,19 @@ No. The host passes the full prompt on every call and keeps the reply.
 ### Does it support images?
 
 Yes, on models with vision support. Put image URLs in a user turn's `images`
-array. Qwen3-VL 2B accepts images on the CPU engine and Gemma 4 E2B accepts
-images on the desktop WebGPU engine. On a phone or tablet Gemma resolves to
-`gemma4_e2b_limited`, the text-only browser build, so use `qwen3_vl_2b` for
-mobile images. Each image keeps its full frame and targets 128 vision tokens,
-at most 136, with both sides snapped to multiples of 32 px and the remainder
-cropped. The WebGPU engine instead center-crops a 384 x 384 square with the
-smallest Gemma 4 vision budget. A model without vision drops images
+array. Qwen3-VL 2B accepts images on the CPU engine and is the vision model in
+the catalog. Each image keeps its full frame and targets 128 vision tokens, at
+most 136, with both sides snapped to multiples of 32 px and the remainder
+cropped. The WebGPU build is text only, so a model without vision drops images
 when the turn also has text; an image-only turn reports
 `Model does not accept images`.
 
 ### Does it support audio?
 
-Yes, on models with audio support. Put an audio URL in a user turn's `audio`
-array. Gemma 4 E2B accepts WAV, MP3 and FLAC on the desktop WebGPU engine, and a
-short 16 kHz mono WAV is the best input. `limits.maxAudio` caps the clips
-(default 1). Audio is desktop only; `gemma4_e2b_limited` has no audio encoder.
-The package does not transcode, so the host supplies one of those formats. A
-model without audio drops the clip when the turn also has text; an audio-only
-turn reports `Model does not accept audio`.
+No model in the catalog has an audio encoder. A user turn can still carry an
+audio URL in `audio`, and `limits.maxAudio` caps the clips (default 1), but a
+model without audio support drops the clip when the turn also has text, and an
+audio-only turn reports `Model does not accept audio`.
 
 ### Does it need a server?
 
@@ -824,11 +793,11 @@ when an older version stored the file. The package stores no model data itself.
 
 ### Which model should I pick?
 
-Qwen3-VL 2B supports reasoning and images on the CPU. Gemma 4 E2B supports
-reasoning, images and audio on desktop WebGPU, with much faster media prompts
-but a larger download and a slower first compile. Use Qwen for broad browser
-support and for mobile images. Use Gemma on a desktop with Chromium WebGPU, or
-on a phone for text, where it resolves to `gemma4_e2b_limited`.
+Qwen3-VL 2B supports reasoning and images on the CPU, and it runs on any browser
+with WebAssembly. Gemma 4 E2B limited supports reasoning on WebGPU, with faster
+text generation but a larger download and a slower first compile. Use Qwen for
+broad browser support and for images. Use Gemma on a device with a WebGPU
+adapter when text speed matters.
 
 ## Licensing
 

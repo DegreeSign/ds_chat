@@ -1,5 +1,6 @@
 export { clearModelCache, createChat, preloadModel } from './chat';
 export { describeImages, describeModelId, describeTranslated, imageReplyTokens } from './describe';
+export { gpuAdapter } from './models';
 export {
     builtinTools,
     calculateTool,
