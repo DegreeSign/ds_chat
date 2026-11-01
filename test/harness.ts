@@ -670,6 +670,20 @@ const definitions: Array<{
                 assertEqual(defaults.maxImages, 2, `images`);
                 assertEqual(defaults.maxAudio, 1, `audio`);
                 assertEqual(defaults.maxThreads, 32, `threads`);
+                assertEqual(defaults.gpuShare, 0.5, `gpu share`);
+                assertEqual(
+                    resolveLlmLimits({ gpuShare: 0.35 }).gpuShare,
+                    0.35,
+                    `share override`,
+                );
+                assertEqual(resolveLlmLimits({ gpuShare: 1 }).gpuShare, 1, `no rest`);
+                assertEqual(resolveLlmLimits({ gpuShare: 0 }).gpuShare, 0.5, `bad share`);
+                assertEqual(resolveLlmLimits({ gpuShare: 2 }).gpuShare, 1, `clamped share`);
+                assertEqual(
+                    resolveLlmLimits({ gpuShare: 0.01 }).gpuShare,
+                    0.05,
+                    `min share`,
+                );
                 assertEqual(defaults.maxContentLength, 1_000, `content`);
                 assertEqual(
                     defaults.maxReasoningTokens,
@@ -1302,6 +1316,8 @@ const definitions: Array<{
                     buffer = wrapped.createBuffer?.();
                 assertEqual(restFor(0), 0, `no rest`);
                 assertEqual(restFor(maxRestMs * 10), maxRestMs, `rest capped`);
+                assertEqual(restFor(40, 1), 0, `no rest share`);
+                assertEqual(restFor(200), 200, `half rest`);
                 assertEqual(
                     Math.round(restFor(40)),
                     Math.round(40 * (1 / gpuShare - 1)),
@@ -2861,13 +2877,14 @@ const definitions: Array<{
                     statuses: ChatStatusSnapshot[] = [],
                     reasoned: string[] = [],
                     replies: string[] = [],
-                    { chat } = chatWith({
+                    { chat, requests } = chatWith({
                         chatText: `hello`,
                         thinkingText: `why`,
                     });
                 const cancel = chat({
                     model: ChatModelId.qwen3_vl_2b,
                     messages: [userMessage(`hi`)],
+                    limits: { gpuShare: 0.35 },
                     reasoning: true,
                     onThinking: value => reasoned.push(value),
                     onResponse: value => replies.push(value),
@@ -2894,6 +2911,8 @@ const definitions: Array<{
                 assertEqual(statuses[statuses.length - 1].error, undefined, `no error`);
                 assertEqual(replies[replies.length - 1], `hello`, `accumulated reply`);
                 assertEqual(reasoned[reasoned.length - 1], `why`, `accumulated thinking`);
+                assertEqual(requests.length, 1, `one request`);
+                assertEqual(requests[0].limits.gpuShare, 0.35, `call share`);
             },
         },
         {

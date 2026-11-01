@@ -4,12 +4,12 @@ declare const
 /** Smallest Gemma 4 vision budget */
 visionTokens = 70, 
 /** GPU busy share of time */
-gpuShare = 0.7, 
+gpuShare = 0.5, 
 /** Most rest per readback */
-maxRestMs = 40;
+maxRestMs = 500;
 declare const 
 /** Rest owed for busy interval */
-restFor: (busyMs: number) => number;
+restFor: (busyMs: number, share?: number) => number;
 /** WebGPU device resting after readback */
 declare const throttledDevice: ({ device, pace, }: GpuThrottleParams) => GpuDevice;
 /** Drop device and wasm module */

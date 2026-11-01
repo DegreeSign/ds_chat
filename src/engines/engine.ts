@@ -17,7 +17,7 @@ import type {
 } from '../types';
 import { rNum } from '@degreesign/utils';
 
-/** Default CPU engine budgets */
+/** Default engine budgets */
 const defaultLlmLimits: LlmLimits = {
     maxReplyTokens: 250,
     maxThinkingTokens: 128,
@@ -28,6 +28,7 @@ const defaultLlmLimits: LlmLimits = {
     maxContentLength: 1000,
     promptCharBudget: 10000,
     maxThreads: 32,
+    gpuShare: 0.5,
 };
 
 /** GPU reasoning and answer budget */
@@ -95,6 +96,11 @@ const resolveLlmLimits = (
             defaults.maxThreads,
             1,
         ),
+        gpuShare: typeof overrides.gpuShare == `number`
+            && Number.isFinite(overrides.gpuShare)
+            && overrides.gpuShare > 0
+            ? Math.min(1, Math.max(0.05, overrides.gpuShare))
+            : defaults.gpuShare,
     };
 };
 

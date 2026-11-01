@@ -246,6 +246,8 @@ interface LlmLimits {
     promptCharBudget: number,
     /** Max CPU threads */
     maxThreads: number,
+    /** GPU busy share */
+    gpuShare: number,
 }
 
 /** Reported model and request state */

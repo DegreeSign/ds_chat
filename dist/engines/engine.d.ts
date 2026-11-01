@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatModel, EngineMessage, EngineRunParams, LlmLimits, StreamReplyParams } from '../types';
-/** Default CPU engine budgets */
+/** Default engine budgets */
 declare const defaultLlmLimits: LlmLimits;
 /** Merge budgets over backend defaults */
 declare const resolveLlmLimits: (overrides?: Partial<LlmLimits>, gpu?: boolean) => LlmLimits;

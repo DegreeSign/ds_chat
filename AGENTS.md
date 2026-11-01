@@ -42,8 +42,11 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   only and renders no UI.
 - wllama assets ship under `dist/assets/wllama` and resolve beside the bundle.
   Never hardcode a host asset path; use `ChatInput.wllama` for overrides.
-- Record `ChangeLog.md` only when the package gains a new export. Fixes,
-  performance work and internal changes stay out of it.
+- Record `ChangeLog.md` only for public API changes: an added, removed or
+  changed export, type, field or enum member. Document features, fixes,
+  performance work and internal work in `README.md` instead.
+- Write one bullet per added or changed item in `ChangeLog.md`, one line each,
+  never wrapped, at most 100 columns. Explain each item in three to seven words.
 - Keep `docs/architecture.html` current with every change. Update the file line
   counts, node line numbers, added or removed helpers, edges and the send flow
   in the same change, so the map never drifts from the source. A version bump

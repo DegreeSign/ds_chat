@@ -129,6 +129,12 @@ const
             });
             if (loaded) {
                 log(logging, `Describe load ready`, model.id);
+                // ready clears progress row
+                report(model.id, {
+                    requesting: false,
+                    phase: LlmPhase.load,
+                    percent: 100,
+                });
                 return undefined;
             };
             const message = error || service.error(model.id) || `Model not ready`;

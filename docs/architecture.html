@@ -519,16 +519,16 @@ const step = (ids, text) => ({ ids, text });
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 38);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 67);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 862);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 299);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 552);
+f(`types`, `entry`, `types.ts`, `src/types.ts`, 864);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 302);
+f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 558);
 f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 363);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 137);
-f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 534);
+f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 540);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 407);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 658);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 661);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 187);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
@@ -544,7 +544,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5101);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5120);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 558);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 194);
@@ -589,7 +589,7 @@ n(`entry`, `exports`, 1, `public exports`,
     + ` · clearModelCache · builtinTools · 3 tools + 8 enums`,
     `Only chat, describe, model probe, cache and tool exports plus the public`
     + ` types and enums leave the package; no tool reaches an engine`);
-n(`chat`, `createChat`, 283, `createChat`, `(input: ChatInput) => CancelChat`,
+n(`chat`, `createChat`, 286, `createChat`, `(input: ChatInput) => CancelChat`,
     `One call per response, bound to the module singleton`);
 n(`chat`, `createChatOn`, 57, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
@@ -603,34 +603,35 @@ n(`chat`, `emitStatus`, 64, `emitStatus`, `(call: ActiveCall) => void`,
 n(`chat`, `run`, 68, `run`, `(call: ActiveCall) => Promise<void>`,
     `Resolve the model, load it, strip unsupported media, report an empty`
     + ` prompt as an error, stream and forward the speed callback, unload the`
-    + ` model after a failed turn so a retry rebuilds a fresh context`);
-n(`chat`, `cancel`, 202, `cancel`, `(call: ActiveCall) => void`,
+    + ` model after a failed turn so a retry rebuilds a fresh context, and`
+    + ` report a cancelled call once its load settles`);
+n(`chat`, `cancel`, 205, `cancel`, `(call: ActiveCall) => void`,
     `Stale no-op, leave the load wait, abort the stream, or unload the model`
     + ` that answered`);
-n(`chat`, `createPreloadOn`, 234, `createPreloadOn`,
+n(`chat`, `createPreloadOn`, 237, `createPreloadOn`,
     `(service: Runtime) => (input?: ChatPreloadInput) => Promise<boolean>`,
     `Testable preload factory over one runtime`);
-n(`chat`, `preloadModel`, 285, `preloadModel`,
+n(`chat`, `preloadModel`, 288, `preloadModel`,
     `(input?: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
-n(`chat`, `clearModelCache`, 288, `clearModelCache`, `() => Promise<void>`,
+n(`chat`, `clearModelCache`, 291, `clearModelCache`, `() => Promise<void>`,
     `Release the loaded model and delete every cached model file`);
-n(`describe`, `describeImages`, 537, `describeImages`,
+n(`describe`, `describeImages`, 543, `describeImages`,
     `(input: DescribeImagesInput) => Promise<ImageDescription[]>`,
     `Describe every image, stream its text and speed, then translate each`
     + ` description on a GPU, bound to the singleton runtime`);
-n(`describe`, `describeTranslated`, 540, `describeTranslated`,
+n(`describe`, `describeTranslated`, 546, `describeTranslated`,
     `(input: DescribeTranslatedInput) => Promise<string[]>`,
     `Translate existing English descriptions on a GPU, streaming their text,`
     + ` bound to the singleton runtime`);
-n(`describe`, `createDescribeOn`, 290, `createDescribeOn`,
+n(`describe`, `createDescribeOn`, 296, `createDescribeOn`,
     `(service: Runtime) => (input) => Promise<ImageDescription[]>`,
     `Testable factory: load the describer, describe each image in its own`
     + ` request with the system rules, keep every finished image when a later`
     + ` one fails, time every image, then load the translator when a GPU exists`
     + ` and the target is not English; a CANNOT_TRANSLATE reply keeps English`
     + ` and every model or request state reaches onStatus`);
-n(`describe`, `createTranslateOn`, 475, `createTranslateOn`,
+n(`describe`, `createTranslateOn`, 481, `createTranslateOn`,
     `(service: Runtime) => (input) => Promise<string[]>`,
     `Testable factory: load the translator when a GPU exists, translate each`
     + ` English description, and keep English when no model or refusal stops it`);
@@ -638,7 +639,7 @@ n(`describe`, `describeTools`, 82, `describeTools`,
     `({ service, limits, logging, signal, onStatus }) => tools`,
     `Build the shared load, generate and status helpers of describers and`
     + ` translators, all stoppable through the batch signal`);
-n(`describe`, `translateDescriptions`, 216, `translateDescriptions`,
+n(`describe`, `translateDescriptions`, 222, `translateDescriptions`,
     `({ translator, generate, descriptions, language, signal, currentIndex,`
     + ` onSpeed, onText }) => Promise<string[]>`,
     `Translate every English description, stream its text, keep English on`
@@ -647,8 +648,8 @@ n(`describe`, `report`, 96, `report`, `(model, state) => void`,
     `Publish one snapshot for the describer, translator or final state`);
 n(`describe`, `load`, 99, `load`, `(model) => Promise<string | undefined>`,
     `Load one model, forward its progress, leave the wait on abort, log the`
-    + ` load and return its failure text`);
-n(`describe`, `generate`, 145, `generate`,
+    + ` load, report it ready and return its failure text`);
+n(`describe`, `generate`, 151, `generate`,
     `({ model, messages, stage, repeatPenalty?, temperature?, onSpeed?,`
     + ` onText? }) => Promise<string | undefined>`,
     `Run one reply, log its stage, duration, streamed deltas and text, forward`
@@ -706,28 +707,28 @@ n(`types`, `records`, 12, `records`,
     + `, LitertAssets`,
     `One turn with optional images and audio, one catalog entry with a CPU or`
     + ` GPU artifact, budgets, a CPU thread cap and asset URLs`);
-n(`types`, `litert`, 386, `LitertAssets`, `script · wasm`,
+n(`types`, `litert`, 388, `LitertAssets`, `script · wasm`,
     `The LiteRT wasm glue and binary URLs emitted beside the bundle`);
-n(`types`, `gpu`, 394,
+n(`types`, `gpu`, 396,
     `GpuNavigator · GpuBuffer · GpuDevice · GpuWasm · GpuThrottleParams`,
     `gpu?.requestAdapter · mapAsync · createBuffer · destroy`,
     `The optional WebGPU entry point and the small surfaces the GPU throttle`
     + ` and the device release wrap, undefined in Node`);
-n(`types`, `mobile`, 431, `MobileNavigator`,
+n(`types`, `mobile`, 433, `MobileNavigator`,
     `userAgentData?.mobile · userAgent · maxTouchPoints`,
     `The narrow navigator view that tells a phone from a desktop`);
-n(`types`, `snapshots`, 252, `ChatStatusSnapshot`,
+n(`types`, `snapshots`, 254, `ChatStatusSnapshot`,
     `model · availability · status · backend · supportsImages`
     + ` · supportsAudio · ready · loading · requesting · phase · percent`
     + ` · error`,
     `Every lifecycle value the host renders, including the build that runs`);
-n(`types`, `input`, 275, `ChatInput · CancelChat`,
+n(`types`, `input`, 277, `ChatInput · CancelChat`,
     `(input: ChatInput) => CancelChat`,
     `The chat input and the cancel handle createChat returns`);
-n(`types`, `preload`, 297, `ChatPreloadInput`,
+n(`types`, `preload`, 299, `ChatPreloadInput`,
     `Pick<ChatInput, model | limits | logging | onStatus>`,
     `The model preload subset a host may call before the first chat`);
-n(`types`, `describe`, 313,
+n(`types`, `describe`, 315,
     `ImageDescription · DescribeImagesInput · DescribeTranslatedInput`,
     `descriptionEN · description · durationMs · targetLanguage · images`
     + ` · signal · descriptions · currentIndex · onSpeed · onText · limits`
@@ -735,47 +736,47 @@ n(`types`, `describe`, 313,
     `One English and translated description with its description time, the`
     + ` batch image request, and the English-description translation request,`
     + ` including their stop signal, text, speed and status callbacks`);
-n(`types`, `call`, 437, `ChatState · ActiveCall · Runtime`,
+n(`types`, `call`, 439, `ChatState · ActiveCall · Runtime`,
     `token · input · controller · cancelled · model · requesting · phase`
     + ` · percent · load · chat · unload · clear · error() · model()`,
     `One request state, one live call and the runtime it drives`);
-n(`types`, `load`, 466, `RuntimeLoadParams · RuntimeLoadWaiter`,
+n(`types`, `load`, 468, `RuntimeLoadParams · RuntimeLoadWaiter`,
     `model · limits · assets · logging · signal · onProgress`
     + ` · report · settle`,
     `One load request and one caller waiting on the load it joined`);
-n(`types`, `store`, 486, `StoredPart · StoredFilePart · StoredModel`
+n(`types`, `store`, 488, `StoredPart · StoredFilePart · StoredModel`
     + ` · StoredModelMeta · ResumePlan · StoreDownloadParams · ModelStore`,
     `size · total · etag · start · complete · file · signal`
     + ` · stored · download · remove · purge`,
     `What the model file store keeps in its parts and metadata, where one`
     + ` response resumes, one download request and one engine store`);
-n(`types`, `params`, 591, `EngineChatParams · StartLlmParams`
+n(`types`, `params`, 593, `EngineChatParams · StartLlmParams`
     + ` · StreamReplyParams`,
     `messages · limits · reasoning · logging · onReason · onText · onSpeed`
     + ` · signal · firstTimeoutMs · idleTimeoutMs · onStall`,
     `Per-call budgets, accumulated text and speed callbacks`);
-n(`types`, `runtimeContract`, 627, `LlmRuntime · LlmEngine`,
+n(`types`, `runtimeContract`, 629, `LlmRuntime · LlmEngine`,
     `startLLM({ model, limits, signal?, logging?, onProgress, assets? })`
     + ` · purge`,
     `The engine returns model, backend, contextSize, chat and unload, and can`
     + ` delete its whole cache`);
-n(`types`, `contentParts`, 652, `EngineContentPart`,
+n(`types`, `contentParts`, 654, `EngineContentPart`,
     `text | image | audio`,
     `One segment of a user turn before an engine maps it`);
-n(`types`, `messages`, 670, `EngineMessage`, `role + content`,
+n(`types`, `messages`, 672, `EngineMessage`, `role + content`,
     `One OpenAI-style turn, a user turn may carry media parts`);
-n(`types`, `litertRuntime`, 676, `LitertContentPart · LitertMessage`
+n(`types`, `litertRuntime`, 678, `LitertContentPart · LitertMessage`
     + ` · LitertEngine · LitertModule`,
     `text | image | audio · role + content + channels`,
     `The LiteRT content, turn, engine and module types, type only`);
-n(`types`, `litertParams`, 691, `LitertSettingsParams · LitertSession`
+n(`types`, `litertParams`, 693, `LitertSettingsParams · LitertSession`
     + ` · LitertChatParams · StreamLitertParams`,
     `model · limits · contextSize · source · mod · conversation? · sent`
     + ` · reasoning · maxTokens · engine · model · mod · params · messages`
     + ` · session`,
     `The engine settings, the reused conversation, one LiteRT chat call and`
     + ` one stream over it`);
-n(`types`, `imageSize`, 782, `ImageSize`, `width · height`,
+n(`types`, `imageSize`, 784, `ImageSize`, `width · height`,
     `Pixel size of one image sent to an engine`);
 
 // model runtime
@@ -878,65 +879,67 @@ n(`models`, `supportsAudio`, 121, `supportsAudio`,
 // prompt and streaming
 n(`engine`, `limits`, 21, `defaultLlmLimits`, `LlmLimits`,
     `Reply 250 tokens, thinking 128, reasoning total 320, 2 images,`
-    + ` 1 audio clip, 1000 chars each, 10000 prompt chars, 32 CPU threads`);
-n(`engine`, `gpuReasoning`, 34, `gpuReasoningTokens`, `1200`,
+    + ` 1 audio clip, 1000 chars each, 10000 prompt chars, 32 CPU threads`
+    + ` and a 0.5 GPU busy share`);
+n(`engine`, `gpuReasoning`, 35, `gpuReasoningTokens`, `1200`,
     `Reasoning budget of the GPU engine, thought plus answer`);
-n(`engine`, `budgetLimit`, 37, `budgetLimit`,
+n(`engine`, `budgetLimit`, 38, `budgetLimit`,
     `(value, fallback, min) => number`,
     `Finite values at or above the floor are floored, anything else falls back`);
-n(`engine`, `resolveLimits`, 47, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
-    `Clamp every budget, then fill every default, 1200 reasoning on the GPU`);
-n(`engine`, `replyOptions`, 102, `replyOptions`, `(limits, reasoning) => object`,
+n(`engine`, `resolveLimits`, 48, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
+    `Clamp every budget and the 0.05 to 1 GPU share, then fill every default,`
+    + ` 1200 reasoning on the GPU`);
+n(`engine`, `replyOptions`, 108, `replyOptions`, `(limits, reasoning) => object`,
     `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
-n(`engine`, `modelUrl`, 118, `modelUrl`, `(repo, file) => string`,
+n(`engine`, `modelUrl`, 124, `modelUrl`, `(repo, file) => string`,
     `Resolve one model file on huggingface.co`);
-n(`engine`, `contentLength`, 121, `contentLength`, `(response) => number`,
+n(`engine`, `contentLength`, 127, `contentLength`, `(response) => number`,
     `Declared size of one download, zero when the host hides it`);
-n(`engine`, `hasPart`, 124, `hasPart`, `(messages, type) => boolean`,
+n(`engine`, `hasPart`, 130, `hasPart`, `(messages, type) => boolean`,
     `Whether any built turn carries an image or audio part`);
-n(`engine`, `hasImages`, 132, `hasImages`, `(messages) => boolean`,
+n(`engine`, `hasImages`, 138, `hasImages`, `(messages) => boolean`,
     `Whether any built turn carries an image part`);
-n(`engine`, `hasAudio`, 135, `hasAudio`, `(messages) => boolean`,
+n(`engine`, `hasAudio`, 141, `hasAudio`, `(messages) => boolean`,
     `Whether any built turn carries an audio part`);
-n(`engine`, `userContent`, 147, `userContent`, `(text, images, audio) => content`,
+n(`engine`, `userContent`, 153, `userContent`, `(text, images, audio) => content`,
     `Text first, then each image, then each audio clip, or plain text`);
-n(`engine`, `contentParts`, 160, `contentParts`, `(content) => EngineContentPart[]`,
+n(`engine`, `contentParts`, 166, `contentParts`, `(content) => EngineContentPart[]`,
     `Flatten string or part content for a merge`);
-n(`engine`, `mergeContent`, 167, `mergeContent`, `(first, next) => content`,
+n(`engine`, `mergeContent`, 173, `mergeContent`, `(first, next) => content`,
     `Join same-role turns and collapse adjacent text parts`);
-n(`engine`, `buildMessages`, 186, `buildMessages`,
+n(`engine`, `buildMessages`, 192, `buildMessages`,
     `(messages, limits?) => EngineMessage[]`,
     `Keep text and media, cap images and audio newest first, fold system,`
     + ` drop leading assistant, merge same roles`);
-n(`engine`, `createThinkSplitter`, 253, `createThinkSplitter`,
+n(`engine`, `createThinkSplitter`, 259, `createThinkSplitter`,
     `(onReason, onText) => { feed, flush }`,
     `Separates inline reasoning markers from the visible reply`);
-n(`engine`, `findTag`, 261, `findTag`, `(data, tags) => { at, tag }`,
+n(`engine`, `findTag`, 267, `findTag`, `(data, tags) => { at, tag }`,
     `Earliest occurrence of any marker`);
-n(`engine`, `holdPartial`, 273, `holdPartial`, `(data, tags) => string`,
+n(`engine`, `holdPartial`, 279, `holdPartial`, `(data, tags) => string`,
     `Holds back the longest suffix that may still become a marker`);
-n(`engine`, `feed`, 286, `feed`, `(text) => void`,
+n(`engine`, `feed`, 292, `feed`, `(text) => void`,
     `Consume a chunk, switch on the current in-reason state`);
-n(`engine`, `flush`, 318, `flush`, `() => void`, `Emit whatever was held back`);
-n(`engine`, `stall`, 328, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
+n(`engine`, `flush`, 324, `flush`, `() => void`, `Emit whatever was held back`);
+n(`engine`, `stall`, 334, `firstReplyTimeout · firstVisionReplyTimeout · idleReplyTimeout`,
     `300000 desktop · 3000000 mobile · 840000 floor · 30000 idle`,
     `First chunk budget per device, a vision floor over it, and the silence`
     + ` between two chunks`);
-n(`engine`, `stallError`, 335, `StallError`, `class Error`,
+n(`engine`, `stallError`, 341, `StallError`, `class Error`,
     `A stream that stopped producing chunks`);
-n(`engine`, `timeout`, 338, `withTimeout`, `(work, ms, message) => Promise`,
+n(`engine`, `timeout`, 344, `withTimeout`, `(work, ms, message) => Promise`,
     `Race one promise against a timeout`);
-n(`engine`, `close`, 357, `closeStream`, `(iterator) => void`,
+n(`engine`, `close`, 363, `closeStream`, `(iterator) => void`,
     `Read the pending abort rejection, then close the stream so a stopped`
     + ` engine keeps no unhandled promise`);
-n(`engine`, `logs`, 371, `logChatCall`, `(model, messages) => void`,
+n(`engine`, `logs`, 377, `logChatCall`, `(model, messages) => void`,
     `Message text and media data are censored, the caller checks the flag`);
-n(`engine`, `streamReply`, 387, `streamReply`, `(params) => Promise<string?>`,
+n(`engine`, `streamReply`, 393, `streamReply`, `(params) => Promise<string?>`,
     `Run the chunk loop, read inline or structured reasoning, collect reply`
     + ` and thought, measure the streamed token speed, stop a silent engine,`
     + ` log when enabled, honour stop`);
 
-n(`engine`, `runEngineChat`, 492, `runEngineChat`,
+n(`engine`, `runEngineChat`, 498, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, log when enabled, pass the speed`
     + ` callback and stream one reply`);
@@ -990,70 +993,71 @@ n(`wllama`, `purge`, 391, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 633, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 636, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, purge`);
 n(`litert`, `cache`, 38,
     `cacheName · gpuShare · maxRestMs · store · backendConfig`,
-    `litertlm-models · 0.7 · 40 · ModelStore · GPU executor settings`,
-    `Cache Storage bucket, the GPU share and rest cap, the resumable store`
-    + ` and the GPU config with one decode step per sync`);
+    `litertlm-models · 0.5 · 500 · ModelStore · GPU executor settings`,
+    `Cache Storage bucket, the default GPU share and rest cap, the resumable`
+    + ` store and the GPU config with one decode step per sync`);
 n(`litert`, `visionTokens`, 42, `visionTokens`, `70`,
     `Smallest Gemma 4 vision budget, 630 patches`);
 n(`litert`, `wasmLog`, 64, `loggingOn · engines · wasmOut · wasmErr`,
     `boolean · number · (...args) => void`,
     `Wasm stdout and stderr, quiet until a call turns logging on, plus the live`
     + ` engine count that keeps the cached device alive for later engines`);
-n(`litert`, `visibleText`, 86, `visibleText · restFor`,
-    `(text) => string · (busyMs) => number`,
+n(`litert`, `visibleText`, 88, `visibleText · restFor`,
+    `(text) => string · (busyMs, share?) => number`,
     `Turn text without its inline reasoning channel, so a cached reply and`
-    + ` a stored reply compare equal, and the rest owed for one busy interval`);
+    + ` a stored reply compare equal, and the rest owed for one busy interval`
+    + ` at the requested share`);
 n(`litert`, `gpuThrottle`, 70,
-    `pacedDevices · pacing · lastSync · throttledDevice · paceGpu`
-    + ` · startPacing · stopPacing`,
-    `WeakSet · boolean · number · ({ device, pace }) => GpuDevice`
-    + ` · () => Promise<void> · () => void`,
+    `pacedDevices · activeShare · pacing · lastSync · throttledDevice`
+    + ` · paceGpu · startPacing · stopPacing`,
+    `WeakSet · number · boolean · number · ({ device, pace }) => GpuDevice`
+    + ` · () => Promise<void> · (share) => void · () => void`,
     `Wrap the WebGPU device so every buffer readback waits for the GPU and`
-    + ` then rests it, keeping the card at 70 percent of wall time, and start`
-    + ` and stop that pacing around the decode`);
-n(`litert`, `releaseDevice`, 144, `releaseDevice`, `(mod) => void`,
+    + ` then rests it, keeping the card at the reply share of wall time, 50`
+    + ` percent by default, and start and stop that pacing around the decode`);
+n(`litert`, `releaseDevice`, 147, `releaseDevice`, `(mod) => void`,
     `Destroy the WebGPU device, clear the wasm device id and unload the wasm`
     + ` module, because a deleted engine wedges them`);
-n(`litert`, `cacheOpen`, 157, `cacheOpen`, `() => Promise<Cache | undefined>`,
+n(`litert`, `cacheOpen`, 160, `cacheOpen`, `() => Promise<Cache | undefined>`,
     `Open the model cache, absent in Node and on an insecure origin`);
-n(`litert`, `modelCached`, 165, `modelCached`, `(model) => Promise<boolean>`,
+n(`litert`, `modelCached`, 168, `modelCached`, `(model) => Promise<boolean>`,
     `Whether the model file is complete in the store or in Cache Storage`);
-n(`litert`, `downloads`, 178, `downloads`, `Map<string, Promise<void>>`,
+n(`litert`, `downloads`, 181, `downloads`, `Map<string, Promise<void>>`,
     `Every model file download in flight, shared by every caller`);
-n(`litert`, `countStream`, 181, `countStream`,
+n(`litert`, `countStream`, 184, `countStream`,
     `(body, total, onProgress) => stream`,
     `Report download progress while the file streams to the cache`);
-n(`litert`, `cacheModel`, 197, `cacheModel`, `(url, cache, signal, onProgress)`,
+n(`litert`, `cacheModel`, 200, `cacheModel`, `(url, cache, signal, onProgress)`,
     `Fallback for a host without a file store, Cache Storage holds the file`);
-n(`litert`, `fetchModel`, 227, `fetchModel`, `(url, signal, onProgress) => stream`,
+n(`litert`, `fetchModel`, 230, `fetchModel`, `(url, signal, onProgress) => stream`,
     `Network stream for a host without a cache or a store`);
-n(`litert`, `toLitertMessages`, 239, `toLitertMessages`,
+n(`litert`, `toLitertMessages`, 242, `toLitertMessages`,
     `(messages, keepMedia?) => Promise<LitertMessage[]>`,
     `Map built turns to LiteRT turns, history media becomes text notes`);
-n(`litert`, `sameMessage`, 271, `sameMessage`, `(first, next) => boolean`,
+n(`litert`, `sameMessage`, 274, `sameMessage`, `(first, next) => boolean`,
     `Same role, visible text and file kind, so a re-encoded file and a`
     + ` channel-wrapped reply still continue the conversation`);
-n(`litert`, `history`, 298, `continuesHistory`, `(sent, history) => boolean`,
+n(`litert`, `history`, 301, `continuesHistory`, `(sent, history) => boolean`,
     `Whether the live conversation already holds the incoming turns`);
-n(`litert`, `streamLitert`, 319, `streamLitert`,
+n(`litert`, `streamLitert`, 322, `streamLitert`,
     `(engine, mod, params, messages, session) => AsyncGenerator<EngineChunk>`,
     `Reuse one conversation, stream content and thought channels, cancel`
     + ` through the abort signal, treat a cancelled read as the end of the`
-    + ` stream, start the GPU rest after the first chunk, drop a turn that`
-    + ` cannot continue`);
-n(`litert`, `chat`, 445, `chatOn`, `(engine, model, mod, params, session)`,
+    + ` stream, start the GPU rest at the reply share after the first chunk,`
+    + ` drop a turn that cannot continue`);
+n(`litert`, `chat`, 448, `chatOn`, `(engine, model, mod, params, session)`,
     `Follow the logging flag, reject unsupported images or audio, then stream`
     + ` through the shared reply loop`);
-n(`litert`, `settings`, 480, `litertSettings`,
+n(`litert`, `settings`, 483, `litertSettings`,
     `({ model, limits, contextSize, source, mod }) => LitertSettings`,
     `Build the engine settings from the catalog file, with the requested`
     + ` context window, the smallest vision budget and the CPU audio`
     + ` backend only when that file has them`);
-n(`litert`, `startLLM`, 511, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`litert`, `startLLM`, 514, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Route the wasm output through the logging flag, load wasm and module,`
     + ` pick the desktop or phone context window, wrap the WebGPU device`
     + ` for the GPU rest, read the stored file or`
@@ -1061,11 +1065,11 @@ n(`litert`, `startLLM`, 511, `startLLM`, `(params) => Promise<LlmRuntime>`,
     + ` progress, size the vision and audio encoders, warm the runtime`
     + ` environment with one throwaway conversation, count the live engine and`
     + ` open one reused conversation`);
-n(`litert`, `unload`, 622, `runtime.unload`, `() => Promise<void>`,
+n(`litert`, `unload`, 625, `runtime.unload`, `() => Promise<void>`,
     `Delete the open conversation and the wasm engine, then destroy the`
     + ` WebGPU device and unload the wasm once the last engine is gone,`
     + ` keeping the cache`);
-n(`litert`, `purge`, 637, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 640, `purge`, `() => Promise<void>`,
     `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
@@ -1242,7 +1246,7 @@ n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
 n(`harness`, `definitions`, 307, `definitions`, `103 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, describe, chat,`
     + ` speed, threads, square`);
-n(`harness`, `main`, 5088, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 5107, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 34, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat, preloadModel,`
@@ -1304,7 +1308,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.3.1`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.4.0`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`
@@ -1375,6 +1379,7 @@ e(`describe.createTranslateOn`, `describe.translateDescriptions`, `call`);
 e(`describe.describeTools`, `describe.report`, `inner`);
 e(`describe.describeTools`, `describe.load`, `inner`);
 e(`describe.describeTools`, `describe.generate`, `inner`);
+e(`describe.load`, `describe.report`, `call`);
 e(`describe.load`, `log.log`, `call`);
 e(`describe.generate`, `log.log`, `call`);
 e(`describe.translateDescriptions`, `describe.translateSystem`, `call`);
@@ -1842,9 +1847,10 @@ const FLOWS = {
             step([`litert.gpuThrottle`],
                 ` Wrap the WebGPU device so every buffer mapAsync waits for`
                 + ` the readback, then rests the share of the busy interval`
-                + ` that keeps the GPU at 70 percent of wall time, capped so`
-                + ` one slow step never stalls the stream. Pacing starts`
-                + ` after the first chunk, so the prefill is never rested.`),
+                + ` requested by the reply, 50 percent by default, capped at`
+                + ` 500 ms so one slow step never stalls the stream. Pacing`
+                + ` starts after the first chunk, so the prefill is never`
+                + ` rested.`),
             step([`engine.logs`],
                 ` Log the censored turn only when the call enables logging,`
                 + ` otherwise stay silent.`),
@@ -1860,7 +1866,7 @@ const FLOWS = {
             step([`chat.cancel`],
                 ` A stale handle does nothing; otherwise abort the stream,`
                 + ` leave the shared download, or unload the model that`
-                + ` answered.`),
+                + ` answered, then report the settled load.`),
         ],
     },
 };

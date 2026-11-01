@@ -1,126 +1,77 @@
 # Changelog
 
+## 1.4.0
+
+- Add `LlmLimits.gpuShare`, GPU busy share per reply.
+
 ## 1.3.0
 
-- Add `gpuAdapter`, the WebGPU probe behind the default model, so a host can
-  check the device before it names a model.
-- Describe with `qwen3_vl_2b_instruct`, the Q4_K_M build, by default;
-  `qwen3_vl_2b_instruct_q3` stays in the catalog as the smaller file.
-- Keep one model in memory. A new load replaces the resident model on either
-  backend, so the CPU describer and the GPU text model no longer stay warm
-  together.
+- Add `gpuAdapter`, WebGPU probe before naming a model.
 - Remove `ChatModelId.gemma4_e2b`, the multimodal Gemma build.
-  `gemma4_e2b_limited`, the 2.0 GB text-only build, is the only Gemma model and
-  it loads on a desktop and a phone alike.
-- Drop audio from the catalog, so an audio-only turn reports
-  `Model does not accept audio` and a text turn drops its clip.
 
 ## 1.2.0
 
-- Add `imageReplyTokens`, the default reply budget of one image description and
-  translation.
-- Add `DescribeImagesInput.signal` and `DescribeTranslatedInput.signal`, so a
-  host can stop a batch and keep every finished image.
-- Add `DescribeImagesInput.additionalRules`, host rules appended to the
-  describer system message, and `LlmLimits.imageTokens`, the vision token
-  budget of one image.
+- Add `imageReplyTokens`, default reply budget per image.
+- Add `signal` to `DescribeImagesInput` and `DescribeTranslatedInput`, cancels a batch.
+- Add `DescribeImagesInput.additionalRules`, host rules for the describer.
+- Add `LlmLimits.imageTokens`, vision token budget per image.
 
 ## 1.1.0
 
-- Load models on different backends at the same time, so a host can warm the
-  GPU text model and the CPU media model with one `Promise.all`. A load on the
-  same backend still replaces the one in flight, and a phone still keeps one
-  model in total.
-- Report the last failure and engine status per model, so a concurrent load
-  never reports the outcome of the other one.
-- Add `describeModelId`, the model `describeImages` loads for its English pass,
-  so a host can warm it beside its own text model.
+- Add `describeModelId`, model for the English pass.
 
 ## 1.0.0
 
-- Add `describeTranslated`, which translates existing English image descriptions
-  on the GPU and returns one translated string per description, keeping English
-  when the translator is unavailable or declines.
-- Add `DescribeTranslatedInput`, the batch translation request.
-- Add `ChatModelId.qwen3_vl_2b_instruct_q3`, the Q3_K_M build of Unsloth
-  Qwen3-VL 2B Instruct, and make `describeImages` load it for the English
-  pass. `qwen3_vl_2b_instruct` stays in the catalog as the Q4_K_M build.
+- Add `describeTranslated`, translates descriptions on the GPU.
+- Add `DescribeTranslatedInput`, batch translation request.
+- Add `ChatModelId.qwen3_vl_2b_instruct_q3`, Q3_K_M build for descriptions.
 
 ## 0.9.2
 
-- Add `ImageDescription.durationMs`, the time the describer took for one image.
-- Pass that duration to `DescribeImagesInput.currentIndex` as its fourth
-  argument, so a host can show a per-image timing before the translation
-  arrives.
+- Add `ImageDescription.durationMs`, per-image describer time.
+- Pass the duration to `DescribeImagesInput.currentIndex`, fourth callback argument.
 
 ## 0.9.0
 
-- Add `describeImages`, which describes every image in English with
-  `qwen3_vl_2b_instruct` and translates each description on a WebGPU device
-  with `gemma4_e2b_limited`.
-- Add `DescribeImagesInput` and `ImageDescription`, the batch request and one
-  English plus translated description.
-- Add `ChatModelId.qwen3_vl_2b_instruct`, the Unsloth Qwen3-VL 2B Instruct
-  build used by `describeImages`.
+- Add `describeImages`, English descriptions then GPU translation.
+- Add `DescribeImagesInput` and `ImageDescription`, batch request and result.
+- Add `ChatModelId.qwen3_vl_2b_instruct`, Q4_K_M description build.
 
 ## 0.8.0
 
-- Add `clearModelCache`, which releases the loaded model and deletes every
-  cached model file.
-- Switching models keeps the previous model on disk, so a switch back skips
-  the download.
+- Add `clearModelCache`, releases model and cached files.
 
 ## 0.7.1
 
-- Add `ChatModelId.gemma4_e2b_limited`, the text-only build a phone or tablet
-  loads for a Gemma request.
-- Add `ChatStatusSnapshot.model`, the build that actually runs after the mobile
-  swap.
+- Add `ChatModelId.gemma4_e2b_limited`, text-only build for phones.
+- Add `ChatStatusSnapshot.model`, build after the mobile swap.
 
 ## 0.7.0
 
-- Add `builtinTools`, which builds the `websearch`, `calculate` and `currency`
-  tools on request. The host runs a tool through `ChatTool.execute`; the model
-  is never offered tools.
-- Add `calculateTool`, `currencyTool` and `webSearchTool`, the three built-in
-  tool descriptors.
-- Add `BuiltinTool` and `WebSearchProvider`, the built-in tool ids and the
-  search provider ids.
-- Add `ChatTool`, `ChatToolCall`, `ChatToolResult`, `ChatToolSchema`,
-  `ChatToolValue`, `WebSearchConfig` and `WebSearchResult`, the shape of one
-  tool, its call, its result and the search settings.
+- Add `builtinTools`, websearch, calculate and currency tools.
+- Add `calculateTool`, `currencyTool` and `webSearchTool`, built-in tool descriptors.
+- Add `BuiltinTool` and `WebSearchProvider`, tool and provider ids.
+- Add `ChatTool`, `ChatToolCall` and `ChatToolResult`, tool call shapes.
+- Add `ChatToolSchema` and `ChatToolValue`, schema and value types.
+- Add `WebSearchConfig` and `WebSearchResult`, search settings and result.
 
 ## 0.4.0
 
-- Add `ChatMessage.audio`, a list of audio data URLs or URLs attached to a user
-  turn.
-- Add `LlmLimits.maxAudio`, the number of audio clips kept in one prompt,
-  default 1.
-- Add `ChatStatusSnapshot.supportsAudio`, whether the requested model accepts
-  audio.
-- Gemma 4 E2B accepts WAV, MP3 and FLAC on the WebGPU engine; Qwen3-VL 2B does
-  not accept audio on the CPU engine.
+- Add `ChatMessage.audio`, audio URLs on a user turn.
+- Add `LlmLimits.maxAudio`, audio clips per prompt.
+- Add `ChatStatusSnapshot.supportsAudio`, whether the model accepts audio.
 
 ## 0.3.7
 
-- Add `onSpeed` to `ChatInput`, a per-call callback that receives the current
-  generation speed in tokens per second, measured from the first streamed
-  token so prompt processing is excluded.
+- Add `onSpeed`, generation speed in tokens per second.
 
 ## 0.2.0
 
-- Add `preloadModel`, a promise that downloads and loads a model before the
-  first `createChat` call, so the first reply starts without a load.
-- Add `ChatPreloadInput`, the subset of `ChatInput` that a preload accepts:
-  `model`, `limits`, `logging` and `onStatus`.
+- Add `preloadModel`, downloads and loads before chat.
+- Add `ChatPreloadInput`, subset of chat input.
 
 ## 0.1.0
 
-- Replace the facade with one-shot `createChat` calls that return a cancel
-  function.
-- Add `ChatInput` for one request and `ChatStatusSnapshot` for its status.
-- Stream accumulated reasoning and reply text through callbacks.
-- Keep the loaded model between calls and free it when a cancel arrives.
-- Add `LlmLimits` for token, prompt and history budgets.
-- Bundle the WebLLM and wllama engines into the browser and Node builds.
-- Start every engine through the unified `startLLM` runtime contract.
+- Replace the facade with one-shot `createChat` calls, one cancel per reply.
+- Add `ChatInput` and `ChatStatusSnapshot`, request input and status.
+- Add `LlmLimits`, token, prompt and history budgets.

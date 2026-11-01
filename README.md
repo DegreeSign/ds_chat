@@ -276,11 +276,16 @@ other GPU tabs, unload the model, or switch to the CPU model. A lost device
 needs a page or model reload; later calls cannot reuse it.
 
 While a reply streams, the GPU engine rests after every token readback, so the
-card stays near 70% of wall time instead of pegging at 100% and starving the
-desktop compositor. The rest applies after the prefill, so the first token is
-not delayed. Unloading releases the WebGPU device and resets the LiteRT wasm,
-because a deleted engine leaves both unusable; a later load rebuilds them from
-the stored model file without downloading it again.
+card stays near 50% of wall time instead of pegging at 100% and starving the
+desktop compositor. `limits.gpuShare` overrides that share for one reply, from
+0.05 to 1; `1` disables the rest and the default is 0.5. Each rest is capped
+at 500 ms, so a very slow token still makes progress. The rest applies after
+the prefill, so the first token is not delayed, but the prefill itself still
+runs unpaced. A freeze during loading or before the first token falls outside
+that rest; use a CPU model on those devices. Unloading releases the WebGPU
+device and resets the LiteRT wasm, because a deleted engine leaves both
+unusable; a later load rebuilds them from the stored model file without
+downloading it again.
 
 ## Public API
 
@@ -321,7 +326,8 @@ WebGPU adapter and the CPU build when it does not. `gpuAdapter` runs the same
 probe, so a host can check the device before it names a model. The budget
 defaults are 250 reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning
 tokens (320 on the CPU), 2 images, 1 audio clip, 1000 characters per message,
-10000 prompt characters and 32 CPU threads.
+10000 prompt characters, 32 CPU threads and a 0.5 GPU busy share. The CPU
+engine ignores `gpuShare`; the GPU engine applies it after prefill.
 
 `CancelChat` is `() => void`. Its meaning depends on the current state:
 
@@ -356,7 +362,7 @@ in memory at a time. A load of the same model still joins the one in flight.
 | Field | Description |
 | ----- | ----------- |
 | `model?` | `ChatModelId` to download and load. Defaults like `ChatInput.model`. |
-| `limits?` | Partial `LlmLimits`; `maxThreads` applies when the model loads. |
+| `limits?` | Partial `LlmLimits`; `maxThreads` applies at load, `gpuShare` per reply. |
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every progress and state change. |
 
@@ -415,11 +421,13 @@ function uses the shared runtime, so it loads the describer and then the
 translator, replacing whichever model was loaded before.
 
 `onStatus` follows the same snapshots as `createChat`. The describer reports
-first, with `supportsImages: true`. When a translation pass follows, the
-snapshots switch to `gemma4_e2b_limited` while it loads and translates. The
-final snapshot has `requesting: false`; when the translator cannot load, it also
-carries that error and the descriptions stay English. An empty `images` list
-touches no model and reports nothing.
+first, with `supportsImages: true`. A finished load reports `percent: 100` and
+`phase: LlmPhase.load` before the first text, so a host can clear its progress
+row. When a translation pass follows, the snapshots switch to
+`gemma4_e2b_limited` while it loads and translates. The final snapshot has
+`requesting: false`; when the translator cannot load, it also carries that error
+and the descriptions stay English. An empty `images` list touches no model and
+reports nothing.
 
 ### Translate descriptions
 
@@ -495,9 +503,11 @@ search and currency tools fetch over the network; `calculate` does not.
 | `error?` | The last failure, cleared when a reply starts. |
 
 The first snapshot fires synchronously inside `createChat`. A final snapshot
-with `requesting: false` marks the end of the call. `describeImages` reports the
-same snapshot for each model it loads: `qwen3_vl_2b_instruct` while it
-describes, then `gemma4_e2b_limited` while it translates.
+with `requesting: false` marks the end of the call. A cancelled call also ends
+with that snapshot, once the model unloads or its wait on the load ends, so a
+host can clear its loading row. `describeImages` reports the same snapshot for
+each model it loads: `qwen3_vl_2b_instruct` while it describes, then
+`gemma4_e2b_limited` while it translates.
 
 A stream that never produces its first chunk ends with an error after 5
 minutes on a desktop or 50 minutes on a phone or tablet, and an image turn
@@ -758,7 +768,7 @@ const useReply = () => {
 | `CancelChat` | The function returned by `createChat`. |
 | `ChatMessage` | One prompt turn, `role`, `content` and optional `images` and `audio`. |
 | `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |
-| `LlmLimits` | Token, prompt, image, audio and thread budgets, all overridable. |
+| `LlmLimits` | Token, prompt, image, audio, thread and GPU share budgets, all overridable. |
 | `WllamaAssets` | Wasm, compat wasm and compat worker URLs. |
 
 The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,

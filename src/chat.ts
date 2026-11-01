@@ -130,8 +130,11 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                     return false;
                 });
             if (call.token != token) return;
-            // cancel reports its own outcome
-            if (call.cancelled) return;
+            // cancelled call reports runtime state
+            if (call.cancelled) {
+                emitStatus(call);
+                return;
+            };
             if (!loaded) {
                 if (!call.error)
                     call.error = service.error(model.id) || `Model not ready`;

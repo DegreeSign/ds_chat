@@ -41,9 +41,9 @@ const
     /** Smallest Gemma 4 vision budget */
     visionTokens = 70,
     /** GPU busy share of time */
-    gpuShare = 0.7,
+    gpuShare = 0.5,
     /** Most rest per readback */
-    maxRestMs = 40,
+    maxRestMs = 500,
     /** Resumable store of GPU engine */
     store = createModelStore(`litert-store`),
     /** One GPU decode per sync */
@@ -70,6 +70,8 @@ let engines = 0;
 const pacedDevices = new WeakSet<object>();
 
 let
+    /** Target GPU busy share */
+    activeShare = gpuShare,
     /** Whether a reply is streaming */
     pacing = false,
     /** Last readback time, busy starts */
@@ -88,8 +90,8 @@ const
         .replace(/<\|channel>thought[\s\S]*$/, ``)
         .trim(),
     /** Rest owed for busy interval */
-    restFor = (busyMs: number): number =>
-        Math.min(maxRestMs, Math.max(0, busyMs * (1 / gpuShare - 1)));
+    restFor = (busyMs: number, share = gpuShare): number =>
+        Math.min(maxRestMs, Math.max(0, busyMs * (1 / share - 1)));
 
 /** WebGPU device resting after readback */
 const throttledDevice = ({
@@ -123,14 +125,15 @@ const paceGpu = async (): Promise<void> => {
         busy = now - lastSync;
     lastSync = now;
     if (!pacing) return;
-    const rest = Math.round(restFor(busy));
+    const rest = Math.round(restFor(busy, activeShare));
     if (rest < 1) return;
     await new Promise<void>(resolve => setTimeout(resolve, rest));
     lastSync = performance.now();
 };
 
 /** Start pacing after prefill */
-const startPacing = () => {
+const startPacing = (share: number = gpuShare) => {
+    activeShare = share > 0 ? share : gpuShare;
     pacing = true;
     lastSync = performance.now();
 };
@@ -411,7 +414,7 @@ const streamLitert = async function* ({
             if (prefill) {
                 log(loggingOn, `LiteRT first chunk`, Math.round(busyMs));
                 // decode rests after prefill
-                startPacing();
+                startPacing(params.limits.gpuShare);
             };
             const delta: EngineDelta = {};
             let text = typeof value.content == `string` ? value.content : ``;
