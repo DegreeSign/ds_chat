@@ -180,6 +180,10 @@ const createChatOn = (service: Runtime): ((input: ChatInput) => CancelChat) => {
                         if (call.token != token || call.cancelled) return;
                         input.onSpeed?.(speed);
                     },
+                    onPromptSpeed: speed => {
+                        if (call.token != token || call.cancelled) return;
+                        input.onPromptSpeed?.(speed);
+                    },
                     signal: call.controller.signal,
                 });
             } catch (error) {

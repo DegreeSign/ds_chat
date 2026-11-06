@@ -1558,6 +1558,69 @@ const definitions: Array<{
             },
         },
         {
+            name: `prompt speed/stream`,
+            run: async () => {
+                const
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    exact: number[] = [],
+                    estimated: number[] = [],
+                    live: number[] = [];
+                await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    onPromptSpeed: value => exact.push(value),
+                    promptTokens: 400,
+                    start: async () => streamOf({
+                        timings: { prompt_per_second: 42 },
+                        choices: [{ delta: { content: `ok` } }],
+                    }),
+                    stopped: () => false,
+                });
+                await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    onPromptSpeed: value => estimated.push(value),
+                    promptTokens: 400,
+                    start: async () => (async function* () {
+                        await sleep(10);
+                        yield { choices: [{ delta: { content: `ok` } }] };
+                    })(),
+                    stopped: () => false,
+                });
+                await streamReply({
+                    model,
+                    onReason: () => { },
+                    onText: () => { },
+                    onPromptSpeed: value => live.push(value),
+                    promptTokens: 400,
+                    start: async () => (async function* () {
+                        await sleep(10);
+                        yield {
+                            prompt_progress: {
+                                total: 200,
+                                processed: 100,
+                                time_ms: 1000,
+                            },
+                        };
+                        await sleep(10);
+                        yield { choices: [{ delta: { content: `ok` } }] };
+                    })(),
+                    stopped: () => false,
+                });
+                assert(exact.length > 1, `exact prompt speed updates`);
+                assertEqual(exact[exact.length - 1], 42, `prompt timing forwarded`);
+                assertEqual(estimated.length, 1, `estimated prompt speed`);
+                assert(
+                    Number.isFinite(estimated[0]) && estimated[0] > 0,
+                    `positive prompt speed`,
+                );
+                assertEqual(live.length, 1, `live prompt speed`);
+                assertEqual(live[0], 100, `progress speed read`);
+            },
+        },
+        {
             name: `runtime/load and reuse`,
             run: async () => {
                 const
@@ -2941,9 +3004,11 @@ const definitions: Array<{
             run: async () => {
                 const
                     speeds: number[] = [],
+                    prompts: number[] = [],
                     { chat } = chatWith({
                         chatImpl: async params => {
                             params.onSpeed?.(12.5);
+                            params.onPromptSpeed?.(7.5);
                             params.onText(`ok`);
                             return `ok`;
                         },
@@ -2953,9 +3018,12 @@ const definitions: Array<{
                     messages: [userMessage(`hi`)],
                     onResponse: () => { },
                     onSpeed: value => speeds.push(value),
+                    onPromptSpeed: value => prompts.push(value),
                 });
                 await waitFor(() => speeds.length == 1, `speed callback`);
+                await waitFor(() => prompts.length == 1, `prompt callback`);
                 assertEqual(speeds[0], 12.5, `speed forwarded`);
+                assertEqual(prompts[0], 7.5, `prompt speed forwarded`);
             },
         },
         {

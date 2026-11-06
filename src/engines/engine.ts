@@ -11,6 +11,7 @@ import type {
     EngineChunk,
     EngineContentPart,
     EngineMessage,
+    EnginePromptProgress,
     EngineRunParams,
     LlmLimits,
     StreamReplyParams,
@@ -33,6 +34,28 @@ const defaultLlmLimits: LlmLimits = {
 
 /** GPU reasoning and answer budget */
 const gpuReasoningTokens = 1200;
+
+/** Characters per prompt token */
+const promptCharsPerToken = 4;
+
+/** Rough prompt token count */
+const promptTokenEstimate = (
+    messages: EngineMessage[],
+    imageTokens: number,
+): number => {
+    let count = 0;
+    for (const message of messages) {
+        if (typeof message.content == `string`) {
+            count += message.content.length / promptCharsPerToken;
+            continue;
+        };
+        for (const part of message.content)
+            count += part.type == `text`
+                ? part.text.length / promptCharsPerToken
+                : imageTokens;
+    };
+    return Math.round(count);
+};
 
 /** Clamp a budget, with fallback */
 const budgetLimit = (
@@ -335,7 +358,9 @@ const
     /** Longest vision prefill wait */
     firstVisionReplyTimeout = Math.max(firstReplyTimeout, 840_000),
     /** Longest silence between streamed chunks */
-    idleReplyTimeout = 30000;
+    idleReplyTimeout = 30000,
+    /** Live prompt speed tick */
+    promptSpeedTick = 500;
 
 /** Stream that stopped producing chunks */
 class StallError extends Error { }
@@ -396,6 +421,8 @@ const
         onReason,
         onText,
         onSpeed,
+        onPromptSpeed,
+        promptTokens,
         start,
         stopped,
         firstTimeoutMs = firstReplyTimeout,
@@ -407,13 +434,68 @@ const
             thought = ``,
             finish = ``,
             seen = false,
+            promptExact = false,
+            promptProgress = false,
+            promptLive = 0,
+            promptAt = 0,
+            promptDone = 0,
+            promptReportedAt = 0,
+            prefillAt = 0,
+            promptTimer: ReturnType<typeof setInterval> | undefined,
             tokens = 0,
             startedAt = 0;
+        const
+            /** Publish one prompt speed */
+            reportPrompt = (speed: number) => {
+                if (!Number.isFinite(speed) || speed <= 0) return;
+                promptLive = rNum(speed);
+                onPromptSpeed?.(promptLive);
+            },
+            /** Estimate prompt speed so far */
+            estimatePrompt = () => {
+                if (seen || promptProgress || !promptTokens) return;
+                const elapsed = performance.now() - prefillAt;
+                if (elapsed > 0) reportPrompt(promptTokens * 1000 / elapsed);
+            },
+            /** Stop live prompt reporting */
+            stopPrompt = () => {
+                if (promptTimer == undefined) return;
+                clearInterval(promptTimer);
+                promptTimer = undefined;
+            },
+            /** Publish engine prefill progress */
+            reportProgress = (progress: EnginePromptProgress | undefined) => {
+                if (!progress) return;
+                const
+                    now = performance.now(),
+                    processed = progress.n_prompt_tokens_processed
+                        ?? progress.processed;
+                if (typeof processed != `number` || processed <= 0) return;
+                // real progress replaces estimate
+                promptProgress = true;
+                stopPrompt();
+                let speed = 0;
+                if (typeof progress.time_ms == `number` && progress.time_ms > 0)
+                    speed = processed * 1000 / progress.time_ms;
+                else if (promptAt)
+                    speed = (processed - promptDone) * 1000
+                        / Math.max(1, now - promptAt);
+                else speed = processed * 1000
+                    / Math.max(1, now - prefillAt);
+                if (now - promptReportedAt < promptSpeedTick) return;
+                promptReportedAt = now;
+                promptAt = now;
+                promptDone = processed;
+                reportPrompt(speed);
+            };
+        if (onPromptSpeed && promptTokens)
+            promptTimer = setInterval(estimatePrompt, promptSpeedTick);
         const splitter = createThinkSplitter(
             text => { thought += text; onReason(text); },
             text => { reply += text; onText(text); },
         );
         try {
+            prefillAt = performance.now();
             const opened = start();
             // timed out start stays handled
             void Promise.resolve(opened).catch(() => { });
@@ -450,15 +532,45 @@ const
                     throw error;
                 };
                 if (step.done) break;
-                seen = true;
                 const
-                    choice = (step.value as EngineChunk | undefined)?.choices?.[0],
+                    chunk = step.value as EngineChunk | undefined,
+                    choice = chunk?.choices?.[0],
                     delta = choice?.delta,
                     reasoned = typeof delta?.reasoning_content == `string`
                         ? delta.reasoning_content
                         : typeof delta?.reasoning == `string`
                             ? delta.reasoning
-                            : ``;
+                            : ``,
+                    output = !!reasoned || !!delta?.content
+                        || !!choice?.finish_reason,
+                    timing = chunk?.timings?.prompt_per_second;
+                // prefill progress stays live
+                if (!output) {
+                    reportProgress(chunk?.prompt_progress);
+                    if (!promptExact
+                        && typeof timing == `number`
+                        && Number.isFinite(timing)
+                        && timing > 0) {
+                        promptExact = true;
+                        reportPrompt(timing);
+                        stopPrompt();
+                    };
+                    continue;
+                };
+                // first token ends prefill
+                if (!seen) {
+                    reportProgress(chunk?.prompt_progress);
+                    if (!promptLive) estimatePrompt();
+                    seen = true;
+                    stopPrompt();
+                };
+                if (!promptExact
+                    && typeof timing == `number`
+                    && Number.isFinite(timing)
+                    && timing > 0) {
+                    promptExact = true;
+                    reportPrompt(timing);
+                };
                 if (choice?.finish_reason) finish = choice.finish_reason;
                 if (reasoned) {
                     thought += reasoned;
@@ -478,6 +590,8 @@ const
             if (logging) console.log(`Local chat failed`, error);
             // stalled engine must reach host
             if (error instanceof StallError && !stopped()) throw error;
+        } finally {
+            stopPrompt();
         };
         const result = stopped() ? undefined : reply || undefined;
         if (logging) {
@@ -514,6 +628,11 @@ const
             onReason: params.onReason,
             onText: params.onText,
             onSpeed: params.onSpeed,
+            onPromptSpeed: params.onPromptSpeed,
+            promptTokens: promptTokenEstimate(
+                messages,
+                params.limits.imageTokens,
+            ),
             start: () => start(messages),
             stopped,
             onStall,

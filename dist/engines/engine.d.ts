@@ -30,7 +30,7 @@ declare const
 /** Log chat call, text censored */
 logChatCall: (model: ChatModel, messages: EngineMessage[]) => void, 
 /** Stream reply, undefined when stopped */
-streamReply: ({ model, logging, onReason, onText, onSpeed, start, stopped, firstTimeoutMs, idleTimeoutMs, onStall, }: StreamReplyParams) => Promise<string | undefined>;
+streamReply: ({ model, logging, onReason, onText, onSpeed, onPromptSpeed, promptTokens, start, stopped, firstTimeoutMs, idleTimeoutMs, onStall, }: StreamReplyParams) => Promise<string | undefined>;
 declare const 
 /** Build prompt, stream through engine */
 runEngineChat: ({ model, params, start, stopped, onStall, }: EngineRunParams) => Promise<string | undefined>;

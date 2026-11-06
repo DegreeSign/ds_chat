@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0
+
+- Add `ChatInput.onPromptSpeed`, live prompt processing speed.
+
 ## 1.4.0
 
 - Add `LlmLimits.gpuShare`, GPU busy share per reply.

@@ -251,6 +251,8 @@ interface ChatInput {
     onResponse: (text: string) => void;
     /** Generation speed callback */
     onSpeed?: (tokensPerSecond: number) => void;
+    /** Prompt processing speed callback */
+    onPromptSpeed?: (tokensPerSecond: number) => void;
     /** Status change callback */
     onStatus?: (snapshot: ChatStatusSnapshot) => void;
 }
@@ -487,6 +489,8 @@ interface RuntimeChatParams {
     onText: (text: string) => void;
     /** Generation speed */
     onSpeed?: (tokensPerSecond: number) => void;
+    /** Prompt processing speed */
+    onPromptSpeed?: (tokensPerSecond: number) => void;
     signal?: AbortSignal;
 }
 /** Shared on-device runtime */
@@ -529,6 +533,8 @@ interface EngineChatParams {
     onText: (text: string) => void;
     /** Generation speed */
     onSpeed?: (tokensPerSecond: number) => void;
+    /** Prompt processing speed */
+    onPromptSpeed?: (tokensPerSecond: number) => void;
     signal?: AbortSignal;
 }
 /** Params of the engine startLLM */
@@ -668,12 +674,34 @@ interface EngineDelta {
     reasoning?: string;
     reasoning_content?: string;
 }
+/** Engine stream timings */
+interface EngineTimings {
+    /** Prompt tokens per second */
+    prompt_per_second?: number;
+    /** Prompt tokens evaluated */
+    prompt_n?: number;
+}
+/** Engine prefill progress */
+interface EnginePromptProgress {
+    /** Prompt tokens total */
+    total?: number;
+    /** Processed prompt tokens */
+    processed?: number;
+    /** Prefill time, milliseconds */
+    time_ms?: number;
+    /** wllama total token field */
+    n_prompt_tokens?: number;
+    /** wllama processed token field */
+    n_prompt_tokens_processed?: number;
+}
 /** Engine stream chunk */
 interface EngineChunk {
     choices?: Array<{
         finish_reason?: string;
         delta?: EngineDelta;
     }>;
+    timings?: EngineTimings;
+    prompt_progress?: EnginePromptProgress;
 }
 /** Params of one streamed reply */
 interface StreamReplyParams {
@@ -684,6 +712,10 @@ interface StreamReplyParams {
     onText: (text: string) => void;
     /** Generation speed */
     onSpeed?: (tokensPerSecond: number) => void;
+    /** Prompt processing speed */
+    onPromptSpeed?: (tokensPerSecond: number) => void;
+    /** Estimated prompt tokens */
+    promptTokens?: number;
     /** Open engine stream */
     start: () => Promise<AsyncIterable<unknown>>;
     /** Generation stopped flag */
@@ -713,4 +745,4 @@ interface ImageSize {
     width: number;
     height: number;
 }
-export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, ImageDescription, DescribeImagesInput, DescribeTranslatedInput, WllamaAssets, LitertAssets, GpuBuffer, GpuDevice, GpuWasm, GpuThrottleParams, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, ImageSize, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, ImageDescription, DescribeImagesInput, DescribeTranslatedInput, WllamaAssets, LitertAssets, GpuBuffer, GpuDevice, GpuWasm, GpuThrottleParams, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, ImageSize, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineTimings, EnginePromptProgress, EngineChunk, StreamReplyParams, EngineRunParams, };

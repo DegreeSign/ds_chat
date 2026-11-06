@@ -1,3 +1,4 @@
+import { rNum } from '@degreesign/utils';
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
@@ -459,7 +460,7 @@ const chatOn = async ({
         session.sent = [];
     };
     try {
-        return await runEngineChat({
+        const result = await runEngineChat({
             model,
             params,
             stopped: () => !!params.signal?.aborted,
@@ -473,6 +474,18 @@ const chatOn = async ({
                 return streamLitert({ engine, mod, params, messages, session });
             },
         });
+        const conversation = session.conversation;
+        // report prefill once stream closes
+        if (conversation && params.onPromptSpeed && !params.signal?.aborted) {
+            const info = await conversation.getBenchmarkInfo()
+                .catch(() => undefined);
+            const speed = info?.lastPrefillTokensPerSecond;
+            if (typeof speed == `number`
+                && Number.isFinite(speed)
+                && speed > 0)
+                params.onPromptSpeed(rNum(speed));
+        };
+        return result;
     } catch (error) {
         reset();
         throw error;

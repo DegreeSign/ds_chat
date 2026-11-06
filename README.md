@@ -112,6 +112,7 @@ const cancel = createChat({
   onResponse: (text) => renderReply(text),
   // onThinking: (text) => renderThinking(text),
   // onSpeed: (tokensPerSecond) => renderSpeed(tokensPerSecond),
+  // onPromptSpeed: (tokensPerSecond) => renderPromptSpeed(tokensPerSecond),
   // onStatus: (snapshot) => renderStatus(snapshot),
 });
 
@@ -123,13 +124,17 @@ await clearModelCache();
 
 Without `model` the package picks the GPU model when the browser provides a
 WebGPU adapter and the CPU model when it does not. `limits`, `reasoning`,
-`onThinking`, `onSpeed` and `onStatus` are optional per call; see the API
-below.
+`onThinking`, `onSpeed`, `onPromptSpeed` and `onStatus` are optional per call;
+see the API below.
 
 There is no promise and no controller object on `createChat`. Every result
 arrives through `onResponse`, and `onStatus` reports `requesting: false` when
 the reply ends. `onSpeed` reports the streamed generation speed in tokens per
 second, measured from the first token so prompt processing is excluded.
+`onPromptSpeed` streams the prompt processing speed while the prompt is
+evaluated, then reports the final value at the first generated token. It uses
+the engine prefill progress or stream timings, and falls back to a running
+estimate when the engine exposes neither.
 `preloadModel` is the one promise: it resolves once the model is loaded, or
 `false` when it cannot load.
 
@@ -319,6 +324,7 @@ from this device.
 | `onThinking?` | Receives the accumulated reasoning text as it streams. |
 | `onResponse` | Receives the accumulated reply text as it streams. Required. |
 | `onSpeed?` | Receives the current generation speed in tokens per second. |
+| `onPromptSpeed?` | Receives live prompt processing speed in tokens per second. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every state change. |
 
 Without `model` the package picks the GPU build when the browser provides a

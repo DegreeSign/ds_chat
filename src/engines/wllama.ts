@@ -219,6 +219,10 @@ const
                 return await instance.createChatCompletion({
                     messages: await toWllamaMessages(messages),
                     ...replyOptions(params.limits, params.reasoning, params.temperature),
+                    // stream prompt timings per chunk
+                    timings_per_token: true,
+                    // stream prefill progress chunks
+                    return_progress: true,
                     ...(params.repeatPenalty
                         ? { penalty_repeat: params.repeatPenalty }
                         : {}),
