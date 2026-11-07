@@ -1,4 +1,4 @@
-import { LlmPhase } from '../enums';
+import { LlmPhase, StoreFault } from '../enums';
 import { contentLength } from './engine';
 import type {
     ModelStore,
@@ -18,8 +18,19 @@ const
     maxStalls = 4,
     /** Idle milliseconds before request restarts */
     idleTimeout = 30000,
+    /** Failures of the file system */
+    storeFaults: ReadonlySet<StoreFault> = new Set([
+        StoreFault.quota,
+        StoreFault.notAllowed,
+        StoreFault.notSupported,
+        StoreFault.invalidState,
+        StoreFault.typeMismatch,
+        StoreFault.security,
+    ]),
     /** Shared downloads in flight */
-    downloads = new Map<string, Promise<StoredModel | undefined>>();
+    downloads = new Map<string, Promise<StoredModel | undefined>>(),
+    /** URLs whose storage filled */
+    quotaFaults = new Set<string>();
 
 let
     /** Whether no writable file system */
@@ -63,6 +74,17 @@ const
         };
         try {
             return await navigator.storage.getDirectory();
+        } catch { return undefined; };
+    },
+    /** Remaining storage bytes, undefined unknown */
+    storageRoom = async (): Promise<number | undefined> => {
+        try {
+            if (typeof navigator == `undefined` || !navigator.storage?.estimate)
+                return undefined;
+            const estimate = await navigator.storage.estimate();
+            return typeof estimate.quota == `number` && estimate.quota > 0
+                ? estimate.quota - (estimate.usage || 0)
+                : undefined;
         } catch { return undefined; };
     },
     /** Open model directory if present */
@@ -254,6 +276,7 @@ const
             written = start,
             inPart = 0,
             left = skip,
+            reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
             writable: FileSystemWritableFileStream | undefined;
         /** Open next part or keep */
         const open = async () => {
@@ -265,12 +288,13 @@ const
         const close = async () => {
             const current = writable;
             writable = undefined;
-            if (current) await current.close().catch(() => { });
+            if (current) await current.close();
         };
         try {
-            const reader = body.getReader();
+            const stream = body.getReader();
+            reader = stream;
             while (true) {
-                const { done, value } = await reader.read();
+                const { done, value } = await stream.read();
                 if (done) break;
                 onChunk();
                 let offset = 0;
@@ -301,7 +325,8 @@ const
             await close();
         } catch (error) {
             // keep complete parts and tail
-            await close();
+            await close().catch(() => { });
+            await reader?.cancel().catch(() => { });
             throw error;
         };
         return written;
@@ -326,7 +351,8 @@ const
         };
         let
             high = 0,
-            stalls = 0;
+            stalls = 0,
+            roomChecked = false;
         while (true) {
             if (signal?.aborted) throw new Error(`Cancelled`);
             const stored = await readStored(dir, name);
@@ -391,18 +417,28 @@ const
                 const
                     // full body replays stored prefix
                     skip = plan.start == 0 ? size : 0,
-                    written = await storeBody({
-                        dir: sub,
-                        start: plan.start + skip,
-                        skip,
-                        total: plan.total,
-                        body: response.body,
-                        onProgress,
-                        onChunk: () => {
-                            clearTimeout(idle);
-                            idle = setTimeout(leave, idleTimeout);
-                        },
-                    });
+                    start = plan.start + skip;
+                if (!roomChecked && plan.total > start) {
+                    roomChecked = true;
+                    const room = await storageRoom();
+                    // full storage keeps parts
+                    if (room != undefined && room < plan.total - start) {
+                        await response.body.cancel().catch(() => { });
+                        throw new DOMException(`Storage is full`, StoreFault.quota);
+                    };
+                };
+                const written = await storeBody({
+                    dir: sub,
+                    start,
+                    skip,
+                    total: plan.total,
+                    body: response.body,
+                    onProgress,
+                    onChunk: () => {
+                        clearTimeout(idle);
+                        idle = setTimeout(leave, idleTimeout);
+                    },
+                });
                 if (!plan.total) {
                     await writeMeta(sub, {
                         total: written,
@@ -416,9 +452,7 @@ const
                 if (signal?.aborted) throw new Error(`Cancelled`);
                 // file system failure keeps parts
                 if (error instanceof DOMException
-                    && [`QuotaExceededError`, `NotAllowedError`, `NotSupportedError`,
-                        `InvalidStateError`, `TypeMismatchError`, `SecurityError`]
-                        .includes(error.name))
+                    && storeFaults.has(error.name as StoreFault))
                     throw error;
                 // next loop resumes committed parts
                 await new Promise(resolve =>
@@ -431,8 +465,11 @@ const
     },
     /** Whether store failure disables storage */
     isStoreError = (error: unknown): boolean =>
-        [`NotAllowedError`, `NotSupportedError`]
-            .includes((error as DOMException)?.name || ``);
+        [StoreFault.notAllowed, StoreFault.notSupported]
+            .includes((error as DOMException)?.name as StoreFault),
+    /** Whether storage quota is full */
+    isQuotaError = (error: unknown): boolean =>
+        (error as DOMException)?.name == StoreFault.quota;
 
 /** Create engine resumable file store */
 const createModelStore = (dirName: string): ModelStore => {
@@ -456,25 +493,35 @@ const createModelStore = (dirName: string): ModelStore => {
             signal,
             onProgress,
         }: StoreDownloadParams): Promise<StoredModel | undefined> => {
+            // full storage streams now
+            if (quotaFaults.has(url))
+                throw new DOMException(`Storage is full`, StoreFault.quota);
             const key = `${dirName}|${url}`;
             const running = downloads.get(key);
             if (running) return await running;
             const root = await dir();
             if (!root) return undefined;
-            const pending = downloadInto(root, url, signal, onProgress).finally(() => {
-                downloads.delete(key);
-            });
+            const pending = downloadInto(root, url, signal, onProgress)
+                .catch(error => {
+                    if (isQuotaError(error)) quotaFaults.add(url);
+                    throw error;
+                })
+                .finally(() => {
+                    downloads.delete(key);
+                });
             downloads.set(key, pending);
             return await pending;
         },
         /** Delete stored file and metadata */
         remove: async (url: string): Promise<void> => {
+            quotaFaults.delete(url);
             const root = await dir();
             if (!root) return;
             await removeFrom(root, storeName(url));
         },
         /** Delete whole store directory */
         purge: async (): Promise<void> => {
+            quotaFaults.clear();
             const root = await storeRoot();
             if (!root) return;
             await root.removeEntry(dirName, { recursive: true }).catch(() => { });
@@ -485,6 +532,7 @@ const createModelStore = (dirName: string): ModelStore => {
 export {
     chainParts,
     createModelStore,
+    isQuotaError,
     isStoreError,
     resumePlan,
 };

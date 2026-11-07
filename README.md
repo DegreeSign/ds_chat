@@ -674,7 +674,8 @@ model files in the origin private file system as numbered parts, under
 `wllama-store` for the CPU engine and `litert-store` for the GPU engine. The GPU
 engine also reads a Cache Storage entry under `litertlm-models` when an older
 version stored the file. A quota failure keeps the parts already stored, so
-freeing disk lets the next attempt resume.
+freeing disk lets the next attempt resume, and the running load streams the
+model from the network so the assistant still starts.
 
 Both engines store the files before they load them, and one download serves
 every caller. A failed load, a cancelled call or a repeated `createChat` reads

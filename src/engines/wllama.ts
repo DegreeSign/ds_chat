@@ -9,7 +9,7 @@ import {
     replyOptions,
     runEngineChat,
 } from './engine';
-import { createModelStore, isStoreError } from './store';
+import { createModelStore, isQuotaError } from './store';
 import { heuristicThreads } from './threads';
 import { contentBuffer, imageTokens } from './images';
 import { log } from '../log';
@@ -295,6 +295,9 @@ const
             n_keep: Math.max(64, Math.round(contextSize / 16)),
             ...visionLimits(model),
         };
+        let
+            /** Full storage skips the cache */
+            quotaFull = false;
         try {
             // complete store skips network
             let blobs = complete
@@ -305,9 +308,9 @@ const
                 blobs = await storedBlobs({ model, signal, onProgress })
                     .catch(error => {
                         if (signal?.aborted) throw new Error(`Cancelled`);
-                        // unwritable store streams file
-                        if (!isStoreError(error)) throw error;
+                        // stream when the store fails
                         if (logging) console.log(`Local model store failed`, error);
+                        quotaFull = isQuotaError(error);
                         return undefined;
                     });
             if (blobs) {
@@ -320,7 +323,7 @@ const
                         : modelFileUrl,
                     {
                         ...loadParams,
-                        useCache: true,
+                        useCache: !quotaFull,
                         // abort download when cancelled
                         signal,
                         progressCallback: ({ loaded, total }) => {

@@ -29,6 +29,15 @@ declare enum LlmPhase {
     download = "download",
     load = "load"
 }
+/** File system failure names */
+declare enum StoreFault {
+    quota = "QuotaExceededError",
+    notAllowed = "NotAllowedError",
+    notSupported = "NotSupportedError",
+    invalidState = "InvalidStateError",
+    typeMismatch = "TypeMismatchError",
+    security = "SecurityError"
+}
 /** Catalog ids of on-device models */
 declare enum ChatModelId {
     qwen3_vl_2b = "qwen3-vl-2b",
@@ -47,4 +56,4 @@ declare enum WebSearchProvider {
     wikipedia = "wikipedia",
     duckduckgo = "duckduckgo"
 }
-export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, ChatModelId, BuiltinTool, WebSearchProvider, };
+export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, StoreFault, ChatModelId, BuiltinTool, WebSearchProvider, };

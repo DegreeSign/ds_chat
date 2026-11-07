@@ -11,7 +11,7 @@ import {
     replyOptions,
     runEngineChat,
 } from './engine';
-import { createModelStore, isStoreError } from './store';
+import { createModelStore, isQuotaError } from './store';
 import { contentBuffer } from './images';
 import { log } from '../log';
 import { LlmBackend, LlmPhase } from '../enums';
@@ -565,7 +565,10 @@ const startLLM = async ({
     const
         url = modelUrl(litert.repo, litert.file),
         cache = await cacheOpen();
-    let source: ReadableStream<Uint8Array> | undefined;
+    let
+        source: ReadableStream<Uint8Array> | undefined,
+        /** Full storage skips the cache */
+        quotaFull = false;
     // complete file needs no network
     const legacy = cache ? await cache.match(url) : undefined;
     if (legacy?.body) source = legacy.body;
@@ -578,14 +581,14 @@ const startLLM = async ({
         const saved = await store.download({ url, signal, onProgress })
             .catch(error => {
                 if (signal?.aborted) throw new Error(`Cancelled`);
-                // unwritable store loads from network
-                if (!isStoreError(error)) throw error;
+                // stream when the store fails
                 if (logging) console.log(`Local model store failed`, error);
+                quotaFull = isQuotaError(error);
                 return undefined;
             });
         if (saved) source = saved.file.stream();
     };
-    if (!source && cache) {
+    if (!source && cache && !quotaFull) {
         try {
             await cacheModel(url, cache, signal, onProgress);
             const hit = await cache.match(url);

@@ -518,7 +518,7 @@ const step = (ids, text) => ({ ids, text });
 
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 38);
-f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 67);
+f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 78);
 f(`types`, `entry`, `types.ts`, `src/types.ts`, 900);
 f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 306);
 f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 558);
@@ -526,10 +526,10 @@ f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 363);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 137);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 659);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 411);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 414);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 674);
-f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 490);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 677);
+f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 538);
 f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 187);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
 f(`litertLoader`, `engines`, `litertLoader.js`,
@@ -958,7 +958,7 @@ n(`engine`, `runEngineChat`, 612, `runEngineChat`,
 n(`wllama`, `visionLimits`, 42, `visionLimits`,
     `(model) => object`,
     `Only the instruct builds set a 16 to 128 image token window`);
-n(`wllama`, `wllamaEngine`, 385, `wllamaEngine`, `LlmEngine`,
+n(`wllama`, `wllamaEngine`, 388, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, purge`);
 n(`wllama`, `resolveAssets`, 59, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
@@ -989,23 +989,23 @@ n(`wllama`, `runtime`, 33, `runtime`,
     `The resumable store, the GPU probe log filter and the log switch`);
 n(`threads`, `heuristicThreads`, 2, `heuristicThreads`, `(cores) => number`,
     `Logical cores minus a fifth, at least one core free, minimum 1`);
-n(`wllama`, `startLLM`, 234, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`wllama`, `startLLM`, 238, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Pick 4k or 8k context, load the model and projector from stored blobs,`
-    + ` fall back to the cache or network, take the heuristic thread count`
-    + ` lowered by the caller budget, warm the graphs at load, shift a full`
-    + ` context, set no image limits except the instruct describer's 16 to`
-    + ` 128 window, abortable`);
-n(`wllama`, `cached`, 388, `cached`, `(model) => Promise<boolean>`,
+    + ` fall back to the cache or network, skip the cache when storage is full,`
+    + ` take the heuristic thread count lowered by the caller budget, warm the`
+    + ` graphs at load, shift a full context, set no image limits except the`
+    + ` instruct describer's 16 to 128 window, abortable`);
+n(`wllama`, `cached`, 391, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
 n(`wllama`, `chat`, 203, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 379, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 382, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `purge`, 395, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 398, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 649, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 652, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, purge`);
 n(`litert`, `cache`, 39,
     `cacheName · gpuShare · maxRestMs · store · backendConfig`,
@@ -1073,15 +1073,16 @@ n(`litert`, `startLLM`, 527, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Route the wasm output through the logging flag, load wasm and module,`
     + ` pick the desktop or phone context window, wrap the WebGPU device`
     + ` for the GPU rest, read the stored file or`
-    + ` download it with resume, compile it with`
+    + ` download it with resume, streaming without the cache when storage is`
+    + ` full, compile it with`
     + ` progress, size the vision and audio encoders, warm the runtime`
     + ` environment with one throwaway conversation, count the live engine and`
     + ` open one reused conversation`);
-n(`litert`, `unload`, 638, `runtime.unload`, `() => Promise<void>`,
+n(`litert`, `unload`, 641, `runtime.unload`, `() => Promise<void>`,
     `Delete the open conversation and the wasm engine, then destroy the`
     + ` WebGPU device and unload the wasm once the last engine is gone,`
     + ` keeping the cache`);
-n(`litert`, `purge`, 653, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 656, `purge`, `() => Promise<void>`,
     `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
@@ -1089,61 +1090,70 @@ n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
 
 // model file store
 n(`store`, `dir`, 14, `partBytes · maxStalls · idleTimeout`
-    + ` · downloads · unsupported`,
-    `32 MiB · 4 · 30000 · Map<string, Promise<StoredModel>> · boolean`,
-    `The part size, the stall budget, the downloads in flight and whether`
-    + ` this process has no writable file system`);
-n(`store`, `storeName`, 30, `storeName`, `(url) => string`,
+    + ` · storeFaults · downloads · quotaFaults · unsupported`,
+    `32 MiB · 4 · 30000 · Set<StoreFault> · Map<string, Promise>`
+    + ` · Set<string> · boolean`,
+    `The part size, the stall budget, the file system failures, the downloads`
+    + ` in flight, the URLs whose storage filled and whether this process has`
+    + ` no writable file system`);
+n(`store`, `storeName`, 41, `storeName`, `(url) => string`,
     `Stable model directory name for one URL, a hash and the file name`);
-n(`store`, `parts`, 39, `partName · partOffset · chainParts`,
+n(`store`, `parts`, 50, `partName · partOffset · chainParts`,
     `(start) => string · (name) => number · (parts) => StoredFilePart[]`,
     `Name one part by its byte offset, read that offset back, and keep only`
     + ` the contiguous chain from zero`);
-n(`store`, `storeRoot`, 58, `storeRoot`,
+n(`store`, `storeRoot`, 69, `storeRoot`,
     `() => Promise<FileSystemDirectoryHandle | undefined>`,
     `Open the origin private file system, absent in Node`);
-n(`store`, `meta`, 69, `modelDir · parseMeta · readMeta · writeMeta`,
+n(`store`, `storageRoom`, 80, `storageRoom`,
+    `() => Promise<number | undefined>`,
+    `Remaining quota from the storage estimate, undefined when unknown`);
+n(`store`, `meta`, 90, `modelDir · parseMeta · readMeta · writeMeta`,
     `(dir, name) => Promise<FileSystemDirectoryHandle?>`
     + ` · (handle) => Promise<StoredModelMeta?>`,
     `Open one model directory, parse its metadata file, read and write the`
     + ` size and entity tag beside the parts`);
-n(`store`, `parthandling`, 112, `storeEntries · removeParts · readParts`,
+n(`store`, `parthandling`, 134, `storeEntries · removeParts · readParts`,
     `(dir) => AsyncIterable · Promise<void> · Promise<Blob?>`,
     `Iterate one directory, delete stale parts, and compose the contiguous`
     + ` prefix into one Blob`);
-n(`store`, `readLegacy`, 154, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
+n(`store`, `readLegacy`, 176, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
     `Read a model an older version stored as one file and metadata`);
-n(`store`, `removeFrom`, 176, `removeFrom`, `(dir, name) => Promise<void>`,
+n(`store`, `removeFrom`, 198, `removeFrom`, `(dir, name) => Promise<void>`,
     `Delete one model directory, its parts and its metadata`);
-n(`store`, `readStored`, 184, `readStored`, `(dir, name) => Promise<StoredModel?>`,
+n(`store`, `readStored`, 206, `readStored`, `(dir, name) => Promise<StoredModel?>`,
     `Stored bytes plus metadata, complete once the parts reach the total`);
-n(`store`, `resumePlan`, 207, `resumePlan`, `(response, part) => ResumePlan?`,
+n(`store`, `resumePlan`, 229, `resumePlan`, `(response, part) => ResumePlan?`,
     `Accept a 206 that continues the parts and matches their size and entity`
     + ` tag, trust the request when the host hides the range`);
-n(`store`, `storeBody`, 236, `storeBody`,
+n(`store`, `storeBody`, 258, `storeBody`,
     `({ dir, start, skip, total, body, onProgress, onChunk }) => Promise<number>`,
     `Write one response body into 32 MiB parts, skip a replayed prefix, commit`
-    + ` every part, report absolute progress and reset the idle timer on each`
-    + ` chunk`);
-n(`store`, `downloadInto`, 310, `downloadInto`,
+    + ` every part, cancel the reader on failure, report absolute progress and`
+    + ` reset the idle timer on each chunk`);
+n(`store`, `downloadInto`, 335, `downloadInto`,
     `(dir, url, signal, onProgress) => Promise<StoredModel>`,
-    `Request a bounded range of the missing bytes, retry a stalled or cut`
-    + ` connection from the last committed part, check size and etag, replay a`
-    + ` full body over stored parts and keep every part on any failure`);
-n(`store`, `isStoreError`, 433, `isStoreError`, `(error) => boolean`,
+    `Request a bounded range of the missing bytes, stop early when the room`
+    + ` cannot hold them, retry a stalled or cut connection from the last`
+    + ` committed part, check size and etag, replay a full body over stored`
+    + ` parts and keep every part on any failure`);
+n(`store`, `isStoreError`, 467, `isStoreError`, `(error) => boolean`,
     `A write the browser refuses means this host cannot use a file store`);
-n(`store`, `createModelStore`, 438, `createModelStore`,
+n(`store`, `isQuotaError`, 471, `isQuotaError`, `(error) => boolean`,
+    `A quota failure means the load streams and skips the cache`);
+n(`store`, `createModelStore`, 475, `createModelStore`,
     `(dirName) => ModelStore`,
     `Open one engine's directory and return stored, download, remove and`
     + ` purge over it`);
-n(`store`, `stored`, 449, `store.stored`, `(url) => Promise<StoredModel?>`,
+n(`store`, `stored`, 486, `store.stored`, `(url) => Promise<StoredModel?>`,
     `Bytes and metadata of one stored model file`);
-n(`store`, `download`, 454, `store.download`,
+n(`store`, `download`, 491, `store.download`,
     `({ url, signal, onProgress }) => Promise<StoredModel?>`,
-    `Share one download per store and URL, undefined without a file system`);
-n(`store`, `remove`, 471, `store.remove`, `(url) => Promise<void>`,
+    `Share one download per store and URL, undefined without a file system,`
+    + ` remember a full storage so the next call streams`);
+n(`store`, `remove`, 516, `store.remove`, `(url) => Promise<void>`,
     `Delete one stored model file and its metadata`);
-n(`store`, `purge`, 477, `store.purge`, `() => Promise<void>`,
+n(`store`, `purge`, 523, `store.purge`, `() => Promise<void>`,
     `Delete the whole engine store directory and every model file in it`);
 
 // image resizing
@@ -1320,7 +1330,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.5.0`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.5.1`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`
@@ -1552,7 +1562,7 @@ e(`wllama.startLLM`, `wllama.cpuFiles`, `call`);
 e(`wllama.startLLM`, `wllama.filesStored`, `call`);
 e(`wllama.startLLM`, `wllama.filesCached`, `call`);
 e(`wllama.startLLM`, `wllama.storedBlobs`, `call`);
-e(`wllama.startLLM`, `store.isStoreError`, `call`);
+e(`wllama.startLLM`, `store.isQuotaError`, `call`);
 e(`wllama.startLLM`, `engine.modelUrl`, `call`);
 e(`wllama.startLLM`, `entryOf`, `call`);
 e(`wllama.startLLM`, `models.snapshots`, `call`);
@@ -1605,7 +1615,7 @@ e(`litert.startLLM`, `litert.cacheModel`, `call`);
 e(`litert.startLLM`, `litert.fetchModel`, `call`);
 e(`litert.startLLM`, `store.stored`, `call`);
 e(`litert.startLLM`, `store.download`, `call`);
-e(`litert.startLLM`, `store.isStoreError`, `call`);
+e(`litert.startLLM`, `store.isQuotaError`, `call`);
 e(`litert.startLLM`, `engine.modelUrl`, `call`);
 e(`litert.startLLM`, `litert.chat`, `inner`);
 e(`litert.startLLM`, `litert.unload`, `inner`);
@@ -1655,11 +1665,13 @@ e(`store.createModelStore`, `store.storeRoot`, `call`);
 e(`store.stored`, `store.readStored`, `call`);
 e(`store.stored`, `store.storeName`, `call`);
 e(`store.download`, `store.downloadInto`, `call`);
+e(`store.download`, `store.isQuotaError`, `call`);
 e(`store.download`, `store.dir`, `store`);
 e(`store.downloadInto`, `store.readStored`, `call`);
 e(`store.downloadInto`, `store.readLegacy`, `call`);
 e(`store.downloadInto`, `store.meta`, `call`);
 e(`store.downloadInto`, `store.resumePlan`, `call`);
+e(`store.downloadInto`, `store.storageRoom`, `call`);
 e(`store.downloadInto`, `store.storeBody`, `call`);
 e(`store.downloadInto`, `store.parthandling`, `call`);
 e(`store.downloadInto`, `store.storeName`, `call`);

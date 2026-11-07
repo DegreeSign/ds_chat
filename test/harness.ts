@@ -65,6 +65,7 @@ import {
 import {
     chainParts,
     createModelStore,
+    isQuotaError,
     isStoreError,
     resumePlan,
 } from "../src/engines/store";
@@ -4227,6 +4228,16 @@ const definitions: Array<{
                     `quota is not a store error`,
                 );
                 assertEqual(isStoreError(new Error(`x`)), false, `plain error`);
+                assertEqual(
+                    isQuotaError(new DOMException(``, `QuotaExceededError`)),
+                    true,
+                    `quota full`,
+                );
+                assertEqual(
+                    isQuotaError(new DOMException(``, `NotAllowedError`)),
+                    false,
+                    `quota only`,
+                );
             },
         },
         {

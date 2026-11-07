@@ -34,6 +34,16 @@ enum LlmPhase {
     load = `load`,
 }
 
+/** File system failure names */
+enum StoreFault {
+    quota = `QuotaExceededError`,
+    notAllowed = `NotAllowedError`,
+    notSupported = `NotSupportedError`,
+    invalidState = `InvalidStateError`,
+    typeMismatch = `TypeMismatchError`,
+    security = `SecurityError`,
+}
+
 /** Catalog ids of on-device models */
 enum ChatModelId {
     qwen3_vl_2b = `qwen3-vl-2b`,
@@ -61,6 +71,7 @@ export {
     LlmStatus,
     LlmBackend,
     LlmPhase,
+    StoreFault,
     ChatModelId,
     BuiltinTool,
     WebSearchProvider,
