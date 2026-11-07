@@ -14,13 +14,23 @@ is typed.
 
 ## Table of contents
 
-[Why](#why) · [Install](#install) · [Quick start](#quick-start) ·
-[Public API](#public-api) · [Tools](#tools) · [Status](#status) ·
-[Models](#models) · [Prompt assembly](#prompt-assembly) ·
-[Enable WebGPU](#enable-webgpu) · [Engines and assets](#engines-and-assets) ·
-[Node.js](#nodejs) · [React](#react) · [Types](#types) ·
-[Testing](#testing) · [Architecture](#architecture) · [FAQ](#faq) ·
-[Licensing](#licensing)
+- [Why](#why)
+- [Install](#install) 
+- [Quick start](#quick-start) 
+- [Public API](#public-api) 
+- [Tools](#tools) 
+- [Status](#status) 
+- [Models](#models) 
+- [Prompt assembly](#prompt-assembly) 
+- [Enable WebGPU](#enable-webgpu) 
+- [Engines and assets](#engines-and-assets) 
+- [Node.js](#nodejs) 
+- [React](#react) 
+- [Types](#types) 
+- [Testing](#testing) 
+- [Architecture](#architecture) 
+- [FAQ](#faq) 
+- [Licensing](#licensing)
 
 ## Why
 

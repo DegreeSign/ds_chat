@@ -9,20 +9,19 @@ gpuShare = 0.5,
 maxRestMs = 500;
 declare const 
 /** Rest owed for busy interval */
-restFor: (busyMs: number, share?: number) => number;
+restFor: (busyMs: number, share?: number) => number, 
 /** WebGPU device resting after readback */
-declare const throttledDevice: ({ device, pace, }: GpuThrottleParams) => GpuDevice;
+throttledDevice: ({ device, pace, }: GpuThrottleParams) => GpuDevice, 
 /** Drop device and wasm module */
-declare const releaseDevice: (mod: Awaited<ReturnType<typeof loadLitert>>) => void;
+releaseDevice: (mod: Awaited<ReturnType<typeof loadLitert>>) => void, 
 /** Cache one file per URL */
-declare const cacheModel: (url: string, cache: Cache, signal: AbortSignal | undefined, onProgress: StartLlmParams[`onProgress`]) => Promise<void>;
+cacheModel: (url: string, cache: Cache, signal: AbortSignal | undefined, onProgress: StartLlmParams[`onProgress`]) => Promise<void>, 
 /** Map messages to LiteRT turns */
-declare const toLitertMessages: (messages: EngineMessage[], keepMedia?: boolean) => Promise<LitertMessage[]>;
+toLitertMessages: (messages: EngineMessage[], keepMedia?: boolean) => Promise<LitertMessage[]>, 
 /** Whether conversation holds incoming history */
-declare const continuesHistory: (sent: EngineMessage[], history: EngineMessage[]) => boolean;
+continuesHistory: (sent: EngineMessage[], history: EngineMessage[]) => boolean, 
 /** Stream LiteRT reply as chunks */
-declare const streamLitert: ({ engine, mod, params, messages, session, }: StreamLitertParams) => AsyncGenerator<EngineChunk>;
+streamLitert: ({ engine, mod, params, messages, session, }: StreamLitertParams) => AsyncGenerator<EngineChunk>, 
 /** Engine settings with vision budget */
-declare const litertSettings: ({ model, limits, contextSize, source, mod, }: LitertSettingsParams) => LitertSettings;
-declare const litertEngine: LlmEngine;
+litertSettings: ({ model, limits, contextSize, source, mod, }: LitertSettingsParams) => LitertSettings, litertEngine: LlmEngine;
 export { cacheModel, continuesHistory, gpuShare, litertEngine, litertSettings, maxRestMs, releaseDevice, restFor, streamLitert, throttledDevice, toLitertMessages, visionTokens, };

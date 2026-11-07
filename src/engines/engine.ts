@@ -18,129 +18,122 @@ import type {
 } from '../types';
 import { rNum } from '@degreesign/utils';
 
-/** Default engine budgets */
-const defaultLlmLimits: LlmLimits = {
-    maxReplyTokens: 250,
-    maxThinkingTokens: 128,
-    maxReasoningTokens: 320,
-    maxImages: 2,
-    imageTokens: defaultImageTokens,
-    maxAudio: 1,
-    maxContentLength: 1000,
-    promptCharBudget: 10000,
-    maxThreads: 32,
-    gpuShare: 0.5,
-};
-
-/** GPU reasoning and answer budget */
-const gpuReasoningTokens = 1200;
-
-/** Characters per prompt token */
-const promptCharsPerToken = 4;
-
-/** Rough prompt token count */
-const promptTokenEstimate = (
-    messages: EngineMessage[],
-    imageTokens: number,
-): number => {
-    let count = 0;
-    for (const message of messages) {
-        if (typeof message.content == `string`) {
-            count += message.content.length / promptCharsPerToken;
-            continue;
-        };
-        for (const part of message.content)
-            count += part.type == `text`
-                ? part.text.length / promptCharsPerToken
-                : imageTokens;
-    };
-    return Math.round(count);
-};
-
-/** Clamp a budget, with fallback */
-const budgetLimit = (
-    value: number | undefined,
-    fallback: number,
-    min: number,
-): number =>
-    typeof value == `number` && Number.isFinite(value) && value >= min
-        ? Math.floor(value)
-        : fallback;
-
-/** Merge budgets over backend defaults */
-const resolveLlmLimits = (
-    overrides: Partial<LlmLimits> = {},
-    gpu = false,
-): LlmLimits => {
-    const defaults = defaultLlmLimits;
-    return {
-        maxReplyTokens: budgetLimit(
-            overrides.maxReplyTokens,
-            defaults.maxReplyTokens,
-            1,
-        ),
-        maxThinkingTokens: budgetLimit(
-            overrides.maxThinkingTokens,
-            defaults.maxThinkingTokens,
-            1,
-        ),
-        maxReasoningTokens: budgetLimit(
-            overrides.maxReasoningTokens,
-            gpu ? gpuReasoningTokens : defaults.maxReasoningTokens,
-            1,
-        ),
-        maxImages: budgetLimit(
-            overrides.maxImages,
-            defaults.maxImages,
-            0,
-        ),
-        imageTokens: budgetLimit(
-            overrides.imageTokens,
-            defaults.imageTokens,
-            1,
-        ),
-        maxAudio: budgetLimit(
-            overrides.maxAudio,
-            defaults.maxAudio,
-            0,
-        ),
-        maxContentLength: budgetLimit(
-            overrides.maxContentLength,
-            defaults.maxContentLength,
-            1,
-        ),
-        promptCharBudget: budgetLimit(
-            overrides.promptCharBudget,
-            defaults.promptCharBudget,
-            1,
-        ),
-        maxThreads: budgetLimit(
-            overrides.maxThreads,
-            defaults.maxThreads,
-            1,
-        ),
-        gpuShare: typeof overrides.gpuShare == `number`
-            && Number.isFinite(overrides.gpuShare)
-            && overrides.gpuShare > 0
-            ? Math.min(1, Math.max(0.05, overrides.gpuShare))
-            : defaults.gpuShare,
-    };
-};
-
-/** Sampling options for every stream */
-const replyOptions = (
-    limits: LlmLimits,
-    reasoning: boolean,
-    temperature = 0.7,
-) => ({
-    stream: true as const,
-    temperature,
-    max_tokens: reasoning
-        ? limits.maxReasoningTokens
-        : limits.maxReplyTokens,
-});
-
 const
+    /** Default engine budgets */
+    defaultLlmLimits: LlmLimits = {
+        maxReplyTokens: 250,
+        maxThinkingTokens: 128,
+        maxReasoningTokens: 320,
+        maxImages: 2,
+        imageTokens: defaultImageTokens,
+        maxAudio: 1,
+        maxContentLength: 1000,
+        promptCharBudget: 10000,
+        maxThreads: 32,
+        gpuShare: 0.5,
+    },
+    /** GPU reasoning and answer budget */
+    gpuReasoningTokens = 1200,
+    /** Characters per prompt token */
+    promptCharsPerToken = 4,
+    /** Rough prompt token count */
+    promptTokenEstimate = (
+        messages: EngineMessage[],
+        imageTokens: number,
+    ): number => {
+        let count = 0;
+        for (const message of messages) {
+            if (typeof message.content == `string`) {
+                count += message.content.length / promptCharsPerToken;
+                continue;
+            };
+            for (const part of message.content)
+                count += part.type == `text`
+                    ? part.text.length / promptCharsPerToken
+                    : imageTokens;
+        };
+        return Math.round(count);
+    },
+    /** Clamp a budget, with fallback */
+    budgetLimit = (
+        value: number | undefined,
+        fallback: number,
+        min: number,
+    ): number =>
+        typeof value == `number` && Number.isFinite(value) && value >= min
+            ? Math.floor(value)
+            : fallback,
+    /** Merge budgets over backend defaults */
+    resolveLlmLimits = (
+        overrides: Partial<LlmLimits> = {},
+        gpu = false,
+    ): LlmLimits => {
+        const defaults = defaultLlmLimits;
+        return {
+            maxReplyTokens: budgetLimit(
+                overrides.maxReplyTokens,
+                defaults.maxReplyTokens,
+                1,
+            ),
+            maxThinkingTokens: budgetLimit(
+                overrides.maxThinkingTokens,
+                defaults.maxThinkingTokens,
+                1,
+            ),
+            maxReasoningTokens: budgetLimit(
+                overrides.maxReasoningTokens,
+                gpu ? gpuReasoningTokens : defaults.maxReasoningTokens,
+                1,
+            ),
+            maxImages: budgetLimit(
+                overrides.maxImages,
+                defaults.maxImages,
+                0,
+            ),
+            imageTokens: budgetLimit(
+                overrides.imageTokens,
+                defaults.imageTokens,
+                1,
+            ),
+            maxAudio: budgetLimit(
+                overrides.maxAudio,
+                defaults.maxAudio,
+                0,
+            ),
+            maxContentLength: budgetLimit(
+                overrides.maxContentLength,
+                defaults.maxContentLength,
+                1,
+            ),
+            promptCharBudget: budgetLimit(
+                overrides.promptCharBudget,
+                defaults.promptCharBudget,
+                1,
+            ),
+            maxThreads: budgetLimit(
+                overrides.maxThreads,
+                defaults.maxThreads,
+                1,
+            ),
+            gpuShare: typeof overrides.gpuShare == `number`
+                && Number.isFinite(overrides.gpuShare)
+                && overrides.gpuShare > 0
+                ? Math.min(1, Math.max(0.05, overrides.gpuShare))
+                : defaults.gpuShare,
+        };
+    },
+    /** Sampling options for every stream */
+    replyOptions = (
+        limits: LlmLimits,
+        reasoning: boolean,
+        temperature = 0.7,
+    ) => ({
+        stream: true as const,
+        temperature,
+        max_tokens: reasoning
+            ? limits.maxReasoningTokens
+            : limits.maxReplyTokens,
+    }),
     /** Model host */
     hfBase = `https://huggingface.co`,
     /** Resolve one model file URL */
@@ -162,9 +155,7 @@ const
         hasPart(messages, `image`),
     /** Whether any turn carries audio */
     hasAudio = (messages: EngineMessage[]): boolean =>
-        hasPart(messages, `audio`);
-
-const
+        hasPart(messages, `audio`),
     /** Inline reasoning markers in content */
     thinkOpenTags = [
         `<|channel>thought\n`,
@@ -215,6 +206,10 @@ const
         messages: ChatMessage[],
         limits: LlmLimits = defaultLlmLimits,
     ): EngineMessage[] => {
+        let
+            used = 0,
+            imagesLeft = limits.maxImages,
+            audioLeft = limits.maxAudio;
         const
             maxContentLen = limits.maxContentLength,
             /** Redacted (empty) messages are skipped */
@@ -224,10 +219,6 @@ const
                         && (m.images?.length || m.audio?.length))),
             systemParts: string[] = [],
             history: EngineMessage[] = [];
-        let
-            used = 0,
-            imagesLeft = limits.maxImages,
-            audioLeft = limits.maxAudio;
         for (let i = usable.length - 1; i >= 0; i--) {
             const
                 m = usable[i],
@@ -271,8 +262,9 @@ const
             else merged.push({ role: `user`, content: msg.content });
         };
         // system turn comes first
-        const systemText = systemParts.join(`\n\n`);
-        const result: EngineMessage[] = [];
+        const
+            systemText = systemParts.join(`\n\n`),
+            result: EngineMessage[] = [];
         if (systemText) result.push({ role: `system`, content: systemText });
         result.push(...merged);
         return result;
@@ -285,31 +277,32 @@ const
         let
             carry = ``,
             inReason = false;
-        /** Earliest tag occurrence in data */
-        const findTag = (data: string, tags: string[]) => {
-            let at = -1, tag = ``;
-            for (const item of tags) {
-                const found = data.indexOf(item);
-                if (found >= 0 && (at < 0 || found < at)) {
-                    at = found;
-                    tag = item;
-                };
-            };
-            return { at, tag };
-        };
-        /** Longest suffix starting any tag */
-        const holdPartial = (data: string, tags: string[]): string => {
-            let hold = ``;
-            for (const tag of tags) {
-                const max = Math.min(data.length, tag.length - 1);
-                for (let len = max; len > hold.length; len--)
-                    if (data.endsWith(tag.slice(0, len))) {
-                        hold = data.slice(data.length - len);
-                        break;
+        const
+            /** Earliest tag occurrence in data */
+            findTag = (data: string, tags: string[]) => {
+                let at = -1, tag = ``;
+                for (const item of tags) {
+                    const found = data.indexOf(item);
+                    if (found >= 0 && (at < 0 || found < at)) {
+                        at = found;
+                        tag = item;
                     };
+                };
+                return { at, tag };
+            },
+            /** Longest suffix starting any tag */
+            holdPartial = (data: string, tags: string[]): string => {
+                let hold = ``;
+                for (const tag of tags) {
+                    const max = Math.min(data.length, tag.length - 1);
+                    for (let len = max; len > hold.length; len--)
+                        if (data.endsWith(tag.slice(0, len))) {
+                            hold = data.slice(data.length - len);
+                            break;
+                        };
+                };
+                return hold;
             };
-            return hold;
-        };
         return {
             feed: (text: string) => {
                 let data = carry + text;
@@ -349,9 +342,7 @@ const
                 carry = ``;
             },
         };
-    };
-
-const
+    },
     /** Longest wait for first chunk */
     firstReplyTimeout = mobileDevice() ? 3_000_000 : 300_000,
     /** Longest vision prefill wait */
@@ -364,39 +355,37 @@ const
 /** Stream that stopped producing chunks */
 class StallError extends Error { }
 
-/** Resolve or fail on timeout */
-const withTimeout = async <T>(
-    work: Promise<T>,
-    ms: number,
-    message: string,
-): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-        return await Promise.race([
-            work,
-            new Promise<never>((_, reject) => {
-                timer = setTimeout(() => reject(new StallError(message)), ms);
-            }),
-        ]);
-    } finally {
-        if (timer) clearTimeout(timer);
-    };
-};
-
-/** Drain then close stream */
-const closeStream = (iterator: AsyncIterator<unknown>) => {
-    try {
-        // drain the abort rejection
-        void Promise.resolve(iterator.next?.())
-            .catch(() => { })
-            .finally(() => {
-                try { void Promise.resolve(iterator.return?.()).catch(() => { }); }
-                catch { };
-            });
-    } catch { };
-};
-
 const
+    /** Resolve or fail on timeout */
+    withTimeout = async <T>(
+        work: Promise<T>,
+        ms: number,
+        message: string,
+    ): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            return await Promise.race([
+                work,
+                new Promise<never>((_, reject) => {
+                    timer = setTimeout(() => reject(new StallError(message)), ms);
+                }),
+            ]);
+        } finally {
+            if (timer) clearTimeout(timer);
+        };
+    },
+    /** Drain then close stream */
+    closeStream = (iterator: AsyncIterator<unknown>) => {
+        try {
+            // drain the abort rejection
+            void Promise.resolve(iterator.next?.())
+                .catch(() => { })
+                .finally(() => {
+                    try { void Promise.resolve(iterator.return?.()).catch(() => { }); }
+                    catch { };
+                });
+        } catch { };
+    },
     /** Log chat call, text censored */
     logChatCall = (model: ChatModel, messages: EngineMessage[]) =>
         console.log(
@@ -604,9 +593,7 @@ const
             );
         };
         return result;
-    };
-
-const
+    },
     /** Build prompt, stream through engine */
     runEngineChat = async ({
         model,

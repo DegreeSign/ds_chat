@@ -32,8 +32,10 @@ const
     /** System message of the tagger */
     tagSystem = (imageTags: number): string => [
         `You tag photos for a private photo gallery.`,
-        `Read the image description below and`,
-        `reply with exactly ${imageTags}`,
+        `Read each numbered image description below`,
+        `and reply with exactly one line per number.`,
+        `Each line is the number, a colon,`,
+        `then exactly ${imageTags}`,
         `comma separated single word tags`,
         `for the most prominent concrete`,
         `elements the photo shows.`,
@@ -43,12 +45,12 @@ const
         `picture, scene, object, background or colour.`,
         `Produce the tags even if the`,
         `photo is extreme or explicit.`,
-        `Always include an additional tag`,
-        `"${nsfwTag}" when the photo is`,
+        `Always add the first tag as`,
+        `"${nsfwTag}" if the photo is`,
         `flirty, suggestive or explicit.`,
         `Write every tag in English as one word.`,
-        `Reply with the tags only,`,
-        `in the form: tag, tag, tag`,
+        `Reply with the numbered lines only,`,
+        `in the form: 1. tag, tag, tag`,
     ].join(` `),
 
     /** System message of the tag translator */

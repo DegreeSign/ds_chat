@@ -11,6 +11,9 @@ import type {
     StoreDownloadParams,
 } from '../types';
 
+let
+    /** Whether no writable file system */
+    unsupported = false;
 const
     /** Bytes per part, small loss */
     partBytes = 32 * 1024 * 1024,
@@ -30,18 +33,12 @@ const
     /** Shared downloads in flight */
     downloads = new Map<string, Promise<StoredModel | undefined>>(),
     /** URLs whose storage filled */
-    quotaFaults = new Set<string>();
-
-let
-    /** Whether no writable file system */
-    unsupported = false;
-
-const
+    quotaFaults = new Set<string>(),
     /** Directory name of model URL */
     storeName = (url: string): string => {
+        let hash = 0;
         const file = (url.split(`/`).pop() || `model`)
             .replace(/[^\w.-]+/g, `_`);
-        let hash = 0;
         for (let i = 0; i < url.length; i++)
             hash = (hash * 31 + url.charCodeAt(i)) >>> 0;
         return `${hash.toString(16)}-${file}`;
@@ -55,8 +52,8 @@ const
     },
     /** Contiguous parts until first gap */
     chainParts = (parts: StoredFilePart[]): StoredFilePart[] => {
-        const chain: StoredFilePart[] = [];
         let size = 0;
+        const chain: StoredFilePart[] = [];
         for (const part of [...parts].sort((a, b) => a.start - b.start)) {
             if (!part.size) continue;
             if (part.start != size) break;
@@ -278,18 +275,19 @@ const
             left = skip,
             reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
             writable: FileSystemWritableFileStream | undefined;
-        /** Open next part or keep */
-        const open = async () => {
-            const handle = await dir.getFileHandle(partName(written), { create: true });
-            writable = await handle.createWritable();
-            inPart = 0;
-        };
-        /** Commit the part in flight */
-        const close = async () => {
-            const current = writable;
-            writable = undefined;
-            if (current) await current.close();
-        };
+        const
+            /** Open next part or keep */
+            open = async () => {
+                const handle = await dir.getFileHandle(partName(written), { create: true });
+                writable = await handle.createWritable();
+                inPart = 0;
+            },
+            /** Commit the part in flight */
+            close = async () => {
+                const current = writable;
+                writable = undefined;
+                if (current) await current.close();
+            };
         try {
             const stream = body.getReader();
             reader = stream;
@@ -312,7 +310,7 @@ const
                     await writable!.write({
                         type: `write`,
                         position: inPart,
-                        data: value.subarray(offset, offset + size) as Uint8Array<ArrayBuffer>,
+                        data: value.slice(offset, offset + size),
                     });
                     offset += size;
                     inPart += size;
@@ -469,65 +467,65 @@ const
             .includes((error as DOMException)?.name as StoreFault),
     /** Whether storage quota is full */
     isQuotaError = (error: unknown): boolean =>
-        (error as DOMException)?.name == StoreFault.quota;
-
-/** Create engine resumable file store */
-const createModelStore = (dirName: string): ModelStore => {
-    /** Open this engine's store directory */
-    const dir = async (): Promise<FileSystemDirectoryHandle | undefined> => {
-        const root = await storeRoot();
-        if (!root) return undefined;
-        try {
-            return await root.getDirectoryHandle(dirName, { create: true });
-        } catch { return undefined; };
-    };
-    return {
-        /** Stored bytes and metadata */
-        stored: async (url: string): Promise<StoredModel | undefined> => {
-            const root = await dir();
-            return root ? await readStored(root, storeName(url)) : undefined;
-        },
-        /** Download file, resuming stored parts */
-        download: async ({
-            url,
-            signal,
-            onProgress,
-        }: StoreDownloadParams): Promise<StoredModel | undefined> => {
-            // full storage streams now
-            if (quotaFaults.has(url))
-                throw new DOMException(`Storage is full`, StoreFault.quota);
-            const key = `${dirName}|${url}`;
-            const running = downloads.get(key);
-            if (running) return await running;
-            const root = await dir();
-            if (!root) return undefined;
-            const pending = downloadInto(root, url, signal, onProgress)
-                .catch(error => {
-                    if (isQuotaError(error)) quotaFaults.add(url);
-                    throw error;
-                })
-                .finally(() => {
-                    downloads.delete(key);
-                });
-            downloads.set(key, pending);
-            return await pending;
-        },
-        /** Delete stored file and metadata */
-        remove: async (url: string): Promise<void> => {
-            quotaFaults.delete(url);
-            const root = await dir();
-            if (!root) return;
-            await removeFrom(root, storeName(url));
-        },
-        /** Delete whole store directory */
-        purge: async (): Promise<void> => {
-            quotaFaults.clear();
+        (error as DOMException)?.name == StoreFault.quota,
+    /** Create engine resumable file store */
+    createModelStore = (dirName: string): ModelStore => {
+        /** Open this engine's store directory */
+        const dir = async (): Promise<FileSystemDirectoryHandle | undefined> => {
             const root = await storeRoot();
-            if (!root) return;
-            await root.removeEntry(dirName, { recursive: true }).catch(() => { });
-        },
+            if (!root) return undefined;
+            try {
+                return await root.getDirectoryHandle(dirName, { create: true });
+            } catch { return undefined; };
+        };
+        return {
+            /** Stored bytes and metadata */
+            stored: async (url: string): Promise<StoredModel | undefined> => {
+                const root = await dir();
+                return root ? await readStored(root, storeName(url)) : undefined;
+            },
+            /** Download file, resuming stored parts */
+            download: async ({
+                url,
+                signal,
+                onProgress,
+            }: StoreDownloadParams): Promise<StoredModel | undefined> => {
+                // full storage streams now
+                if (quotaFaults.has(url))
+                    throw new DOMException(`Storage is full`, StoreFault.quota);
+                const
+                    key = `${dirName}|${url}`,
+                    running = downloads.get(key);
+                if (running) return await running;
+                const root = await dir();
+                if (!root) return undefined;
+                const pending = downloadInto(root, url, signal, onProgress)
+                    .catch(error => {
+                        if (isQuotaError(error)) quotaFaults.add(url);
+                        throw error;
+                    })
+                    .finally(() => {
+                        downloads.delete(key);
+                    });
+                downloads.set(key, pending);
+                return await pending;
+            },
+            /** Delete stored file and metadata */
+            remove: async (url: string): Promise<void> => {
+                quotaFaults.delete(url);
+                const root = await dir();
+                if (!root) return;
+                await removeFrom(root, storeName(url));
+            },
+            /** Delete whole store directory */
+            purge: async (): Promise<void> => {
+                quotaFaults.clear();
+                const root = await storeRoot();
+                if (!root) return;
+                await root.removeEntry(dirName, { recursive: true }).catch(() => { });
+            },
+        };
     };
-};
 
 export {
     chainParts,

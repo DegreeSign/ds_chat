@@ -26,32 +26,27 @@ import type {
     WllamaMessage,
 } from '../types';
 
-const
-    /** GPU probe log to ignore */
-    gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
-    /** Resumable store of CPU engine */
-    store = createModelStore(`wllama-store`);
-
-/** Ids with instruct vision window */
-const instructIds = [
-    ChatModelId.qwen3_vl_2b_instruct,
-    ChatModelId.qwen3_vl_2b_instruct_q3,
-];
-
-/** Image limits of one model */
-const visionLimits = (model: ChatModel) =>
-    model.cpu?.mmproj && instructIds.includes(model.id)
-        ? { image_min_tokens: 16, image_max_tokens: imageTokens }
-        : {};
-
 let
     wllama: Wllama | undefined,
     assets: WllamaAssets | undefined,
     assetsKey = ``,
     /** Whether this call wants logs */
     loggingOn = false;
-
 const
+    /** GPU probe log to ignore */
+    gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
+    /** Resumable store of CPU engine */
+    store = createModelStore(`wllama-store`),
+    /** Ids with instruct vision window */
+    instructIds = [
+        ChatModelId.qwen3_vl_2b_instruct,
+        ChatModelId.qwen3_vl_2b_instruct_q3,
+    ],
+    /** Image limits of one model */
+    visionLimits = (model: ChatModel) =>
+        model.cpu?.mmproj && instructIds.includes(model.id)
+            ? { image_min_tokens: 16, image_max_tokens: imageTokens }
+            : {},
     /** Stable key for asset set */
     assetsKeyOf = (value: WllamaAssets): string =>
         `${value.wasm}|${value.compatWasm}|${value.compatWorker}`,

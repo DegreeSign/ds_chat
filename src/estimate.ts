@@ -7,19 +7,17 @@ let
     /** Measured seconds per operation */
     measured: Partial<Record<EstimateOperation, number>> | undefined;
 
-/** localStorage key of estimates */
-const estimateKey = `degreesign-chat-estimates-v1`;
-
-/** Fallback seconds per operation */
-const fallbackSeconds: Record<EstimateOperation, number> = {
-    analyze: 95,
-    describe: 25,
-    translate: 15,
-    tags: 6,
-    translateTags: 4,
-};
-
 const
+    /** localStorage key of estimates */
+    estimateKey = `degreesign-chat-estimates-v1`,
+    /** Fallback seconds per operation */
+    fallbackSeconds: Record<EstimateOperation, number> = {
+        analyze: 95,
+        describe: 25,
+        translate: 15,
+        tags: 6,
+        translateTags: 4,
+    },
     /** Read measured seconds once */
     measuredSeconds = (): Partial<Record<EstimateOperation, number>> =>
         measured ??= readData<Partial<Record<EstimateOperation, number>>>(

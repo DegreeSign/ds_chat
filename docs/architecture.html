@@ -520,37 +520,37 @@ const e = (from, to, kind) => EDGES.push({ from, to, kind });
 const step = (ids, text) => ({ ids, text });
 
 f(`host`, `host`, `host app`, `host app`, 0, true);
-f(`entry`, `entry`, `index.ts`, `src/index.ts`, 55);
+f(`entry`, `entry`, `index.ts`, `src/index.ts`, 56);
 f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 105);
 f(`types`, `entry`, `types.ts`, `src/types.ts`, 1009);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 306);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 618);
+f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 304);
+f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 601);
 f(`prompts`, `entry`, `prompts.ts`, `src/prompts.ts`, 105);
-f(`estimate`, `entry`, `estimate.ts`, `src/estimate.ts`, 57);
-f(`deprecated`, `entry`, `deprecated.ts`, `src/deprecated.ts`, 158);
+f(`estimate`, `entry`, `estimate.ts`, `src/estimate.ts`, 55);
+f(`deprecated`, `entry`, `deprecated.ts`, `src/deprecated.ts`, 155);
 f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
-f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 363);
+f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 362);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 137);
-f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 658);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 506);
+f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 645);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 501);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
-f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 677);
-f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 538);
-f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 187);
+f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 657);
+f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 536);
+f(`images`, `engines`, `images.ts`, `src/engines/images.ts`, 179);
 f(`loader`, `engines`, `loader.js`, `src/engines/loader.js`, 6);
 f(`litertLoader`, `engines`, `litertLoader.js`,
     `src/engines/litertLoader.js`, 5);
 f(`tools`, `tools`, `index.ts`, `src/tools/index.ts`, 21);
-f(`calculator`, `tools`, `calculator.ts`, `src/tools/calculator.ts`, 149);
-f(`currency`, `tools`, `currency.ts`, `src/tools/currency.ts`, 335);
-f(`search`, `tools`, `search.ts`, `src/tools/search.ts`, 155);
-f(`text`, `tools`, `text.ts`, `src/tools/text.ts`, 59);
+f(`calculator`, `tools`, `calculator.ts`, `src/tools/calculator.ts`, 147);
+f(`currency`, `tools`, `currency.ts`, `src/tools/currency.ts`, 314);
+f(`search`, `tools`, `search.ts`, `src/tools/search.ts`, 151);
+f(`text`, `tools`, `text.ts`, `src/tools/text.ts`, 56);
 f(`assets`, `assets`, `browser.js`, `src/assets/browser.js`, 22);
 f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5377);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5378);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 558);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 224);
@@ -610,7 +610,7 @@ n(`chat`, `createChat`, 290, `createChat`, `(input: ChatInput) => CancelChat`,
 n(`chat`, `createChatOn`, 57, `createChatOn`,
     `(service: Runtime) => (input: ChatInput) => CancelChat`,
     `Testable factory over one runtime`);
-n(`chat`, `statusSnapshot`, 27, `statusSnapshot`,
+n(`chat`, `statusSnapshot`, 28, `statusSnapshot`,
     `(service, model, state) => ChatStatusSnapshot`,
     `Derive availability and image or audio support, build one snapshot for`
     + ` chat, preload or describe`);
@@ -627,67 +627,67 @@ n(`chat`, `cancel`, 209, `cancel`, `(call: ActiveCall) => void`,
 n(`chat`, `createPreloadOn`, 241, `createPreloadOn`,
     `(service: Runtime) => (input?: ChatPreloadInput) => Promise<boolean>`,
     `Testable preload factory over one runtime`);
-n(`chat`, `preloadModel`, 292, `preloadModel`,
+n(`chat`, `preloadModel`, 291, `preloadModel`,
     `(input?: ChatPreloadInput) => Promise<boolean>`,
     `Download and load a model before the first chat, bound to the singleton`);
-n(`chat`, `clearModelCache`, 295, `clearModelCache`, `() => Promise<void>`,
+n(`chat`, `clearModelCache`, 293, `clearModelCache`, `() => Promise<void>`,
     `Release the loaded model and delete every cached model file`);
-n(`describe`, `describeImage`, 600, `describeImage`,
+n(`describe`, `describeImage`, 585, `describeImage`,
     `(input: DescribeImageInput) => Promise<string>`,
     `Describe one image in English, stream its text and speed, record its`
     + ` analysis and description estimates, bound to the singleton runtime`);
-n(`describe`, `descriptionEnhanced`, 603, `descriptionEnhanced`,
+n(`describe`, `descriptionEnhanced`, 587, `descriptionEnhanced`,
     `(input: DescriptionEnhancedInput) => Promise<DescriptionEnhanced>`,
     `Translate one English description and build its tags, tag translations`
     + ` and nsfw flag, bound to the singleton runtime`);
-n(`describe`, `createDescribeImageOn`, 297, `createDescribeImageOn`,
+n(`describe`, `createDescribeImageOn`, 283, `createDescribeImageOn`,
     `(service: Runtime) => (input) => Promise<string>`,
     `Testable factory: load the describer, describe one image with the`
     + ` system rules, time analysis and streaming, record both estimates`
     + ` and report every model state through onStatus`);
-n(`describe`, `createDescriptionEnhancedOn`, 448, `createDescriptionEnhancedOn`,
+n(`describe`, `createDescriptionEnhancedOn`, 433, `createDescriptionEnhancedOn`,
     `(service: Runtime) => (input) => Promise<DescriptionEnhanced>`,
     `Testable factory: translate the description, tag it with nsfw, then`
     + ` translate the tags through the shared tag translator, keeping English`
     + ` when a call fails and recording each stage estimate`);
-n(`describe`, `tagsOf`, 96, `tagsOf`, `(reply: string) => ImageTag[]`,
+n(`describe`, `tagsOf`, 83, `tagsOf`, `(reply: string) => ImageTag[]`,
     `Parse one tag reply, clean each word and keep three tags with nsfw`);
-n(`describe`, `imageVisionTokens`, 51, `imageVisionTokens`, `192`,
+n(`describe`, `imageVisionTokens`, 48, `imageVisionTokens`, `192`,
     `Vision token budget of one described image`);
-n(`describe`, `imageRepeatPenalty`, 45, `imageRepeatPenalty`, `1`,
+n(`describe`, `imageRepeatPenalty`, 44, `imageRepeatPenalty`, `1`,
     `Repetition penalty of one described image`);
-n(`describe`, `imageTemperature`, 48, `imageTemperature`, `0.1`,
+n(`describe`, `imageTemperature`, 46, `imageTemperature`, `0.1`,
     `Sampling temperature of one described image`);
-n(`describe`, `describeModelId`, 54, `describeModelId`,
+n(`describe`, `describeModelId`, 50, `describeModelId`,
     `ChatModelId.qwen3_vl_2b_instruct`,
     `The Qwen3-VL 2B instruct Q4 describer used by default`);
-n(`describe`, `imageTags`, 57, `imageTags`, `3`,
+n(`describe`, `imageTags`, 52, `imageTags`, `3`,
     `Tags kept for one image`);
-n(`describe`, `cannotTranslate`, 66, `CANNOT_TRANSLATE`, `CANNOT_TRANSLATE`,
+n(`describe`, `cannotTranslate`, 58, `CANNOT_TRANSLATE`, `CANNOT_TRANSLATE`,
     `The exact reply that makes the description fall back to English`);
-n(`describe`, `prepareModel`, 133, `prepareModel`,
+n(`describe`, `prepareModel`, 119, `prepareModel`,
     `({ service, limits, logging, signal, onStatus, model }) => ready`,
     `Resolve the model, load it, mark it ready and hand back the report and`
     + ` generate helpers of the call, or return its error or wrapped abort`);
-n(`describe`, `imageReplyTokens`, 39, `imageReplyTokens`, `128`,
+n(`describe`, `imageReplyTokens`, 40, `imageReplyTokens`, `128`,
     `Default reply budget of one description, overridable by limits`);
 n(`describe`, `imageTranslateTokens`, 42, `imageTranslateTokens`, `256`,
     `Translation reply budget, twice the description budget`);
-n(`describe`, `tagReplyTokens`, 60, `tagReplyTokens`, `128`,
+n(`describe`, `tagReplyTokens`, 54, `tagReplyTokens`, `128`,
     `Reply budget of one tag pass`);
-n(`describe`, `tagTranslateTokens`, 63, `tagTranslateTokens`, `256`,
+n(`describe`, `tagTranslateTokens`, 56, `tagTranslateTokens`, `256`,
     `Reply budget of one tag translation`);
-n(`describe`, `needsTranslation`, 69, `needsTranslation`,
+n(`describe`, `needsTranslation`, 60, `needsTranslation`,
     `(language: string) => boolean`,
     `English tags skip the translation pass`);
-n(`describe`, `translateTagWords`, 115, `translateTagWords`,
+n(`describe`, `translateTagWords`, 102, `translateTagWords`,
     `(reply, tags, code) => void`,
     `Fill the target key of every tag from a numbered translation reply`);
-n(`describe`, `createTranslateTagsOn`, 382, `createTranslateTagsOn`,
+n(`describe`, `createTranslateTagsOn`, 368, `createTranslateTagsOn`,
     `(service: Runtime) => (input) => Promise<ImageTag[]>`,
     `Testable factory: load the text model, ask one numbered translation`
     + ` reply and fill the target key of every tag`);
-n(`describe`, `translateTags`, 606, `translateTags`,
+n(`describe`, `translateTags`, 589, `translateTags`,
     `(input: TranslateTagsInput) => Promise<ImageTag[]>`,
     `Translate stored tags into the target code, keep English on a refusal or`
     + ` a failed call, and record the translateTags estimate, bound to the`
@@ -710,35 +710,35 @@ n(`prompts`, `translatePreMessage`, 81, `translatePreMessage`, `string`,
 n(`prompts`, `translatePrompt`, 85, `translatePrompt`,
     `(language) => string`,
     `One request that asks for the previous reply alone, never the instruction`);
-n(`estimate`, `estimateReport`, 29, `estimateReport`,
+n(`estimate`, `estimateReport`, 27, `estimateReport`,
     `(operations) => EstimateReport`,
     `Build the measured or fallback seconds of the requested operations`);
-n(`estimate`, `recordEstimate`, 40, `recordEstimate`,
+n(`estimate`, `recordEstimate`, 38, `recordEstimate`,
     `({ operation, seconds }) => void`,
     `Store one measured operation in local storage`);
-n(`estimate`, `resetEstimates`, 52, `resetEstimates`, `() => void`,
+n(`estimate`, `resetEstimates`, 50, `resetEstimates`, `() => void`,
     `Drop every measured operation and stored estimate`);
-n(`deprecated`, `describeImages`, 148, `describeImages`,
+n(`deprecated`, `describeImages`, 146, `describeImages`,
     `(input: DescribeImagesInput) => Promise<ImageDescription[]>`,
     `Deprecated batch wrapper over describeImage and descriptionEnhanced`);
-n(`deprecated`, `describeTranslated`, 151, `describeTranslated`,
+n(`deprecated`, `describeTranslated`, 148, `describeTranslated`,
     `(input: DescribeTranslatedInput) => Promise<string[]>`,
     `Deprecated batch translation wrapper over descriptionEnhanced`);
 n(`deprecated`, `createDescribeImagesOn`, 22, `createDescribeImagesOn`,
     `(service: Runtime) => (input) => Promise<ImageDescription[]>`,
     `Testable batch wrapper factory over one runtime`);
-n(`deprecated`, `createDescribeTranslatedOn`, 96, `createDescribeTranslatedOn`,
+n(`deprecated`, `createDescribeTranslatedOn`, 95, `createDescribeTranslatedOn`,
     `(service: Runtime) => (input) => Promise<string[]>`,
     `Testable translation wrapper factory over one runtime`);
-n(`deprecated`, `translateNeeded`, 16, `translateNeeded`,
+n(`deprecated`, `translateNeeded`, 17, `translateNeeded`,
     `(language: string) => boolean`,
     `English targets skip the translation pass`);
-n(`describe`, `report`, 149, `report`, `(model, state) => void`,
+n(`describe`, `report`, 136, `report`, `(model, state) => void`,
     `Publish one snapshot for the describer, enhancer or final state`);
-n(`describe`, `load`, 152, `load`, `(model) => Promise<string | undefined>`,
+n(`describe`, `load`, 139, `load`, `(model) => Promise<string | undefined>`,
     `Load one model, forward its progress, leave the wait on abort, log the`
     + ` load, report it ready and return its failure text`);
-n(`describe`, `generate`, 204, `generate`,
+n(`describe`, `generate`, 191, `generate`,
     `({ model, messages, stage, repeatPenalty?, temperature?, limits?,`
     + ` onSpeed?, onText? }) => Promise<string | undefined>`,
     `Run one reply, log its stage, duration, streamed deltas and text, forward`
@@ -866,36 +866,36 @@ n(`types`, `imageSize`, 910, `ImageSize`, `width · height`,
     `Pixel size of one image sent to an engine`);
 
 // model runtime
-n(`llm`, `createRuntime`, 24, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
+n(`llm`, `createRuntime`, 25, `createRuntime`, `(deps?: RuntimeDeps) => Runtime`,
     `One module singleton, fake engines and a device class in tests`);
-n(`llm`, `probes`, 56, `probes`,
+n(`llm`, `probes`, 55, `probes`,
     `wasmSupported · webgpuSupported · persistStorage`,
     `Capability and storage checks, guarded`);
-n(`llm`, `engineFor`, 67, `engineFor`,
+n(`llm`, `engineFor`, 66, `engineFor`,
     `(model: ChatModel) => LlmEngine | undefined`,
     `Test override, then the model artifact and WebGPU or wasm capability`);
-n(`llm`, `runtimeFor`, 85, `runtimeFor`, `(model?) => LlmRuntime | undefined`,
+n(`llm`, `runtimeFor`, 84, `runtimeFor`, `(model?) => LlmRuntime | undefined`,
     `The runtime of one model, or of the active model`);
-n(`llm`, `release`, 96, `release`, `(model) => Promise<void>`,
+n(`llm`, `release`, 95, `release`, `(model) => Promise<void>`,
     `Drop one loaded model, keeping every stored model file, and hand the`
     + ` active slot to a remaining model`);
-n(`llm`, `releaseAll`, 106, `releaseAll`, `() => Promise<void>`,
+n(`llm`, `releaseAll`, 105, `releaseAll`, `() => Promise<void>`,
     `Drop every loaded model`);
-n(`llm`, `reportProgress`, 110, `reportProgress`,
+n(`llm`, `reportProgress`, 109, `reportProgress`,
     `(model, value, phase?) => void`,
     `Clamp 0..1 and report to every caller waiting on the load`);
-n(`llm`, `setStatus`, 92, `setStatus`, `(next: LlmStatus) => void`,
+n(`llm`, `setStatus`, 91, `setStatus`, `(next: LlmStatus) => void`,
     `Store the engine status for the next snapshot`);
-n(`llm`, `abortLoad`, 124, `abortLoad`, `(model) => void`,
+n(`llm`, `abortLoad`, 123, `abortLoad`, `(model) => void`,
     `Bump the load token, abort the engine call and return to idle`);
-n(`llm`, `releaseWaiter`, 140, `releaseWaiter`, `(model, waiter) => void`,
+n(`llm`, `releaseWaiter`, 139, `releaseWaiter`, `(model, waiter) => void`,
     `Drop one caller, then abort in a microtask once nobody waits`);
-n(`llm`, `followLoad`, 150, `followLoad`,
+n(`llm`, `followLoad`, 149, `followLoad`,
     `(model, onProgress, signal?) => Promise<boolean>`,
     `Follow the shared load, leave on abort, never restart the download`);
-n(`llm`, `ready`, 185, `ready`, `(model?) => boolean`,
+n(`llm`, `ready`, 184, `ready`, `(model?) => boolean`,
     `Whether one model, or the active model, is loaded`);
-n(`llm`, `load`, 187, `load`,
+n(`llm`, `load`, 186, `load`,
     `({ model, limits, assets, logging, signal, onProgress }) => Promise<boolean>`,
     `Join the same load, abandon the wait on abort, abort a different model,`
     + ` pick the engine, release the resident model, cache check, startLLM,`
@@ -912,7 +912,7 @@ n(`llm`, `error`, 355, `runtime.error`, `() => string | undefined`,
     `Last model load error, cleared when a load starts`);
 n(`llm`, `model`, 357, `runtime.model`, `() => ChatModel | undefined`,
     `The model that loaded or answered last`);
-n(`llm`, `runtime`, 361, `runtime`, `createRuntime()`,
+n(`llm`, `runtime`, 360, `runtime`, `createRuntime()`,
     `The process-wide loaded models`);
 
 // model catalog
@@ -963,163 +963,163 @@ n(`models`, `supportsAudio`, 121, `supportsAudio`,
     + ` decides audio`);
 
 // prompt and streaming
-n(`engine`, `limits`, 22, `defaultLlmLimits`, `LlmLimits`,
+n(`engine`, `limits`, 23, `defaultLlmLimits`, `LlmLimits`,
     `Reply 250 tokens, thinking 128, reasoning total 320, 2 images,`
     + ` 1 audio clip, 1000 chars each, 10000 prompt chars, 32 CPU threads`
     + ` and a 0.5 GPU busy share`);
 n(`engine`, `gpuReasoning`, 36, `gpuReasoningTokens`, `1200`,
     `Reasoning budget of the GPU engine, thought plus answer`);
-n(`engine`, `estimate`, 42, `promptTokenEstimate`,
+n(`engine`, `estimate`, 40, `promptTokenEstimate`,
     `(messages, imageTokens) => number`,
     `Rough prompt tokens, four characters each and one image budget`);
-n(`engine`, `budgetLimit`, 61, `budgetLimit`,
+n(`engine`, `budgetLimit`, 58, `budgetLimit`,
     `(value, fallback, min) => number`,
     `Finite values at or above the floor are floored, anything else falls back`);
-n(`engine`, `resolveLimits`, 71, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
+n(`engine`, `resolveLimits`, 67, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
     `Clamp every budget and the 0.05 to 1 GPU share, then fill every default,`
     + ` 1200 reasoning on the GPU`);
-n(`engine`, `replyOptions`, 131, `replyOptions`, `(limits, reasoning) => object`,
+n(`engine`, `replyOptions`, 126, `replyOptions`, `(limits, reasoning) => object`,
     `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
-n(`engine`, `modelUrl`, 147, `modelUrl`, `(repo, file) => string`,
+n(`engine`, `modelUrl`, 140, `modelUrl`, `(repo, file) => string`,
     `Resolve one model file on huggingface.co`);
-n(`engine`, `contentLength`, 150, `contentLength`, `(response) => number`,
+n(`engine`, `contentLength`, 143, `contentLength`, `(response) => number`,
     `Declared size of one download, zero when the host hides it`);
-n(`engine`, `hasPart`, 153, `hasPart`, `(messages, type) => boolean`,
+n(`engine`, `hasPart`, 146, `hasPart`, `(messages, type) => boolean`,
     `Whether any built turn carries an image or audio part`);
-n(`engine`, `hasImages`, 161, `hasImages`, `(messages) => boolean`,
+n(`engine`, `hasImages`, 154, `hasImages`, `(messages) => boolean`,
     `Whether any built turn carries an image part`);
-n(`engine`, `hasAudio`, 164, `hasAudio`, `(messages) => boolean`,
+n(`engine`, `hasAudio`, 157, `hasAudio`, `(messages) => boolean`,
     `Whether any built turn carries an audio part`);
-n(`engine`, `userContent`, 175, `userContent`, `(text, images, audio) => content`,
+n(`engine`, `userContent`, 166, `userContent`, `(text, images, audio) => content`,
     `Text first, then each image, then each audio clip, or plain text`);
-n(`engine`, `contentParts`, 188, `contentParts`, `(content) => EngineContentPart[]`,
+n(`engine`, `contentParts`, 179, `contentParts`, `(content) => EngineContentPart[]`,
     `Flatten string or part content for a merge`);
-n(`engine`, `mergeContent`, 195, `mergeContent`, `(first, next) => content`,
+n(`engine`, `mergeContent`, 186, `mergeContent`, `(first, next) => content`,
     `Join same-role turns and collapse adjacent text parts`);
-n(`engine`, `buildMessages`, 214, `buildMessages`,
+n(`engine`, `buildMessages`, 205, `buildMessages`,
     `(messages, limits?) => EngineMessage[]`,
     `Keep text and media, cap images and audio newest first, fold system,`
     + ` drop leading assistant, merge same roles`);
-n(`engine`, `createThinkSplitter`, 281, `createThinkSplitter`,
+n(`engine`, `createThinkSplitter`, 273, `createThinkSplitter`,
     `(onReason, onText) => { feed, flush }`,
     `Separates inline reasoning markers from the visible reply`);
-n(`engine`, `findTag`, 289, `findTag`, `(data, tags) => { at, tag }`,
+n(`engine`, `findTag`, 282, `findTag`, `(data, tags) => { at, tag }`,
     `Earliest occurrence of any marker`);
-n(`engine`, `holdPartial`, 301, `holdPartial`, `(data, tags) => string`,
+n(`engine`, `holdPartial`, 294, `holdPartial`, `(data, tags) => string`,
     `Holds back the longest suffix that may still become a marker`);
-n(`engine`, `feed`, 314, `feed`, `(text) => void`,
+n(`engine`, `feed`, 307, `feed`, `(text) => void`,
     `Consume a chunk, switch on the current in-reason state`);
-n(`engine`, `flush`, 346, `flush`, `() => void`, `Emit whatever was held back`);
-n(`engine`, `stall`, 356, `firstReplyTimeout · firstVisionReplyTimeout`
+n(`engine`, `flush`, 339, `flush`, `() => void`, `Emit whatever was held back`);
+n(`engine`, `stall`, 346, `firstReplyTimeout · firstVisionReplyTimeout`
     + ` · idleReplyTimeout · promptSpeedTick`,
     `300000 desktop · 3000000 mobile · 840000 floor · 30000 idle · 500 live`,
     `First chunk budget per device, a vision floor over it, the silence`
     + ` between two chunks, and the live prompt tick`);
-n(`engine`, `stallError`, 365, `StallError`, `class Error`,
+n(`engine`, `stallError`, 356, `StallError`, `class Error`,
     `A stream that stopped producing chunks`);
-n(`engine`, `timeout`, 368, `withTimeout`, `(work, ms, message) => Promise`,
+n(`engine`, `timeout`, 360, `withTimeout`, `(work, ms, message) => Promise`,
     `Race one promise against a timeout`);
-n(`engine`, `close`, 387, `closeStream`, `(iterator) => void`,
+n(`engine`, `close`, 378, `closeStream`, `(iterator) => void`,
     `Read the pending abort rejection, then close the stream so a stopped`
     + ` engine keeps no unhandled promise`);
-n(`engine`, `logs`, 401, `logChatCall`, `(model, messages) => void`,
+n(`engine`, `logs`, 390, `logChatCall`, `(model, messages) => void`,
     `Message text and media data are censored, the caller checks the flag`);
-n(`engine`, `streamReply`, 417, `streamReply`, `(params) => Promise<string?>`,
+n(`engine`, `streamReply`, 406, `streamReply`, `(params) => Promise<string?>`,
     `Run the chunk loop, read inline or structured reasoning, collect reply`
     + ` and thought, measure the streamed token speed, stream prefill`
     + ` progress or estimate, stop a silent engine, log when enabled,`
     + ` honour stop`);
 
-n(`engine`, `runEngineChat`, 611, `runEngineChat`,
+n(`engine`, `runEngineChat`, 598, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
     `Build the prompt and media parts, estimate its tokens, log when enabled,`
     + ` pass both speed callbacks and stream one reply`);
-n(`wllama`, `visionLimits`, 42, `visionLimits`,
+n(`wllama`, `visionLimits`, 46, `visionLimits`,
     `(model) => object`,
     `Only the instruct builds set a 16 to 128 image token window`);
-n(`wllama`, `wllamaEngine`, 478, `wllamaEngine`, `LlmEngine`,
+n(`wllama`, `wllamaEngine`, 473, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, purge`);
-n(`wllama`, `resolveAssets`, 59, `resolveAssets`, `(overrides?) => WllamaAssets`,
+n(`wllama`, `resolveAssets`, 54, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
-n(`wllama`, `cpuLogger`, 68, `cpuLogger`, `(base) => WllamaLogger`,
+n(`wllama`, `cpuLogger`, 63, `cpuLogger`, `(base) => WllamaLogger`,
     `Follows the per-call logging flag and hides the GPU probe`);
-n(`wllama`, `getWllama`, 85, `getWllama`, `() => Promise<Wllama>`,
+n(`wllama`, `getWllama`, 80, `getWllama`, `() => Promise<Wllama>`,
     `Lazy singleton, default assets resolved and cached on first use`);
-n(`wllama`, `entryOf`, 112, `entryOf`, `(entry, file) => boolean`,
+n(`wllama`, `entryOf`, 107, `entryOf`, `(entry, file) => boolean`,
     `Cache entry matches by file name or original URL`);
-n(`wllama`, `cpuFiles`, 116, `cpuFiles`, `(model) => { name, url }[]`,
+n(`wllama`, `cpuFiles`, 111, `cpuFiles`, `(model) => { name, url }[]`,
     `The model file plus its vision projector, the projector from its own`
     + ` repo when set`);
-n(`wllama`, `filesStored`, 130, `filesStored`, `(model) => Promise<boolean>`,
+n(`wllama`, `filesStored`, 125, `filesStored`, `(model) => Promise<boolean>`,
     `Every CPU file including the projector is complete in the store`);
-n(`wllama`, `filesCached`, 140, `filesCached`,
+n(`wllama`, `filesCached`, 135, `filesCached`,
     `(instance, model) => Promise<boolean>`,
     `The cache manager holds a valid model with its projector`);
-n(`wllama`, `cachedBlobs`, 151, `cachedBlobs`,
+n(`wllama`, `cachedBlobs`, 146, `cachedBlobs`,
     `(instance, model) => Promise<Blob[]?>`,
     `Open the valid cache manager entry, undefined when absent`);
-n(`wllama`, `fetchRange`, 164, `fetchRange`,
+n(`wllama`, `fetchRange`, 159, `fetchRange`,
     `(url, start, end, signal) => Promise<ArrayBuffer>`,
     `Read one byte range, a non 206 response fails the load`);
-n(`wllama`, `remoteSize`, 182, `remoteSize`,
+n(`wllama`, `remoteSize`, 177, `remoteSize`,
     `(url, signal) => Promise<number>`,
     `Remote file size from a HEAD content length`);
-n(`wllama`, `tailBlob`, 193, `tailBlob`,
+n(`wllama`, `tailBlob`, 188, `tailBlob`,
     `({ url, stored, storedSize, total, signal }) => Blob`,
     `Blob-compatible file that reads the stored prefix from disk and the`
     + ` missing tail over range requests`);
-n(`wllama`, `streamBlobs`, 238, `streamBlobs`,
+n(`wllama`, `streamBlobs`, 233, `streamBlobs`,
     `(model, signal) => Promise<Blob[]>`,
     `Every CPU file as a tail blob, no copy written`);
-n(`wllama`, `storedBlobs`, 261, `storedBlobs`,
+n(`wllama`, `storedBlobs`, 256, `storedBlobs`,
     `({ model, signal, onProgress }) => Promise<Blob[]?>`,
     `Read every CPU file from the store, resuming the parts already stored`);
-n(`wllama`, `toWllamaMessages`, 288, `toWllamaMessages`,
+n(`wllama`, `toWllamaMessages`, 283, `toWllamaMessages`,
     `(messages) => Promise<WllamaMessage[]>`,
     `Map text, image and audio parts to wllama content segments`);
-n(`wllama`, `dropWllama`, 106, `dropWllama`, `() => Promise<void>`,
+n(`wllama`, `dropWllama`, 101, `dropWllama`, `() => Promise<void>`,
     `Drop the worker, a crashed or exited one cannot be reused`);
-n(`wllama`, `runtime`, 33, `runtime`,
+n(`wllama`, `runtime`, 39, `runtime`,
     `store · gpuProbeLog · loggingOn`,
     `The resumable store, the GPU probe log filter and the log switch`);
 n(`threads`, `heuristicThreads`, 2, `heuristicThreads`, `(cores) => number`,
     `Logical cores minus a fifth, at least one core free, minimum 1`);
-n(`wllama`, `startLLM`, 350, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`wllama`, `startLLM`, 345, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Pick 4k or 8k context, load the model and projector from the complete`
     + ` store, a valid legacy cache or the store download, stream the stored`
     + ` tail over range requests when no copy fits, take the heuristic thread`
     + ` count lowered by the caller budget, warm the graphs at load, shift a`
     + ` full context, set no image limits except the instruct describer's 16`
     + ` to 128 window, abortable`);
-n(`wllama`, `cached`, 481, `cached`, `(model) => Promise<boolean>`,
+n(`wllama`, `cached`, 476, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `chat`, 315, `chatOn`, `(instance, model, params)`,
+n(`wllama`, `chat`, 310, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 472, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 467, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `purge`, 488, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 483, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
-n(`litert`, `litertEngine`, 652, `litertEngine`, `LlmEngine`,
+n(`litert`, `litertEngine`, 632, `litertEngine`, `LlmEngine`,
     `backend gpu, startLLM, cached, purge`);
-n(`litert`, `cache`, 39,
+n(`litert`, `cache`, 44,
     `cacheName · gpuShare · maxRestMs · store · backendConfig`,
     `litertlm-models · 0.5 · 500 · ModelStore · GPU executor settings`,
     `Cache Storage bucket, the default GPU share and rest cap, the resumable`
     + ` store and the GPU config with one decode step per sync`);
-n(`litert`, `visionTokens`, 43, `visionTokens`, `70`,
+n(`litert`, `visionTokens`, 48, `visionTokens`, `70`,
     `Smallest Gemma 4 vision budget, 630 patches`);
-n(`litert`, `wasmLog`, 65, `loggingOn · engines · wasmOut · wasmErr`,
+n(`litert`, `wasmLog`, 41, `loggingOn · engines · wasmOut · wasmErr`,
     `boolean · number · (...args) => void`,
     `Wasm stdout and stderr, quiet until a call turns logging on, plus the live`
     + ` engine count that keeps the cached device alive for later engines`);
-n(`litert`, `visibleText`, 89, `visibleText · restFor`,
+n(`litert`, `visibleText`, 83, `visibleText · restFor`,
     `(text) => string · (busyMs, share?) => number`,
     `Turn text without its inline reasoning channel, so a cached reply and`
     + ` a stored reply compare equal, and the rest owed for one busy interval`
     + ` at the requested share`);
-n(`litert`, `gpuThrottle`, 71,
+n(`litert`, `gpuThrottle`, 75,
     `pacedDevices · activeShare · pacing · lastSync · throttledDevice`
     + ` · paceGpu · startPacing · stopPacing`,
     `WeakSet · number · boolean · number · ({ device, pace }) => GpuDevice`
@@ -1127,45 +1127,45 @@ n(`litert`, `gpuThrottle`, 71,
     `Wrap the WebGPU device so every buffer readback waits for the GPU and`
     + ` then rests it, keeping the card at the reply share of wall time, 50`
     + ` percent by default, and start and stop that pacing around the decode`);
-n(`litert`, `releaseDevice`, 148, `releaseDevice`, `(mod) => void`,
+n(`litert`, `releaseDevice`, 138, `releaseDevice`, `(mod) => void`,
     `Destroy the WebGPU device, clear the wasm device id and unload the wasm`
     + ` module, because a deleted engine wedges them`);
-n(`litert`, `cacheOpen`, 161, `cacheOpen`, `() => Promise<Cache | undefined>`,
+n(`litert`, `cacheOpen`, 151, `cacheOpen`, `() => Promise<Cache | undefined>`,
     `Open the model cache, absent in Node and on an insecure origin`);
-n(`litert`, `modelCached`, 169, `modelCached`, `(model) => Promise<boolean>`,
+n(`litert`, `modelCached`, 158, `modelCached`, `(model) => Promise<boolean>`,
     `Whether the model file is complete in the store or in Cache Storage`);
-n(`litert`, `downloads`, 182, `downloads`, `Map<string, Promise<void>>`,
+n(`litert`, `downloads`, 170, `downloads`, `Map<string, Promise<void>>`,
     `Every model file download in flight, shared by every caller`);
-n(`litert`, `countStream`, 185, `countStream`,
+n(`litert`, `countStream`, 172, `countStream`,
     `(body, total, onProgress) => stream`,
     `Report download progress while the file streams to the cache`);
-n(`litert`, `cacheModel`, 201, `cacheModel`, `(url, cache, signal, onProgress)`,
+n(`litert`, `cacheModel`, 187, `cacheModel`, `(url, cache, signal, onProgress)`,
     `Fallback for a host without a file store, Cache Storage holds the file`);
-n(`litert`, `fetchModel`, 231, `fetchModel`, `(url, signal, onProgress) => stream`,
+n(`litert`, `fetchModel`, 216, `fetchModel`, `(url, signal, onProgress) => stream`,
     `Network stream for a host without a cache or a store`);
-n(`litert`, `toLitertMessages`, 243, `toLitertMessages`,
+n(`litert`, `toLitertMessages`, 227, `toLitertMessages`,
     `(messages, keepMedia?) => Promise<LitertMessage[]>`,
     `Map built turns to LiteRT turns, history media becomes text notes`);
-n(`litert`, `sameMessage`, 275, `sameMessage`, `(first, next) => boolean`,
+n(`litert`, `sameMessage`, 258, `sameMessage`, `(first, next) => boolean`,
     `Same role, visible text and file kind, so a re-encoded file and a`
     + ` channel-wrapped reply still continue the conversation`);
-n(`litert`, `history`, 302, `continuesHistory`, `(sent, history) => boolean`,
+n(`litert`, `history`, 284, `continuesHistory`, `(sent, history) => boolean`,
     `Whether the live conversation already holds the incoming turns`);
-n(`litert`, `streamLitert`, 323, `streamLitert`,
+n(`litert`, `streamLitert`, 304, `streamLitert`,
     `(engine, mod, params, messages, session) => AsyncGenerator<EngineChunk>`,
     `Reuse one conversation, stream content and thought channels, cancel`
     + ` through the abort signal, treat a cancelled read as the end of the`
     + ` stream, start the GPU rest at the reply share after the first chunk,`
     + ` drop a turn that cannot continue`);
-n(`litert`, `chat`, 449, `chatOn`, `(engine, model, mod, params, session)`,
+n(`litert`, `chat`, 430, `chatOn`, `(engine, model, mod, params, session)`,
     `Follow the logging flag, reject unsupported images or audio, then stream`
     + ` through the shared reply loop`);
-n(`litert`, `settings`, 496, `litertSettings`,
+n(`litert`, `settings`, 478, `litertSettings`,
     `({ model, limits, contextSize, source, mod }) => LitertSettings`,
     `Build the engine settings from the catalog file, with the requested`
     + ` context window, the smallest vision budget and the CPU audio`
     + ` backend only when that file has them`);
-n(`litert`, `startLLM`, 527, `startLLM`, `(params) => Promise<LlmRuntime>`,
+n(`litert`, `startLLM`, 508, `startLLM`, `(params) => Promise<LlmRuntime>`,
     `Route the wasm output through the logging flag, load wasm and module,`
     + ` pick the desktop or phone context window, wrap the WebGPU device`
     + ` for the GPU rest, read the stored file or`
@@ -1174,82 +1174,82 @@ n(`litert`, `startLLM`, 527, `startLLM`, `(params) => Promise<LlmRuntime>`,
     + ` progress, size the vision and audio encoders, warm the runtime`
     + ` environment with one throwaway conversation, count the live engine and`
     + ` open one reused conversation`);
-n(`litert`, `unload`, 641, `runtime.unload`, `() => Promise<void>`,
+n(`litert`, `unload`, 622, `runtime.unload`, `() => Promise<void>`,
     `Delete the open conversation and the wasm engine, then destroy the`
     + ` WebGPU device and unload the wasm once the last engine is gone,`
     + ` keeping the cache`);
-n(`litert`, `purge`, 656, `purge`, `() => Promise<void>`,
+n(`litert`, `purge`, 636, `purge`, `() => Promise<void>`,
     `Delete every stored model file and the whole Cache Storage bucket`);
 n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `() => Promise<typeof import('@litert-lm/core')>`,
     `import() of the bundled engine-litert chunk, fetched on demand`);
 
 // model file store
-n(`store`, `dir`, 14, `partBytes · maxStalls · idleTimeout`
+n(`store`, `dir`, 17, `partBytes · maxStalls · idleTimeout`
     + ` · storeFaults · downloads · quotaFaults · unsupported`,
     `32 MiB · 4 · 30000 · Set<StoreFault> · Map<string, Promise>`
     + ` · Set<string> · boolean`,
     `The part size, the stall budget, the file system failures, the downloads`
     + ` in flight, the URLs whose storage filled and whether this process has`
     + ` no writable file system`);
-n(`store`, `storeName`, 41, `storeName`, `(url) => string`,
+n(`store`, `storeName`, 38, `storeName`, `(url) => string`,
     `Stable model directory name for one URL, a hash and the file name`);
-n(`store`, `parts`, 50, `partName · partOffset · chainParts`,
+n(`store`, `parts`, 47, `partName · partOffset · chainParts`,
     `(start) => string · (name) => number · (parts) => StoredFilePart[]`,
     `Name one part by its byte offset, read that offset back, and keep only`
     + ` the contiguous chain from zero`);
-n(`store`, `storeRoot`, 69, `storeRoot`,
+n(`store`, `storeRoot`, 66, `storeRoot`,
     `() => Promise<FileSystemDirectoryHandle | undefined>`,
     `Open the origin private file system, absent in Node`);
-n(`store`, `storageRoom`, 80, `storageRoom`,
+n(`store`, `storageRoom`, 77, `storageRoom`,
     `() => Promise<number | undefined>`,
     `Remaining quota from the storage estimate, undefined when unknown`);
-n(`store`, `meta`, 90, `modelDir · parseMeta · readMeta · writeMeta`,
+n(`store`, `meta`, 87, `modelDir · parseMeta · readMeta · writeMeta`,
     `(dir, name) => Promise<FileSystemDirectoryHandle?>`
     + ` · (handle) => Promise<StoredModelMeta?>`,
     `Open one model directory, parse its metadata file, read and write the`
     + ` size and entity tag beside the parts`);
-n(`store`, `parthandling`, 134, `storeEntries · removeParts · readParts`,
+n(`store`, `parthandling`, 131, `storeEntries · removeParts · readParts`,
     `(dir) => AsyncIterable · Promise<void> · Promise<Blob?>`,
     `Iterate one directory, delete stale parts, and compose the contiguous`
     + ` prefix into one Blob`);
-n(`store`, `readLegacy`, 176, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
+n(`store`, `readLegacy`, 173, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
     `Read a model an older version stored as one file and metadata`);
-n(`store`, `removeFrom`, 198, `removeFrom`, `(dir, name) => Promise<void>`,
+n(`store`, `removeFrom`, 195, `removeFrom`, `(dir, name) => Promise<void>`,
     `Delete one model directory, its parts and its metadata`);
-n(`store`, `readStored`, 206, `readStored`, `(dir, name) => Promise<StoredModel?>`,
+n(`store`, `readStored`, 203, `readStored`, `(dir, name) => Promise<StoredModel?>`,
     `Stored bytes plus metadata, complete once the parts reach the total`);
-n(`store`, `resumePlan`, 229, `resumePlan`, `(response, part) => ResumePlan?`,
+n(`store`, `resumePlan`, 226, `resumePlan`, `(response, part) => ResumePlan?`,
     `Accept a 206 that continues the parts and matches their size and entity`
     + ` tag, trust the request when the host hides the range`);
-n(`store`, `storeBody`, 258, `storeBody`,
+n(`store`, `storeBody`, 255, `storeBody`,
     `({ dir, start, skip, total, body, onProgress, onChunk }) => Promise<number>`,
     `Write one response body into 32 MiB parts, skip a replayed prefix, commit`
     + ` every part, cancel the reader on failure, report absolute progress and`
     + ` reset the idle timer on each chunk`);
-n(`store`, `downloadInto`, 335, `downloadInto`,
+n(`store`, `downloadInto`, 333, `downloadInto`,
     `(dir, url, signal, onProgress) => Promise<StoredModel>`,
     `Request a bounded range of the missing bytes, stop early when the room`
     + ` cannot hold them, retry a stalled or cut connection from the last`
     + ` committed part, check size and etag, replay a full body over stored`
     + ` parts and keep every part on any failure`);
-n(`store`, `isStoreError`, 467, `isStoreError`, `(error) => boolean`,
+n(`store`, `isStoreError`, 465, `isStoreError`, `(error) => boolean`,
     `A write the browser refuses means this host cannot use a file store`);
-n(`store`, `isQuotaError`, 471, `isQuotaError`, `(error) => boolean`,
+n(`store`, `isQuotaError`, 469, `isQuotaError`, `(error) => boolean`,
     `A quota failure means the load streams and skips the cache`);
-n(`store`, `createModelStore`, 475, `createModelStore`,
+n(`store`, `createModelStore`, 472, `createModelStore`,
     `(dirName) => ModelStore`,
     `Open one engine's directory and return stored, download, remove and`
     + ` purge over it`);
-n(`store`, `stored`, 486, `store.stored`, `(url) => Promise<StoredModel?>`,
+n(`store`, `stored`, 483, `store.stored`, `(url) => Promise<StoredModel?>`,
     `Bytes and metadata of one stored model file`);
-n(`store`, `download`, 491, `store.download`,
+n(`store`, `download`, 488, `store.download`,
     `({ url, signal, onProgress }) => Promise<StoredModel?>`,
     `Share one download per store and URL, undefined without a file system,`
     + ` remember a full storage so the next call streams`);
-n(`store`, `remove`, 516, `store.remove`, `(url) => Promise<void>`,
+n(`store`, `remove`, 514, `store.remove`, `(url) => Promise<void>`,
     `Delete one stored model file and its metadata`);
-n(`store`, `purge`, 523, `store.purge`, `() => Promise<void>`,
+n(`store`, `purge`, 521, `store.purge`, `() => Promise<void>`,
     `Delete the whole engine store directory and every model file in it`);
 
 // image resizing
@@ -1259,18 +1259,18 @@ n(`images`, `tokenCell`, 7, `tokenCell`, `32`,
     `Pixels covered by one vision token`);
 n(`images`, `slack`, 9, `tokenSlack`, `8`,
     `Tokens allowed above the target`);
-n(`images`, `gpuSize`, 12, `gpuImageSize`, `384 x 384`,
+n(`images`, `gpuSize`, 11, `gpuImageSize`, `384 x 384`,
     `Square size the WebGPU engine encodes`);
-n(`images`, `buffer`, 48, `contentBuffer`, `(url) => Promise<ArrayBuffer>`,
+n(`images`, `buffer`, 43, `contentBuffer`, `(url) => Promise<ArrayBuffer>`,
     `Decode a data URL or fetch an image or audio URL into bytes`);
-n(`images`, `visionSize`, 65, `visionSize`,
+n(`images`, `visionSize`, 59, `visionSize`,
     `(width, height, tokens?) => ImageSize`,
     `Closest 32 px grid near the token target, aspect kept`);
-n(`images`, `resizeUrl`, 97, `resizeImageUrl`,
+n(`images`, `resizeUrl`, 90, `resizeImageUrl`,
     `(url, size?, tokens?) => Promise<string>`,
     `Decode an image, crop the sub-cell remainder, resize to the grid,`
     + ` encode JPEG`);
-n(`images`, `resizeImages`, 154, `resizeImages`,
+n(`images`, `resizeImages`, 146, `resizeImages`,
     `(messages, size?, tokens?) => Promise<EngineMessage[]>`,
     `Fit every image part before the engine starts`);
 
@@ -1281,41 +1281,41 @@ n(`tools`, `registry`, 8, `builtinTools`,
 n(`calculator`, `normalize`, 14, `normalizeExpression`,
     `(input: string) => string`,
     `Fold the symbols a host may type into plain arithmetic`);
-n(`calculator`, `evaluate`, 23, `evaluateExpression`,
+n(`calculator`, `evaluate`, 22, `evaluateExpression`,
     `(expression: string) => number`,
     `Evaluate a normalized expression, percent applies to the left operand`);
-n(`calculator`, `calculate`, 114, `calculate`,
+n(`calculator`, `calculate`, 112, `calculate`,
     `(input: string) => CalculationResult`,
     `Normalize, guard the length and the characters, then evaluate`);
-n(`calculator`, `tool`, 127, `calculateTool`, `ChatTool`,
+n(`calculator`, `tool`, 125, `calculateTool`, `ChatTool`,
     `The arithmetic descriptor, fully local`);
-n(`currency`, `resetPrices`, 44, `resetPrices`, `() => void`,
+n(`currency`, `resetPrices`, 42, `resetPrices`, `() => void`,
     `Clear the in-memory and the stored snapshot, used by tests`);
-n(`currency`, `sectionsFor`, 171, `sectionsFor`,
+n(`currency`, `sectionsFor`, 159, `sectionsFor`,
     `(symbols: string[]) => PriceSections`,
     `Decide which feed section one request has to read`);
-n(`currency`, `convert`, 256, `convert`,
+n(`currency`, `convert`, 236, `convert`,
     `(args: Record<string, ChatToolValue>) => Promise<CurrencyResult>`,
     `Refresh what is stale, then convert the amount and quote the change`);
-n(`currency`, `tool`, 310, `currencyTool`, `ChatTool`,
+n(`currency`, `tool`, 289, `currencyTool`, `ChatTool`,
     `The EUR conversion descriptor over the CoinExams feed`);
 n(`search`, `settings`, 29, `searchSettings`,
     `(config?: WebSearchConfig) => WebSearchSettings`,
     `Resolve the provider, language, limit, snippet and timeout`);
-n(`search`, `wikipedia`, 62, `wikipediaResults`,
+n(`search`, `wikipedia`, 60, `wikipediaResults`,
     `(settings, query) => Promise<WebSearchResult[]>`,
     `Read the REST search and map pages to hits`);
-n(`search`, `duckduckgo`, 88, `duckDuckGoResults`,
+n(`search`, `duckduckgo`, 85, `duckDuckGoResults`,
     `(settings, query) => Promise<WebSearchResult[]>`,
     `Read the instant answer and flatten the related topics`);
-n(`search`, `tool`, 121, `webSearchTool`, `(config?: WebSearchConfig) => ChatTool`,
+n(`search`, `tool`, 117, `webSearchTool`, `(config?: WebSearchConfig) => ChatTool`,
     `The search descriptor, Wikipedia by default`);
-n(`text`, `clamp`, 22, `clampNumber`,
+n(`text`, `clamp`, 21, `clampNumber`,
     `(value, min, max, fallback) => number`,
     `Clamp one search setting, a bad value falls back`);
-n(`text`, `decode`, 33, `decodeEntity`, `(entity: string) => string`,
+n(`text`, `decode`, 31, `decodeEntity`, `(entity: string) => string`,
     `Decode one HTML entity, an unknown one stays literal`);
-n(`text`, `plain`, 46, `plainText`, `(text: string, max: number) => string`,
+n(`text`, `plain`, 43, `plainText`, `(text: string, max: number) => string`,
     `Strip markup, decode entities, collapse spaces and cap the text`);
 
 // loader and assets
@@ -1325,19 +1325,19 @@ n(`external`, `ggufWeights`, 0, `GGUF weights`, `runtime download`,
     `The Qwen GGUF and projector, never shipped in the package`);
 n(`external`, `litertWeights`, 0, `LiteRT weights`, `runtime download`,
     `The Gemma .litertlm file, never shipped in the package`);
-n(`assets`, `defaultWllamaAssets`, 10, `defaultWllamaAssets`, `() => WllamaAssets`,
+n(`assets`, `defaultWllamaAssets`, 11, `defaultWllamaAssets`, `() => WllamaAssets`,
     `Browser build: asset/resource URLs emitted beside the bundle`);
 n(`assets`, `defaultLitertAssets`, 17, `defaultLitertAssets`, `() => LitertAssets`,
     `Browser build: wasm glue and binary URLs emitted beside the bundle`);
-n(`assetsNode`, `defaultWllamaAssets`, 6, `defaultWllamaAssets`, `() => WllamaAssets`,
+n(`assetsNode`, `defaultWllamaAssets`, 7, `defaultWllamaAssets`, `() => WllamaAssets`,
     `Node CommonJS build: paths joined beside dist/assets/wllama`);
 n(`assetsNode`, `defaultLitertAssets`, 10, `defaultLitertAssets`, `() => LitertAssets`,
     `Node CommonJS build: paths joined beside dist/assets/litert`);
-n(`assetsNodePaths`, `wllamaAssetsAt`, 5, `wllamaAssetsAt`, `(base) => WllamaAssets`,
+n(`assetsNodePaths`, `wllamaAssetsAt`, 6, `wllamaAssetsAt`, `(base) => WllamaAssets`,
     `One wasm, compat wasm and compat worker mapping below a base path`);
 n(`assetsNodePaths`, `litertAssetsAt`, 12, `litertAssetsAt`, `(base) => LitertAssets`,
     `The wasm glue and binary mapping below a base path`);
-n(`assetsNodeEsm`, `defaultWllamaAssets`, 7, `defaultWllamaAssets`, `() => WllamaAssets`,
+n(`assetsNodeEsm`, `defaultWllamaAssets`, 8, `defaultWllamaAssets`, `() => WllamaAssets`,
     `Node ESM build: paths resolved from import.meta.url`);
 n(`assetsNodeEsm`, `defaultLitertAssets`, 12, `defaultLitertAssets`, `() => LitertAssets`,
     `Node ESM build: paths resolved from import.meta.url`);
@@ -1426,7 +1426,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.0`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.1`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`

@@ -6,17 +6,17 @@ import compatWorker from '@wllama/wllama-compat/wasm/wllama.js';
 import litertScript from '@degreesign/litert-wasm/litertlm_wasm_internal.js';
 import litertWasm from '@degreesign/litert-wasm/litertlm_wasm_internal.wasm';
 
-/** Default wllama asset URLs, emitted beside the browser bundle */
-const defaultWllamaAssets = () => ({
-    wasm: wllamaWasm,
-    compatWasm,
-    compatWorker,
-});
-
-/** Default LiteRT asset URLs, emitted beside the browser bundle */
-const defaultLitertAssets = () => ({
-    script: litertScript,
-    wasm: litertWasm,
-});
+const
+    /** Default wllama asset URLs, emitted beside the browser bundle */
+    defaultWllamaAssets = () => ({
+        wasm: wllamaWasm,
+        compatWasm,
+        compatWorker,
+    }),
+    /** Default LiteRT asset URLs, emitted beside the browser bundle */
+    defaultLitertAssets = () => ({
+        script: litertScript,
+        wasm: litertWasm,
+    });
 
 export { defaultLitertAssets, defaultWllamaAssets };

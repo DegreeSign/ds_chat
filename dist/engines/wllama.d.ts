@@ -1,13 +1,13 @@
 import type { ChatModel, EngineMessage, LlmEngine, LlmRuntime, StartLlmParams, WllamaMessage } from '../types';
+declare const 
 /** Image limits of one model */
-declare const visionLimits: (model: ChatModel) => {
+visionLimits: (model: ChatModel) => {
     image_min_tokens: number;
     image_max_tokens: number;
 } | {
     image_min_tokens?: undefined;
     image_max_tokens?: undefined;
-};
-declare const 
+}, 
 /** CPU file names and URLs */
 cpuFiles: (model: ChatModel) => Array<{
     name: string;

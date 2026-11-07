@@ -1,4 +1,3 @@
 import type { Runtime, RuntimeDeps } from './types';
-declare const createRuntime: (deps?: RuntimeDeps) => Runtime;
-declare const runtime: Runtime;
+declare const createRuntime: (deps?: RuntimeDeps) => Runtime, runtime: Runtime;
 export { createRuntime, runtime };
