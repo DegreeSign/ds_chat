@@ -339,7 +339,7 @@ const
                         ? { penalty_repeat: params.repeatPenalty }
                         : {}),
                     abortSignal: params.signal,
-                    ...(model.reasoning
+                    ...(model.reasoning || instructIds.includes(model.id)
                         ? { chat_template_kwargs: { enable_thinking: params.reasoning } }
                         : {}),
                 });
@@ -396,7 +396,10 @@ const
             n_parallel: 1,
             // warm graphs at load
             warmup: true,
-            reasoning_budget_tokens: limits.maxThinkingTokens, // cap thinking tokens for speed
+            // reasoning models only
+            ...(model.reasoning
+                ? { reasoning_budget_tokens: limits.maxThinkingTokens }
+                : { reasoning_budget_tokens: 0 }),
             n_gpu_layers: 0, // CPU fallback, never use GPU
             jinja: true,
             // shift a full context

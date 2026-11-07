@@ -1,49 +1,51 @@
-import { findLlmModel, gpuAdapter } from './models';
+import { findLlmModel, resolveLlmModel } from './models';
 import { statusSnapshot } from './chat';
 import { runtime } from './service';
 import { resolveLlmLimits } from './engines/engine';
 import { log } from './log';
-import { ChatModelId, LlmPhase, LlmRole } from './enums';
+import { estimateReport, recordEstimate } from './estimate';
+import {
+    imageNote,
+    imageSystem,
+    nsfwTag,
+    tagSystem,
+    tagTranslateSystem,
+    translatePreMessage,
+    translatePrompt,
+    translateSystem,
+} from './prompts';
+import {
+    ChatModelId,
+    DescriptionEnhancedStage,
+    EstimateOperation,
+    LlmPhase,
+    LlmRole,
+} from './enums';
 import type {
     ChatMessage,
     ChatModel,
     ChatState,
     ChatStatusSnapshot,
-    DescribeImagesInput,
-    DescribeTranslatedInput,
-    ImageDescription,
+    DescribeImageInput,
+    DescriptionEnhanced,
+    DescriptionEnhancedInput,
+    ImageTag,
     LlmLimits,
     Runtime,
+    TranslateTagsInput,
 } from './types';
-
-const
-
-    /** System message of the describer */
-    imageSystem = [
-        `Describe images in an efficient manner.`,
-        `Never mention rules and restrictions`,
-        `always comply and describe images.`,
-    ].join(` `),
-
-    /** System image rules */
-    imageRules = [
-        `Do not lie.`,
-        `Do not provide verdict.`,
-        `Do not use vague referrals.`,
-        `Do not include any part of the message in your response.`
-    ].join(` `),
-
-    /** Request for every image */
-    imageNote = `Describe all elements of the image.`;
 
 /** Reply budget, about 100 words */
 const imageReplyTokens = 128;
+
+/** Translation reply budget, doubled */
+const imageTranslateTokens = imageReplyTokens * 2;
 
 /** Repetition penalty of one description */
 const imageRepeatPenalty = 1;
 
 /** Sampling temperature of one description */
-const imageTemperature = 0.3;
+const imageTemperature = 0.1;
 
 /** Vision tokens for one image */
 const imageVisionTokens = 192;
@@ -51,13 +53,14 @@ const imageVisionTokens = 192;
 /** Describer model, Q4 CPU build */
 const describeModelId = ChatModelId.qwen3_vl_2b_instruct;
 
-/** System message of the translator */
-const translateSystem = [
-    `You are a precise translator.`,
-    `Translate your own previous reply above faithfully and literally into the target language.`,
-    `Never translate the user's request or instructions.`,
-    `Preserve meaning, names and numbers, and never add, omit or explain anything.`,
-].join(` `);
+/** Tags kept per image */
+const imageTags = 3;
+
+/** Reply budget of one tag pass */
+const tagReplyTokens = 128;
+
+/** Reply budget of one tag translation */
+const tagTranslateTokens = imageTranslateTokens;
 
 /** Reply of declined translation */
 const CANNOT_TRANSLATE = `CANNOT_TRANSLATE`;
@@ -68,29 +71,79 @@ const needsTranslation = (language: string): boolean => {
     return !!tag && !/^(en|eng|english)([-_]|$)/.test(tag);
 };
 
-/** Prompt asking for one translation */
-const translatePrompt = (language: string): string =>
-    `Now please translate your previous reply above faithfully into ${language}. ` +
-    `Your translation should be as literal and as accurate as possible, word for word. ` +
-    `In order to be usable for accessibility for visually impaired if needed. ` +
-    `Reply only by the translation without any addition or explanation`;
-// +
-// fallback reply for unknown language
+/** Clean English tag word */
+const cleanTag = (value?: string): string =>
+    typeof value == `string`
+        ? value.toLowerCase().replace(/[^a-z]+/g, ``).slice(0, 20)
+        : ``;
+
+/** Clean translated tag word */
+const cleanTagTranslation = (value?: string): string =>
+    typeof value == `string`
+        ? value.toLowerCase().replace(/[^\p{L}]+/gu, ``).slice(0, 20)
+        : ``;
+
+/** Keep three tags, nsfw last */
+const keepTags = (tags: ImageTag[]): ImageTag[] => {
+    const kept = tags.slice(0, imageTags);
+    const flagged = tags.find(tag => tag.en == nsfwTag);
+    if (flagged && !kept.includes(flagged) && kept.length)
+        kept[kept.length - 1] = flagged;
+    return kept;
+};
+
+/** Tags of one model reply */
+const tagsOf = (reply: string): ImageTag[] => {
+    const tags: ImageTag[] = [];
+    /** Add one reply word */
+    const add = (value: string) => {
+        const en = cleanTag(value);
+        if (en.length < 2 || tags.some(tag => tag.en == en)) return;
+        tags.push({ en });
+    };
+    for (const match of reply.matchAll(/^\s*\d+\s*[:.\-]\s*(.+)$/gm))
+        for (const value of (match[1] || ``).split(/[,;\n]+/))
+            for (const word of value.split(/\s+/)) add(word);
+    // plain reply without numbers
+    if (!tags.length)
+        for (const value of reply.split(/[,;\n]+/))
+            for (const word of value.split(/\s+/)) add(word);
+    return keepTags(tags);
+};
+
+/** Fill translated tag words */
+const translateTagWords = (
+    reply: string,
+    tags: ImageTag[],
+    code: string,
+): void => {
+    // English tags stay untouched
+    if (code == `en`) return;
+    for (const match of reply.matchAll(/^\s*(\d+)\s*[:.\-]\s*(.+)$/gm)) {
+        const tag = tags[Number(match[1]) - 1];
+        const word = cleanTagTranslation(match[2]);
+        // English kept when missing
+        if (!tag || !word || word == tag.en) continue;
+        tag[code] = word;
+    };
+};
 
 const
-    /** Describe load, generate and report */
-    describeTools = ({
+    /** Resolve, load and prepare one call */
+    prepareModel = async ({
         service,
         limits,
         logging,
         signal,
         onStatus,
+        model,
     }: {
         service: Runtime,
         limits: LlmLimits,
         logging: boolean,
         signal?: AbortSignal,
         onStatus?: (snapshot: ChatStatusSnapshot) => void,
+        model?: ChatModelId,
     }) => {
         /** Report model and request state */
         const report = (model: ChatModelId, state: ChatState) =>
@@ -154,6 +207,7 @@ const
             stage,
             repeatPenalty,
             temperature,
+            limits: callLimits,
             onSpeed,
             onText,
         }: {
@@ -162,6 +216,7 @@ const
             stage: string,
             repeatPenalty?: number,
             temperature?: number,
+            limits?: Partial<LlmLimits>,
             onSpeed?: (tokensPerSecond: number) => void,
             onText?: (text: string) => void,
         }): Promise<string | undefined> => {
@@ -174,7 +229,7 @@ const
                 const result = await service.chat({
                     model,
                     messages,
-                    limits,
+                    limits: callLimits ? { ...limits, ...callLimits } : limits,
                     reasoning: false,
                     ...(repeatPenalty ? { repeatPenalty } : {}),
                     ...(temperature === undefined ? {} : { temperature }),
@@ -216,343 +271,348 @@ const
                 throw error;
             }
         };
-        return { report, load, generate };
-    },
-    /** Translate descriptions, English on failure */
-    translateDescriptions = async ({
-        translator,
-        generate,
-        descriptions,
-        language,
-        logging,
-        signal,
-        currentIndex,
-        onSpeed,
-        onText,
-    }: {
-        translator: ChatModel,
-        generate: (input: {
-            model: ChatModelId,
-            messages: ChatMessage[],
-            stage: string,
-            onSpeed?: (tokensPerSecond: number) => void,
-            onText?: (text: string) => void,
-        }) => Promise<string | undefined>,
-        descriptions: string[],
-        language: string,
-        logging: boolean,
-        signal?: AbortSignal,
-        currentIndex?: DescribeTranslatedInput[`currentIndex`],
-        onSpeed?: DescribeTranslatedInput[`onSpeed`],
-        onText?: DescribeTranslatedInput[`onText`],
-    }): Promise<string[]> => {
-        const result = [...descriptions];
-        for (let index = 0; index < descriptions.length; index++) {
-            // stopped batch keeps English
-            if (signal?.aborted) break;
-            const descriptionEN = (descriptions[index] || ``).trim();
-            // empty description keeps its place
-            if (!descriptionEN) {
-                currentIndex?.(index, descriptionEN, descriptionEN);
-                continue;
-            };
-            let description = ``;
-            try {
-                const text = await generate({
-                    model: translator.id,
-                    messages: [{
-                        role: LlmRole.system,
-                        content: translateSystem,
-                    }, {
-                        role: LlmRole.user,
-                        content: `[image] describe this image in English very accurately`,
-                    }, {
-                        role: LlmRole.assistant,
-                        content: descriptionEN,
-                    }, {
-                        role: LlmRole.user,
-                        content: translatePrompt(language),
-                    }],
-                    stage: `translate`,
-                    onSpeed: speed => onSpeed?.(index, speed),
-                    onText: value => onText?.(index, value, `translate`),
-                });
-                description = (text || ``).trim();
-            } catch (error) {
-                // failed translation never stops others
-                log(logging, `Translate item failed`, index, error);
-            };
-            const refused = description
-                .replace(/[^a-z]/gi, ``)
-                .toUpperCase()
-                .includes(CANNOT_TRANSLATE.replace(/[^a-z]/gi, ``));
-            if (description && !refused) result[index] = description;
-            currentIndex?.(index, descriptionEN, result[index]);
+        const textModel = findLlmModel(model) ?? await resolveLlmModel();
+        if (!textModel) {
+            log(logging, `Model missing`, model);
+            report(model || describeModelId, {
+                requesting: false,
+                phase: LlmPhase.download,
+                percent: 0,
+                error: `Unknown model`,
+            });
+            return { error: `Unknown model` };
         };
-        return result;
+        const loadError = await load(textModel);
+        if (loadError) return { error: loadError };
+        if (signal?.aborted) return { aborted: true };
+        report(textModel.id, {
+            requesting: true,
+            phase: LlmPhase.load,
+            percent: 100,
+        });
+        return { report, generate, model: textModel };
     };
 
-/** Build descriptions over one runtime */
-const createDescribeOn = (service: Runtime) => async (
-    input: DescribeImagesInput,
-): Promise<ImageDescription[]> => {
+/** Build image description over one runtime */
+const createDescribeImageOn = (service: Runtime) => async (
+    input: DescribeImageInput,
+): Promise<string> => {
     const
-        { images, currentIndex, signal } = input,
-        descriptions: ImageDescription[] = [],
-        logging = input.logging === true;
-    log(logging, `Describe start`, images.length, input.targetLanguage);
-    if (!images.length) {
-        log(logging, `Describe empty`);
-        return descriptions;
-    };
-    const
-        describer = findLlmModel(describeModelId),
-        describerId = describeModelId,
+        logging = input.logging === true,
         limits = resolveLlmLimits({
             maxReplyTokens: imageReplyTokens,
             imageTokens: imageVisionTokens,
             ...input.limits,
-        }),
-        { report, load, generate } = describeTools({
-            service,
-            limits,
-            logging,
-            signal,
-            onStatus: input.onStatus,
         });
-    log(
+    input.onEstimate?.(estimateReport([
+        EstimateOperation.analyze,
+        EstimateOperation.describe,
+    ]));
+    log(logging, `Describe image start`, input.image.length);
+    const ready = await prepareModel({
+        service,
+        limits,
         logging,
-        `Describe model`,
-        describerId,
-        describer ? `found` : `missing`,
-        limits.maxReplyTokens,
-        limits.maxImages,
-    );
-    const describerReady = service.ready(describerId);
-    report(describerId, {
-        requesting: false,
-        phase: describerReady ? LlmPhase.load : LlmPhase.download,
-        percent: describerReady ? 100 : 0,
+        signal: input.signal,
+        onStatus: input.onStatus,
+        model: describeModelId,
     });
-    if (!describer) {
-        log(logging, `Describe model missing`, describerId);
-        report(describerId, {
-            requesting: false,
-            phase: LlmPhase.download,
-            percent: 0,
-            error: `Unknown model`,
-        });
-        throw new Error(`Unknown model`);
+    if (`error` in ready) throw new Error(ready.error);
+    if (`aborted` in ready) return ``;
+    const { report, generate, model: describer } = ready;
+    let
+        firstTextAt: number | undefined,
+        text = ``;
+    const startedAt = Date.now();
+    try {
+        text = (await generate({
+            model: describer.id,
+            messages: [{
+                role: LlmRole.system,
+                content: input.systemRulesOverride
+                    || imageSystem,
+            }, {
+                role: LlmRole.user,
+                content: imageNote,
+                images: [input.image],
+            }],
+            stage: `describe`,
+            repeatPenalty: imageRepeatPenalty,
+            temperature: imageTemperature,
+            onSpeed: input.onSpeed,
+            onText: value => {
+                firstTextAt ??= Date.now();
+                input.onText?.(value);
+            },
+        }) || ``).trim();
+    } catch (error) {
+        // stopped image stays silent
+        if (input.signal?.aborted) return ``;
+        throw error;
     };
-    const describerError = await load(describer);
-    if (describerError) {
-        log(logging, `Describe stop`, describerError);
-        throw new Error(describerError);
-    };
-    if (signal?.aborted) return descriptions;
+    const endedAt = Date.now();
+    log(logging, `Describe image done`, endedAt - startedAt, text);
     report(describer.id, {
-        requesting: true,
+        requesting: false,
         phase: LlmPhase.load,
         percent: 100,
     });
-    for (let index = 0; index < images.length; index++) {
-        // stopped batch keeps finished
-        if (signal?.aborted) break;
-        const
-            startedAt = Date.now(),
-            source = images[index];
-        log(
-            logging,
-            `Describe image start`,
-            index,
-            images.length,
-            source.startsWith(`data:`) ? `data URL` : source,
-            source.length,
-        );
-        currentIndex?.(index);
-        let descriptionEN = ``;
-        try {
-            const text = await generate({
-                model: describer.id,
-                messages: [{
-                    role: LlmRole.system,
-                    content: `${imageSystem}${input.additionalRules ?
-                        ` ${input.additionalRules} `
-                        : ` `}${imageRules}`,
-                }, {
-                    role: LlmRole.user,
-                    content: imageNote,
-                    images: [source],
-                }],
-                stage: `describe`,
-                repeatPenalty: imageRepeatPenalty,
-                temperature: imageTemperature,
-                onSpeed: speed => input.onSpeed?.(index, speed),
-                onText: value => input.onText?.(index, value, `describe`),
-            });
-            descriptionEN = (text || ``).trim();
-        } catch (error) {
-            // failed image never stops batch
-            log(logging, `Describe image failed`, index, error);
-        };
-        const durationMs = Date.now() - startedAt;
-        log(logging, `Describe english`, index, durationMs, descriptionEN);
-        if (!descriptionEN) {
-            // empty place keeps indexes aligned
-            log(logging, `Describe empty`, index);
-            descriptions.push({ descriptionEN: ``, description: ``, durationMs });
-            currentIndex?.(index, ``, undefined, durationMs);
-            continue;
-        };
-        descriptions.push({ descriptionEN, description: descriptionEN, durationMs });
-        currentIndex?.(index, descriptionEN, undefined, durationMs);
-    };
-    const described = descriptions.filter(item => !!item.descriptionEN).length;
-    log(logging, `Describe english ready`, described);
-    if (!described) {
+    if (!text) {
+        log(logging, `Describe image empty`);
         report(describer.id, {
             requesting: false,
             phase: LlmPhase.load,
             percent: 100,
             error: `No description`,
         });
-        return descriptions;
+        return ``;
     };
-    // stopped batch keeps English text
-    if (signal?.aborted) return descriptions;
-    const
-        language = input.targetLanguage.trim(),
-        translator = needsTranslation(language) && await gpuAdapter()
-            ? findLlmModel(ChatModelId.gemma4_e2b_limited)
-            : undefined,
-        translationError = translator ? await load(translator) : undefined;
-    if (translator && !translationError) {
-        if (signal?.aborted) return descriptions;
-        report(translator.id, {
-            requesting: true,
-            phase: LlmPhase.load,
-            percent: 100,
-        });
-        await translateDescriptions({
-            translator,
-            generate,
-            descriptions: descriptions.map(item => item.descriptionEN),
-            language,
-            logging,
-            signal,
-            currentIndex: (index, descriptionEN, description) => {
-                const item = descriptions[index];
-                if (description) item.description = description;
-                currentIndex?.(index, descriptionEN, item.description, item.durationMs);
-            },
-            onText: input.onText,
-        });
-        report(translator.id, {
-            requesting: false,
-            phase: LlmPhase.load,
-            percent: 100,
-        });
-    } else {
-        // keep English on fallback
-        for (let index = 0; index < descriptions.length; index++) {
-            const item = descriptions[index];
-            if (!item.descriptionEN) continue;
-            currentIndex?.(
-                index,
-                item.descriptionEN,
-                item.description,
-                item.durationMs,
-            );
-        };
-        const
-            target = translator?.id ?? describer.id,
-            ready = service.ready(target);
-        report(target, {
-            requesting: false,
-            phase: ready ? LlmPhase.load : LlmPhase.download,
-            percent: ready ? 100 : 0,
-            ...(translationError ? { error: translationError } : {}),
-        });
-    };
-    return descriptions;
+    recordEstimate({
+        operation: EstimateOperation.analyze,
+        seconds: ((firstTextAt ?? endedAt) - startedAt) / 1000,
+    });
+    recordEstimate({
+        operation: EstimateOperation.describe,
+        seconds: (endedAt - (firstTextAt ?? startedAt)) / 1000,
+    });
+    return text;
 };
 
-/** Build translations over one runtime */
-const createTranslateOn = (service: Runtime) => async (
-    input: DescribeTranslatedInput,
-): Promise<string[]> => {
+/** Build tag translation over one runtime */
+const createTranslateTagsOn = (service: Runtime) => async (
+    input: TranslateTagsInput,
+): Promise<ImageTag[]> => {
     const
-        descriptions = [...input.descriptions],
+        tags = input.tags.map(tag => ({ ...tag })),
         language = input.targetLanguage.trim(),
+        code = input.targetCode.trim() || `en`,
         logging = input.logging === true;
-    log(logging, `Translate start`, descriptions.length, language);
-    if (!descriptions.length || !needsTranslation(language)) {
-        log(logging, `Translate skipped`);
-        return descriptions;
-    };
+    // English tags stay untouched
+    if (!tags.length || code == `en` || !needsTranslation(language))
+        return tags;
+    input.onEstimate?.(estimateReport([
+        EstimateOperation.translateTags,
+    ]));
     const
         limits = resolveLlmLimits({
-            maxReplyTokens: imageReplyTokens,
+            maxReplyTokens: tagTranslateTokens,
             ...input.limits,
         }),
-        { report, load, generate } = describeTools({
+        ready = await prepareModel({
             service,
             limits,
             logging,
             signal: input.signal,
             onStatus: input.onStatus,
-        }),
-        translator = await gpuAdapter()
-            ? findLlmModel(ChatModelId.gemma4_e2b_limited)
-            : undefined;
-    if (!translator) {
-        log(logging, `Translate no gpu`);
-        return descriptions;
+            model: input.model,
+        });
+    if (`error` in ready || `aborted` in ready) return tags;
+    const
+        { report, generate, model: textModel } = ready,
+        startedAt = Date.now(),
+        prompt = tags
+            .map((tag, line) => `${line + 1}. ${tag.en}`)
+            .join(`\n`);
+    try {
+        const reply = (await generate({
+            model: textModel.id,
+            messages: [{
+                role: LlmRole.system,
+                content: tagTranslateSystem(language),
+            }, {
+                role: LlmRole.user,
+                content: prompt,
+            }],
+            stage: DescriptionEnhancedStage.translateTags,
+            limits: { maxReplyTokens: tagTranslateTokens },
+            onText: input.onText,
+        }) || ``).trim();
+        translateTagWords(reply, tags, code);
+        recordEstimate({
+            operation: EstimateOperation.translateTags,
+            seconds: (Date.now() - startedAt) / 1000,
+        });
+    } catch (error) {
+        // failed tag translation keeps English
+        log(logging, `Enhance tag translate failed`, error);
     };
-    const error = await load(translator);
-    if (error) {
-        log(logging, `Translate stop`, error);
-        return descriptions;
-    };
-    if (input.signal?.aborted) return descriptions;
-    report(translator.id, {
-        requesting: true,
-        phase: LlmPhase.load,
-        percent: 100,
-    });
-    const translated = await translateDescriptions({
-        translator,
-        generate,
-        descriptions,
-        language,
-        logging,
-        signal: input.signal,
-        currentIndex: input.currentIndex,
-        onSpeed: input.onSpeed,
-        onText: input.onText,
-    });
-    report(translator.id, {
+    report(textModel.id, {
         requesting: false,
         phase: LlmPhase.load,
         percent: 100,
     });
-    return translated;
+    return tags;
 };
 
-/** Describe images in English, translate */
-const describeImages = createDescribeOn(runtime);
+/** Build text enhancement over one runtime */
+const createDescriptionEnhancedOn = (service: Runtime) => async (
+    input: DescriptionEnhancedInput,
+): Promise<DescriptionEnhanced> => {
+    const
+        descriptionEN = input.descriptionEN.trim(),
+        language = input.targetLanguage.trim(),
+        code = input.targetCode.trim() || `en`,
+        withTags = input.withTags !== false,
+        withDescription = input.withDescription !== false,
+        logging = input.logging === true,
+        translateTagsOn = createTranslateTagsOn(service),
+        translate = !!descriptionEN
+            && withDescription
+            && code != `en`
+            && needsTranslation(language),
+        tagTranslate = withTags
+            && code != `en`
+            && needsTranslation(language),
+        operations: EstimateOperation[] = [
+            ...(translate ? [EstimateOperation.translate] : []),
+            ...(withTags ? [EstimateOperation.tags] : []),
+            ...(tagTranslate ? [EstimateOperation.translateTags] : []),
+        ],
+        result: DescriptionEnhanced = {
+            description: descriptionEN,
+            translated: false,
+            tags: [],
+            nsfw: undefined,
+        };
+    log(logging, `Enhance start`, descriptionEN.length, language, code);
+    // empty text needs nothing
+    if (!descriptionEN || !operations.length) return result;
+    input.onEstimate?.(estimateReport(operations));
+    const
+        limits = resolveLlmLimits({
+            maxReplyTokens: imageTranslateTokens,
+            ...input.limits,
+        }),
+        ready = await prepareModel({
+            service,
+            limits,
+            logging,
+            signal: input.signal,
+            onStatus: input.onStatus,
+            model: input.model,
+        });
+    if (`error` in ready || `aborted` in ready) return result;
+    const { report, generate, model: textModel } = ready;
+    if (translate) {
+        input.onStage?.(DescriptionEnhancedStage.translate);
+        const startedAt = Date.now();
+        try {
+            const text = await generate({
+                model: textModel.id,
+                messages: [{
+                    role: LlmRole.system,
+                    content: translateSystem,
+                }, {
+                    role: LlmRole.user,
+                    content: `[image] ${translatePreMessage}`,
+                }, {
+                    role: LlmRole.assistant,
+                    content: descriptionEN,
+                }, {
+                    role: LlmRole.user,
+                    content: translatePrompt(language),
+                }],
+                stage: DescriptionEnhancedStage.translate,
+                limits: { maxReplyTokens: imageTranslateTokens },
+                onSpeed: input.onSpeed,
+                onText: value => input.onText?.(
+                    value,
+                    DescriptionEnhancedStage.translate,
+                ),
+            });
+            const description = (text || ``).trim();
+            const refused = description
+                .replace(/[^a-z]/gi, ``)
+                .toUpperCase()
+                .includes(CANNOT_TRANSLATE.replace(/[^a-z]/gi, ``));
+            if (description && !refused) {
+                result.description = description;
+                result.translated = true;
+            };
+            recordEstimate({
+                operation: EstimateOperation.translate,
+                seconds: (Date.now() - startedAt) / 1000,
+            });
+        } catch (error) {
+            // failed translation keeps English
+            log(logging, `Enhance translate failed`, error);
+        };
+    };
+    if (withTags) {
+        input.onStage?.(DescriptionEnhancedStage.tags);
+        const startedAt = Date.now();
+        try {
+            const reply = (await generate({
+                model: textModel.id,
+                messages: [{
+                    role: LlmRole.system,
+                    content: tagSystem(imageTags),
+                }, {
+                    role: LlmRole.user,
+                    content: descriptionEN,
+                }],
+                stage: DescriptionEnhancedStage.tags,
+                limits: { maxReplyTokens: tagReplyTokens },
+                onSpeed: input.onSpeed,
+                onText: value => input.onText?.(
+                    value,
+                    DescriptionEnhancedStage.tags,
+                ),
+            }) || ``).trim();
+            result.tags = tagsOf(reply);
+            result.nsfw = result.tags.some(tag => tag.en == nsfwTag);
+            recordEstimate({
+                operation: EstimateOperation.tags,
+                seconds: (Date.now() - startedAt) / 1000,
+            });
+            log(logging, `Enhance tags`, result.tags);
+        } catch (error) {
+            // failed tags keep flag unknown
+            log(logging, `Enhance tags failed`, error);
+        };
+    };
+    if (tagTranslate && result.tags.length) {
+        input.onStage?.(DescriptionEnhancedStage.translateTags);
+        result.tags = await translateTagsOn({
+            tags: result.tags,
+            targetLanguage: language,
+            targetCode: code,
+            model: textModel.id,
+            signal: input.signal,
+            limits: input.limits,
+            logging,
+            onStatus: input.onStatus,
+            onText: value => input.onText?.(
+                value,
+                DescriptionEnhancedStage.translateTags,
+            ),
+        });
+    };
+    report(textModel.id, {
+        requesting: false,
+        phase: LlmPhase.load,
+        percent: 100,
+    });
+    return result;
+};
 
-/** Translate image descriptions on GPU */
-const describeTranslated = createTranslateOn(runtime);
+/** Describe one image in English */
+const describeImage = createDescribeImageOn(runtime);
+
+/** Enhance one English description */
+const descriptionEnhanced = createDescriptionEnhancedOn(runtime);
+
+/** Translate stored tags */
+const translateTags = createTranslateTagsOn(runtime);
 
 export {
-    createDescribeOn,
-    createTranslateOn,
-    describeImages,
+    createDescribeImageOn,
+    createDescriptionEnhancedOn,
+    createTranslateTagsOn,
+    describeImage,
     describeModelId,
-    describeTranslated,
-    imageNote,
+    descriptionEnhanced,
     imageReplyTokens,
-    imageRules,
-    imageSystem,
+    imageTranslateTokens,
+    translateTags,
 };

@@ -1,13 +1,9 @@
 # @degreesign/chat
 
-One-shot on-device AI chat for browsers, workers and Node, using a wllama CPU
-engine and a LiteRT-LM WebGPU engine. It streams text, describes images,
-manages model downloads with automatic resume, and renders no UI.
-
-Voice notes are transcribed on device by `@degreesign/voice`, a companion
-package, then passed to `@degreesign/chat` as text.
-
-`@degreesign/chat` is a plug and play engine for any UI.
+Headless on-device AI chat for browsers, workers and Node: one model in memory,
+one streamed reply, no UI. A wllama CPU engine and a LiteRT-LM WebGPU engine
+handle text and image turns, downloads resume after a reload, and every export
+is typed.
 
 [![npm version](https://img.shields.io/npm/v/@degreesign/chat.svg)](https://www.npmjs.com/package/@degreesign/chat)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](#licensing)
@@ -18,77 +14,43 @@ package, then passed to `@degreesign/chat` as text.
 
 ## Table of contents
 
-- [Why](#why)
-- [Install](#install)
-- [Quick start](#quick-start)
-- [Case study: DoListy](#case-study-dolisty)
-- [Enable WebGPU](#enable-webgpu)
-- [Public API](#public-api)
-- [Tools](#tools)
-- [Status](#status)
-- [Models](#models)
-- [Prompt assembly](#prompt-assembly)
-- [Engines and assets](#engines-and-assets)
-- [Node.js](#nodejs)
-- [React](#react)
-- [Types](#types)
-- [Testing](#testing)
-- [Architecture](#architecture)
-- [FAQ](#faq)
-- [Licensing](#licensing)
+[Why](#why) · [Install](#install) · [Quick start](#quick-start) ·
+[Public API](#public-api) · [Tools](#tools) · [Status](#status) ·
+[Models](#models) · [Prompt assembly](#prompt-assembly) ·
+[Enable WebGPU](#enable-webgpu) · [Engines and assets](#engines-and-assets) ·
+[Node.js](#nodejs) · [React](#react) · [Types](#types) ·
+[Testing](#testing) · [Architecture](#architecture) · [FAQ](#faq) ·
+[Licensing](#licensing)
 
 ## Why
 
-- Proven: [DoListy](https://dolisty.com/#chat), a no-signup PWA, answers
+- Proven: [DoListy](https://dolisty.com/#chat), a no-signup PWA, describes
+  photos, turns voice notes into tasks with `@degreesign/voice`, and answers
   with the network off.
-- On device: model weights download once, then every reply is generated locally.
-- Headless: the package returns text through callbacks and renders no UI.
-- Stateless: the host passes the whole message list and keeps its own history.
-- Two engines: CPU through wllama and WebGPU through LiteRT-LM, behind one
-  `startLLM` runtime contract.
-- Images: a user turn can carry image URLs, sent only to a vision model and
-  capped by the prompt budgets.
-- Audio: a user turn can carry an audio URL, sent only to a model with audio
-  support. No model in the catalog has an audio encoder.
-- Reusable: the loaded model stays in memory for the next call.
-- Typed: written in TypeScript with declarations for every export.
-- Portable: importing and calling works in browsers, workers, React and Node.
-  Local inference stays browser only.
+- On device: weights download once, then every reply is generated locally,
+  with no API key and no per-reply cost.
+- Headless and stateless: results arrive through callbacks, no UI is rendered
+  and no history is kept; the host passes the whole message list.
+- Two engines behind one runtime: CPU through wllama, WebGPU through LiteRT-LM.
+- Typed and portable: declarations for every export, and importing it works in
+  browsers, workers, React and Node.
 
 ## Install
 
 ```bash
 npm install @degreesign/chat
-```
-
-```bash
 yarn add @degreesign/chat
-```
-
-```bash
 pnpm add @degreesign/chat
 ```
 
-`@wllama/wllama`, `@wllama/wllama-compat` and `@litert-lm/core` are build-time
-dependencies. The engines are bundled into the published build as dynamic
-chunks and their wasm assets ship beside them, so a consumer installs nothing
-extra and resolves no engine import. Only the model weights are downloaded at
-runtime.
+The engines and helpers are bundled into dynamic chunks, so a host resolves no
+engine import and downloads only the chunk a model uses. Only the model weights
+come from outside the package. The build emits `dist/browser/chat.min.mjs` with
+its engine chunks, the CommonJS and ESM Node entries in `dist/node/`, the wasm
+assets in `dist/assets/wllama/` and `dist/assets/litert/`, and `dist/index.d.ts`.
 
-The build emits:
-
-- `dist/browser/chat.min.mjs`, the ESM browser entry.
-- `dist/browser/engine-wllama.min.mjs` and
-  `dist/browser/engine-litert.min.mjs`, the bundled engines, fetched only when
-  a matching model starts.
-- `dist/node/chat.node.min.js` and `chat.node.min.mjs`, the CommonJS and ESM
-  Node entries, with the same engine chunks beside them.
-- `dist/assets/wllama/`, the wllama wasm binaries and compat worker.
-- `dist/assets/litert/`, the LiteRT-LM wasm glue and binary.
-- `dist/index.d.ts`, declarations for every export.
-
-Build from source with `yarn build`; typecheck with `yarn typecheck`; test the
-built Node entry with `yarn verify:node`.
+Build with `yarn build`, typecheck with `yarn typecheck` and test the Node entry
+with `yarn verify:node`.
 
 ## Quick start
 
@@ -110,10 +72,7 @@ await preloadModel();
 const cancel = createChat({
   messages,
   onResponse: (text) => renderReply(text),
-  // onThinking: (text) => renderThinking(text),
-  // onSpeed: (tokensPerSecond) => renderSpeed(tokensPerSecond),
-  // onPromptSpeed: (tokensPerSecond) => renderPromptSpeed(tokensPerSecond),
-  // onStatus: (snapshot) => renderStatus(snapshot),
+  // onThinking, onSpeed, onPromptSpeed and onStatus are optional.
 });
 
 // Later, stop the reply, cancel the load, or free the model.
@@ -123,194 +82,32 @@ await clearModelCache();
 ```
 
 Without `model` the package picks the GPU model when the browser provides a
-WebGPU adapter and the CPU model when it does not. `limits`, `reasoning`,
-`onThinking`, `onSpeed`, `onPromptSpeed` and `onStatus` are optional per call;
-see the API below.
+WebGPU adapter and the CPU model when it does not.
 
-There is no promise and no controller object on `createChat`. Every result
-arrives through `onResponse`, and `onStatus` reports `requesting: false` when
-the reply ends. `onSpeed` reports the streamed generation speed in tokens per
-second, measured from the first token so prompt processing is excluded.
-`onPromptSpeed` streams the prompt processing speed while the prompt is
-evaluated, then reports the final value at the first generated token. It uses
-the engine prefill progress or stream timings, and falls back to a running
-estimate when the engine exposes neither.
-`preloadModel` is the one promise: it resolves once the model is loaded, or
-`false` when it cannot load.
-
-Attach images to a user turn with `images: [dataUrl]`. The package sends them
-only to a model with vision support, fits each image to 128 to 136 vision
-tokens, snaps both sides to multiples of 32 px, crops the remainder, and caps
-the number with `limits.maxImages`. `qwen3_vl_2b` is the vision model in the
-catalog, and it runs on the CPU engine. A turn sent to a model without vision
-drops its images when the turn also has text, and an image-only turn reports
-`Model does not accept images`.
-
-Attach a recording with `audio: [dataUrl]`. No model in the catalog has an
-audio encoder, so a text turn drops the clip and an audio-only turn reports
-`Model does not accept audio`. `limits.maxAudio` still caps the clips
-(default 1).
-
-The package never writes storage, so the host appends the user message before
-the call and appends the assistant message after the last `onResponse`.
-
-## Case study: DoListy
-
-[DoListy](https://dolisty.com/#chat) is a DegreeSign project: a private
-to-do list PWA with no sign-up. It ships `@degreesign/chat` for replies
-and image descriptions, and `@degreesign/voice` for voice notes.
-
-I wanted an assistant that could read my daily tasks, but I did not want
-to give 100% of my data to big tech. I was also working on a new project
-that had to stay under wraps until its soft launch, so I could not send
-that work to a hosted model. The assistant had to run on the device, and
-it had to be easy for any developer to drop into an app. Most days I have
-that conversation on my phone: a voice note, a transcript, a few tasks,
-all local. DoListy is where that engine got its first real use.
-
-![DoListy assistant answering a question on a phone][dolisty-shot]
-
-[dolisty-shot]: https://degreesign.github.io/ds_chat/case-study-dolisty.png
-
-*A real session on dolisty.com. The green dot is the local model, not a
-server.*
-
-### What it does
-
-- Describes a photo and tags it without uploading it.
-- Turns a voice note into a task through `@degreesign/voice`.
-- Writes titles, tags and a running summary in 19 languages. The persona
-  is the app's; the package adds no identity text.
-- Answers with the network off, from the model already on disk.
-
-### What it costs
-
-- No per-reply cost, no API key, no rate limit. The only bill is the
-  one-time download: about 1.5 GB for Qwen3-VL, 2.0 GB for Gemma 4.
-- An image waits about 70 seconds for its first token on an 8-thread
-  desktop CPU. That is the cost of the CPU vision path, chosen so images
-  work on phones without WebGPU; text takes the GPU path when the browser
-  has one.
-- A 2 GB download resumes from the last committed part. A reload costs at
-  most one part, never the whole file.
-- The gallery describes images in the background while you work.
-
-### How it is wired
-
-- One `createChat` per send, over a prompt assembled from the app's
-  encrypted stores.
-- The reply is committed when `onStatus` reports the end; a newer send
-  drops the stale one.
-- `gpuAdapter()` picks Gemma on WebGPU and Qwen everywhere else.
-- One model stays resident, so a switch reloads the engine but never the
-  file.
-
-**See it work:** open [dolisty.com](https://dolisty.com/#chat) on a phone,
-let the model download once, then turn off the network and ask for a
-summary. Speed numbers are in the
-[web-llm comparison](https://degreesign.github.io/ds_chat/vs_web_llm.html).
-
-## Enable WebGPU
-
-A request without `model` picks `gemma4_e2b_limited` when the browser exposes a
-WebGPU adapter and `qwen3_vl_2b` when it does not. The Gemma build is the 2.0 GB
-text-only `gemma-4-E2B-it-gpu.litertlm`, and it is the only WebGPU model in the
-catalog, so it loads on a desktop and on a phone alike. Every status snapshot
-reports the build that runs in `model`. Hosts that need images pass
-`qwen3_vl_2b`. The GPU engine is far faster on a desktop, so check the browser
-before blaming the package:
-
-```js
-// Run in the console of the page that loads the package
-const adapter = await navigator.gpu?.requestAdapter();
-adapter
-    ? `${adapter.info.vendor} ${adapter.info.architecture}`
-    : `no adapter`;
-```
-
-`null` means the browser has the API but no usable adapter, and the package
-falls back to the CPU model. Chromium browsers report the whole state at
-`chrome://gpu`: `WebGPU` should read `Hardware accelerated` and `Vulkan` should
-read `Enabled`. Firefox lists the detected features at `about:support` under
-`Graphics`.
-
-### Firefox
-
-WebGPU ships enabled on Windows and macOS. On Linux, and on any build that
-reports `navigator.gpu` as undefined:
-
-1. Open `about:config`.
-2. Set `dom.webgpu.enabled` to `true`.
-3. Restart the browser and run the snippet again.
-
-Firefox runs WebGPU on its own wgpu stack, so an adapter can appear even with a
-software driver. Check the renderer in `about:support` when replies feel slow.
-
-### Chrome, Edge and Brave
-
-WebGPU ships enabled on Windows, macOS and ChromeOS since version 113, so there
-is nothing to configure.
-
-On Linux the GPU process only exposes an adapter when ANGLE runs on Vulkan,
-which is not the default. Start the browser with both flags:
-
-```bash
-google-chrome --enable-features=Vulkan --use-angle=vulkan
-microsoft-edge --enable-features=Vulkan --use-angle=vulkan
-brave-browser --enable-features=Vulkan --use-angle=vulkan
-```
-
-Either flag alone leaves `requestAdapter()` returning `null`. To keep them, add
-them to the `Exec` line of the browser entry under
-`~/.local/share/applications`, or to the target of a desktop shortcut.
-
-`--enable-unsafe-webgpu` is a different switch: it only unlocks software
-adapters, so an adapter whose `info.vendor` reads `google` is SwiftShader on the
-CPU, not the GPU. Remove it when measuring speed. Headless Chromium hides
-`navigator.gpu` unless it starts with `--enable-unsafe-webgpu`,
-`--enable-features=Vulkan,WebGPU` and `--use-angle=vulkan`; check the adapter
-there too, because a missing adapter silently selects the CPU model.
-
-### GPU memory
-
-The WebGPU engine keeps the model and its KV cache in GPU memory. The Gemma
-build carries no vision or audio encoder, so it never starts one and never
-resizes an image. A card that is already busy can lose the device
-(`VK_ERROR_DEVICE_LOST`) during a long generation. If the error appears, close
-other GPU tabs, unload the model, or switch to the CPU model. A lost device
-needs a page or model reload; later calls cannot reuse it.
-
-While a reply streams, the GPU engine rests after every token readback, so the
-card stays near 50% of wall time instead of pegging at 100% and starving the
-desktop compositor. `limits.gpuShare` overrides that share for one reply, from
-0.05 to 1; `1` disables the rest and the default is 0.5. Each rest is capped
-at 500 ms, so a very slow token still makes progress. The rest applies after
-the prefill, so the first token is not delayed, but the prefill itself still
-runs unpaced. A freeze during loading or before the first token falls outside
-that rest; use a CPU model on those devices. Unloading releases the WebGPU
-device and resets the LiteRT wasm, because a deleted engine leaves both
-unusable; a later load rebuilds them from the stored model file without
-downloading it again.
+`createChat` returns no promise and no controller. Every result arrives through
+`onResponse`, and `onStatus` reports `requesting: false` when the reply ends.
+`onSpeed` measures from the first token, so it excludes prompt processing. The
+host appends the user and assistant messages itself; the package never writes
+storage. A user turn may carry `images` or `audio`; see
+[Prompt assembly](#prompt-assembly).
 
 ## Public API
 
 ```ts
 createChat(input: ChatInput): CancelChat
 preloadModel(input?: ChatPreloadInput): Promise<boolean>
-describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
-describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
+describeImage(input: DescribeImageInput): Promise<string>
+descriptionEnhanced(input: DescriptionEnhancedInput): Promise<DescriptionEnhanced>
+translateTags(input: TranslateTagsInput): Promise<ImageTag[]>
 describeModelId: ChatModelId
 imageReplyTokens: number
 gpuAdapter(): Promise<boolean>
 clearModelCache(): Promise<void>
 ```
 
-Call it once per response. A new call aborts the previous stream. When the
-requested model is already loaded, no download or load happens. One model stays
-resident on every device, so a new model replaces the old one, including a move
-between the CPU describer and the GPU translator. Files stay on disk, and
-`clearModelCache` releases the loaded model and deletes every cached model file
-from this device.
+Call it once per response. A new call aborts the previous stream, and a model
+already loaded skips the download and the load. One model stays resident, and
+`clearModelCache` releases it and deletes every cached file.
 
 `ChatInput`:
 
@@ -327,137 +124,143 @@ from this device.
 | `onPromptSpeed?` | Receives live prompt processing speed in tokens per second. |
 | `onStatus?` | Receives a `ChatStatusSnapshot` on every state change. |
 
-Without `model` the package picks the GPU build when the browser provides a
-WebGPU adapter and the CPU build when it does not. `gpuAdapter` runs the same
-probe, so a host can check the device before it names a model. The budget
-defaults are 250 reply tokens, 128 CPU thinking tokens, 1200 GPU reasoning
-tokens (320 on the CPU), 2 images, 1 audio clip, 1000 characters per message,
-10000 prompt characters, 32 CPU threads and a 0.5 GPU busy share. The CPU
-engine ignores `gpuShare`; the GPU engine applies it after prefill.
+The budget defaults are 250 reply tokens, 128 CPU thinking tokens, 1200 GPU
+reasoning tokens (320 on the CPU), 2 images, 1 audio clip, 1000 characters per
+message, 10000 prompt characters, 32 CPU threads and a 0.5 GPU busy share. The
+CPU engine ignores `gpuShare`; the GPU engine applies it after prefill.
 
-`CancelChat` is `() => void`. Its meaning depends on the current state:
+`CancelChat` is `() => void`:
 
 | State | Effect |
 | ----- | ------ |
-| Downloading or loading | Stops waiting for the load. Bytes stay on disk, and a download another caller waits for keeps going. |
+| Downloading or loading | Stops waiting; a shared download keeps going and its bytes stay. |
 | Ready | Aborts the reply and unloads the model that answered. |
 | An older call | Nothing, because a newer call owns the runtime. |
 
-The model stays loaded between calls until a cancel frees it, and a newer model
-replaces it. One model download serves every caller: a chat that joins a preload
-shares its progress and never starts a second download.
-
 ### Preload
 
-```ts
-preloadModel(input?: ChatPreloadInput): Promise<boolean>
-```
+Call `preloadModel` before the first `createChat` to load early. It resolves
+`true` when the runtime is ready and `false` when the model is unknown,
+unsupported or failed. A preload owns no cancel function, so a cancelled chat
+leaves its download running.
 
-Call it before the first `createChat` to download and load the model early. It
-resolves `true` when the runtime is ready and `false` when the model is unknown,
-unsupported or failed. A later `createChat` for the same model reuses the loaded
-runtime, and either call joins a load already in flight. A preload owns no cancel
-function, so a chat that joins its download and is cancelled leaves the download
-running.
+`ChatPreloadInput` takes `model?`, `limits?`, `logging?` and `onStatus?`. The
+final snapshot reports `ready: true`, `phase: LlmPhase.load` and `percent: 100`
+on success, or an `error` with `availability: ChatStatus.offline` on failure.
 
-A preload of another model replaces the resident one, because one model stays
-in memory at a time. A load of the same model still joins the one in flight.
-
-`ChatPreloadInput` is the subset of `ChatInput` that a preload needs:
-
-| Field | Description |
-| ----- | ----------- |
-| `model?` | `ChatModelId` to download and load. Defaults like `ChatInput.model`. |
-| `limits?` | Partial `LlmLimits`; `maxThreads` applies at load, `gpuShare` per reply. |
-| `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
-| `onStatus?` | Receives a `ChatStatusSnapshot` on every progress and state change. |
-
-The final snapshot reports `ready: true`, `phase: LlmPhase.load` and
-`percent: 100` on success, or an `error` with `availability: ChatStatus.offline`
-on failure. A preload owns no cancel function; a new load replaces it.
-
-### Describe images
+### Describe one image
 
 ```ts
-describeImages(input: DescribeImagesInput): Promise<ImageDescription[]>
+describeImage(input: DescribeImageInput): Promise<string>
 ```
 
-Describe every image in English with `qwen3_vl_2b_instruct`, the Q4_K_M
-build of Unsloth Qwen3-VL 2B Instruct, one image at a time. When a WebGPU
-adapter exists and `targetLanguage` is not English, the English descriptions
-are then translated one by one with `gemma4_e2b_limited`. Without a GPU, when
-the translation model cannot load, or when the translator replies
-`CANNOT_TRANSLATE`, `description` stays equal to `descriptionEN`. Both the
-description and translation calls use the `imageReplyTokens` budget of 128
-tokens unless `limits.maxReplyTokens` overrides it. The describer requests
-192 vision tokens for its image resize; the CPU engine keeps its instruct
-window at 16 to 128 tokens, and other models leave the engine image limits
-unset.
+Describe one image in English with `qwen3_vl_2b_instruct`, the Q4_K_M build of
+Unsloth Qwen3-VL 2B Instruct. The describer replaces euphemisms with specific
+terms, names visible organs and limbs for living things, and prioritizes
+unusual details. It must never lie, use vague referrals, prefer a
+general term over a precise one, or repeat the request.
+`systemRulesOverride` replaces the default system message. The call uses the
+`imageReplyTokens` budget of 128 tokens unless `limits.maxReplyTokens`
+overrides it, requests 192 vision tokens for its resize, and samples at
+temperature 0.1.
 
-The describer receives a system message that asks for every element of the
-image and adds rules against lying, verdicts and vague referrals.
-`DescribeImagesInput.additionalRules` appends host rules to that message. The
-translator translates its own previous reply, never the user's instruction,
-preserving meaning, names and numbers without adding or omitting anything.
-
-`DescribeImagesInput`:
+`DescribeImageInput` extends `CallOptions`:
 
 | Field | Description |
 | ----- | ----------- |
-| `targetLanguage` | Language of `description`; `en`, `English` or a tag such as `en-US` skips translation. |
-| `images` | Image data URLs or URLs, described in this order. |
-| `currentIndex?` | Receives `index`, then `index` and `descriptionEN`, then `index`, `descriptionEN`, `description` and the description time in milliseconds. |
-| `limits?` | Partial `LlmLimits` for both the description and translation calls. |
-| `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
-| `onStatus?` | Receives a `ChatStatusSnapshot` while the describer and translator load and run. |
+| `image` | One image data URL or URL. |
+| `systemRulesOverride?` | Replaces the default describer system message. |
+| `onSpeed?` | Receives the generation speed, tokens per second. |
+| `onText?` | Receives the accumulated streamed text. |
 
-The promise resolves one `ImageDescription` per image, in input order:
-
-| Field | Description |
-| ----- | ----------- |
-| `descriptionEN` | The English description from the vision model. |
-| `description` | The translated description, or `descriptionEN` without a GPU. |
-| `durationMs` | Time the describer took for this image, in milliseconds. |
-
-`currentIndex` fires once per image at the start of its description, once when
-the English text is ready, and once when the final description is ready. The
-first call carries the index alone, the second adds `descriptionEN` and
-`durationMs`, and the third adds `description` while keeping `durationMs`. The
-function uses the shared runtime, so it loads the describer and then the
-translator, replacing whichever model was loaded before.
-
-`onStatus` follows the same snapshots as `createChat`. The describer reports
-first, with `supportsImages: true`. A finished load reports `percent: 100` and
+The promise resolves the trimmed English description, or an empty string when
+the model returns no text. A finished load reports `percent: 100` and
 `phase: LlmPhase.load` before the first text, so a host can clear its progress
-row. When a translation pass follows, the snapshots switch to
-`gemma4_e2b_limited` while it loads and translates. The final snapshot has
-`requesting: false`; when the translator cannot load, it also carries that error
-and the descriptions stay English. An empty `images` list touches no model and
-reports nothing.
+row.
 
-### Translate descriptions
+### Enhance a description
 
 ```ts
-describeTranslated(input: DescribeTranslatedInput): Promise<string[]>
+descriptionEnhanced(
+    input: DescriptionEnhancedInput,
+): Promise<DescriptionEnhanced>
 ```
 
-Translate English image descriptions that the host already has, without another
-vision pass. `describeImages` uses the same translation pass. When a WebGPU
-adapter exists, each description is translated one by one with
-`gemma4_e2b_limited`. Without a GPU, when the translator cannot load, or when it
-replies `CANNOT_TRANSLATE`, the result keeps the English text. The promise
-resolves one string per input description, in input order.
+Take one English description, translate it when the target is not English, then
+build its gallery tags from the same text. Without a `model` override, the text
+model is `gemma4_e2b_limited` when a WebGPU adapter exists and `qwen3_vl_2b`
+otherwise. The tag pass asks for three English words, then fills the target
+language key of each tag. A failed translation, or the reply
+`CANNOT_TRANSLATE`, keeps the English description. A failed tag call leaves the
+tags empty; a missing tag translation keeps the English tag.
 
-`DescribeTranslatedInput`:
+`DescriptionEnhancedInput` extends `CallOptions`:
 
 | Field | Description |
 | ----- | ----------- |
-| `descriptions` | English descriptions, translated in this order. |
-| `targetLanguage` | Language of each result; `en`, `English` or a tag such as `en-US` skips translation. |
-| `currentIndex?` | Receives `index`, `descriptionEN` and `description` as each entry finishes. |
-| `limits?` | Partial `LlmLimits` for the translation call. |
+| `descriptionEN` | The English description to translate and tag. |
+| `targetLanguage` | Language name used in the prompts, such as `German`. |
+| `targetCode` | Two-letter code used as the tag translation key, such as `de`. |
+| `withTags?` | Whether tags are generated. Defaults to `true`. |
+| `withDescription?` | Whether the description is translated. Defaults to `true`. |
+| `model?` | Text model override; the package picks the GPU build when available. |
+| `onStage?` | Receives `translate`, `tags` or `translateTags` as each pass starts. |
+| `onSpeed?` | Receives the generation speed, tokens per second. |
+| `onText?` | Receives the accumulated streamed text and its stage. |
+
+`DescriptionEnhanced` holds `description` (the translation or English
+fallback), `translated` (whether the target language is in use), `tags` (up to
+three, with `en` and the target code, including `nsfw` when flagged) and
+`nsfw?` boolean.
+
+### Translate stored tags
+
+```ts
+translateTags(input: TranslateTagsInput): Promise<ImageTag[]>
+```
+
+Translate tags a gallery already holds, without describing or tagging again.
+Each tag keeps its `en` word and gains the `targetCode` key; a refusal or a
+failed call returns the English tags unchanged. The text model follows the same
+rule as `descriptionEnhanced`, and it is reused when it already sits in memory.
+
+`TranslateTagsInput` extends `CallOptions`:
+
+| Field | Description |
+| ----- | ----------- |
+| `tags` | The `ImageTag` list to translate. |
+| `targetLanguage` | Language name used in the prompt, such as `German`. |
+| `targetCode` | Two-letter code written as the tag translation key. |
+| `model?` | Text model override; the package picks the GPU build when available. |
+| `onText?` | Receives the accumulated streamed text. |
+
+### Call options
+
+Every description and tag call takes the same `CallOptions`:
+
+| Field | Description |
+| ----- | ----------- |
+| `signal?` | Stops the call and leaves finished work in place. |
+| `limits?` | Partial `LlmLimits` for every model call of the request. |
 | `logging?` | Whether package and engine console logs are written. Defaults to `false`. |
-| `onStatus?` | Receives a `ChatStatusSnapshot` while the translator loads and runs. |
+| `onStatus?` | Receives a `ChatStatusSnapshot` while the model loads and runs. |
+| `onEstimate?` | Receives an `EstimateReport` before the model loads. |
+
+### Estimates
+
+The three functions report stage durations through `onEstimate`, with `totalEst` and
+a `breakdown` of `operation` and `est` seconds. `describeImage` reports
+`analyze` and `describe`; `descriptionEnhanced` reports `translate`, `tags` and
+`translateTags`; `translateTags` reports `translateTags` alone, leaving out a
+stage that will not run. Measured stages are kept under the `localStorage` key
+`degreesign-chat-estimates-v1`, with a built-in fallback until then.
+
+### Deprecated batch helpers
+
+`describeImages` and `describeTranslated` remain as wrappers over the two
+single-item functions. They are deprecated, will be removed after November 2027,
+and skip translation when no WebGPU adapter exists. Use `describeImage` and
+`descriptionEnhanced` for new code.
 
 ## Tools
 
@@ -481,13 +284,10 @@ const answer = await calculation.execute({ expression: `6*7` });
 | `WebSearchProvider` | `wikipedia` or `duckduckgo`. |
 
 Each tool has `name`, `description`, `parameters` (`ChatToolSchema`) and
-`execute(args)`, which returns a JSON-safe `ChatToolValue` or throws. `ChatTool`
-is that whole shape, and `ChatToolCall` / `ChatToolResult` describe a call and
-its outcome for a host that records them.
-
-`webSearchTool` takes `WebSearchConfig`: `provider`, a Wikipedia `language`
-edition, `limit` results, `snippetLength` and a `timeout` in milliseconds. The
-search and currency tools fetch over the network; `calculate` does not.
+`execute(args)`, which returns a JSON-safe `ChatToolValue` or throws.
+`webSearchTool` takes `provider`, a Wikipedia `language`, `limit`,
+`snippetLength` and `timeout`. Search and currency fetch over the network;
+`calculate` does not.
 
 ## Status
 
@@ -509,26 +309,14 @@ search and currency tools fetch over the network; `calculate` does not.
 | `error?` | The last failure, cleared when a reply starts. |
 
 The first snapshot fires synchronously inside `createChat`. A final snapshot
-with `requesting: false` marks the end of the call. A cancelled call also ends
-with that snapshot, once the model unloads or its wait on the load ends, so a
-host can clear its loading row. `describeImages` reports the same snapshot for
-each model it loads: `qwen3_vl_2b_instruct` while it describes, then
-`gemma4_e2b_limited` while it translates.
+with `requesting: false` marks the end, including a cancelled call.
+`describeImage` and `descriptionEnhanced` report the same snapshots.
 
-A stream that never produces its first chunk ends with an error after 5
-minutes on a desktop or 50 minutes on a phone or tablet, and an image turn
-waits at least 14 minutes for a slow CPU vision prefill. Once a chunk has
-arrived, 30 seconds of silence ends the stream and keeps the text already
-delivered.
-
-## Logging
-
-Console output stays off by default. Pass `logging: true` in a call to receive
-the package's censored engine logs, the wllama engine's own logs and the
-LiteRT-LM wasm diagnostics for that call. `describeImages` also logs every stage
-from the model load to the generated English description, including the image
-URL or data URL size and the raw reply. The flag is per call, so a later call
-without it goes quiet again.
+A stream that never produces its first chunk ends after 5 minutes on a desktop
+or 50 minutes on a phone, and an image turn waits at least 14 minutes for a
+slow CPU prefill. Once a chunk arrives, 30 seconds of silence ends the stream
+and keeps the text already delivered. Console output stays off unless a call
+passes `logging: true`.
 
 ## Models
 
@@ -539,47 +327,18 @@ without it goes quiet again.
 | `qwen3_vl_2b_instruct_q3` | Qwen3-VL 2B Instruct Q3 | No | Yes | No | Yes | No |
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 
-`gemma4_e2b_limited` loads `gemma-4-E2B-it-gpu.litertlm` on every device. The
-build that runs is always the one in `ChatStatusSnapshot.model`. It has no
-vision or audio encoder, so `supportsImages` and `supportsAudio` report `false`
-there. Use `qwen3_vl_2b` for images.
+`qwen3_vl_2b` is the general and vision model: a 445 MB projector with the
+model, about 1.5 GB in total, and a 4096 token context on a phone or 8192 on a
+desktop. Its projector shares the text thread budget, so image turns wait.
 
-The first call downloads the model before its engine loads it. Later calls
-reuse the loaded runtime. One model stays resident, and a new model replaces it.
-An interrupted download keeps every part it committed and resumes from the last
-one on the next attempt, including after a reload.
+`qwen3_vl_2b_instruct` is the Unsloth Q4_K_M build that `describeImage` loads,
+with the same Q8_0 projector and no reasoning pass; the Q3_K_M variant is about
+160 MB smaller.
 
-When the storage is full, the CPU engine reads the parts already on disk and
-streams only the missing tail over HTTP, so a nearly complete download still
-loads without writing a second copy. The WebGPU engine streams the whole file
-in that case.
-
-Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
-total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
-context on a phone and 8192 on a desktop. Its projector uses the same CPU thread
-budget as the text pass, so image turns wait behind the CPU queue.
-
-`qwen3_vl_2b_instruct` is the Unsloth Qwen3-VL 2B Instruct build that
-`describeImages` loads for the English pass, its Q4_K_M file. Both instruct
-builds use Qwen's Q8_0 projector, about 445 MB, so the describer totals about
-1.5 GB on the CPU engine. It has no reasoning pass, so it answers an image
-prompt directly. `qwen3_vl_2b_instruct_q3` is the same model in Q3_K_M, about
-160 MB smaller, for a host that prefers the smaller file and names it
-explicitly.
-
-Gemma 4 E2B downloads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm`, the
-precompiled GPU_ARTISAN build Google ships for browsers. It runs on the WebGPU
-engine, carries no vision or audio encoder, and needs no projector download.
-
-The WebGPU engine asks for a 32768 token context on a desktop and 16384 on a
-phone, both multiples of 1024. Its int8 KV cache holds the full desktop window
-in about 300 MB, so the larger window stays a small part of the 2 GB model
-footprint.
-
-The WebGPU engine keeps one LiteRT conversation for consecutive turns. When the
-next prompt continues that history, only the new user turn is sent. A changed
-history opens a fresh conversation, and older images and audio become `[image]`
-and `[audio]` notes in its preface.
+`gemma4_e2b_limited` loads the 2.0 GB `gemma-4-E2B-it-gpu.litertlm` with a
+32768 token context on a desktop and 16384 on a phone, without vision or audio
+encoders. A first call downloads it and later calls reuse it; an interrupted
+download resumes from the last committed part.
 
 ## Prompt assembly
 
@@ -593,135 +352,94 @@ assistant: {next turn}
 user:      {next turn}
 ```
 
-- Leading assistant turns are dropped, because the transcript must start with a
-  user turn.
-- Consecutive same-role turns are merged.
-- Messages with no text, images or audio are skipped.
+- Leading assistant turns are dropped, consecutive same-role turns are merged,
+  and empty messages are skipped.
 - `maxContentLength` clips each message and `promptCharBudget` bounds the whole
-  prompt.
+  prompt; image and audio payloads do not count against it.
 - System messages are folded into one leading system turn.
-- User turns may carry `images` or `audio`. They are sent only to a model with
-  vision or audio support.
-- Images are collected from the newest turns first and capped by `maxImages`
-  (default 2). Older image parts are dropped and their text stays.
-- Every image part keeps its full frame and targets 128 vision tokens, with at
-  most 136. Both sides are snapped to multiples of 32 px and the remainder is
-  cropped.
-- Audio is collected from the newest turns first and capped by `maxAudio`
-  (default 1). Older audio parts are dropped and their text stays.
-- Image and audio payloads do not count against `promptCharBudget`.
-- An image-only turn with a text model reports `Model does not accept images`,
-  and an audio-only turn reports `Model does not accept audio`.
+- Images and audio come from the newest turns first, capped by `maxImages`
+  (default 2) and `maxAudio` (default 1). Older parts are dropped, text stays.
+- Each image keeps its full frame and targets 128 vision tokens, at most 136,
+  snapped to multiples of 32 px with the remainder cropped.
+- An image-only turn with a text model reports `Model does not accept images`;
+  an audio-only turn reports `Model does not accept audio`.
+
+## Enable WebGPU
+
+A request without `model` picks `gemma4_e2b_limited` when the browser exposes a
+WebGPU adapter and `qwen3_vl_2b` when it does not. `gpuAdapter()` runs the same
+probe, and every snapshot reports the running build in `model`. Check before
+blaming the package:
+
+```js
+const adapter = await navigator.gpu?.requestAdapter();
+adapter
+    ? `${adapter.info.vendor} ${adapter.info.architecture}`
+    : `no adapter`;
+```
+
+`null` means the API exists but no adapter does. Chromium reports the state at
+`chrome://gpu`: `WebGPU` should read `Hardware accelerated`. Firefox lists
+features at `about:support`, and on Linux needs `dom.webgpu.enabled` set to
+`true` in `about:config`.
+
+Chrome, Edge and Brave ship WebGPU on Windows, macOS and ChromeOS. On Linux,
+start the browser with both flags, since either one alone returns `null`:
+
+```bash
+google-chrome --enable-features=Vulkan --use-angle=vulkan
+```
+
+`--enable-unsafe-webgpu` only unlocks software adapters: a vendor that reads
+`google` is SwiftShader on the CPU. Headless Chromium needs it plus
+`--enable-features=Vulkan,WebGPU` and `--use-angle=vulkan`.
+
+The GPU engine keeps the model and KV cache in GPU memory and rests after every
+token readback, so the card stays near 50% of wall time. `limits.gpuShare`
+overrides that for one reply, from 0.05 to 1; `1` disables the rest, and prefill
+runs unpaced. A busy card can lose the device (`VK_ERROR_DEVICE_LOST`); close
+other GPU tabs or use the CPU model.
 
 ## Engines and assets
 
-The engine is chosen per model:
+The engine is chosen per model: WebGPU through LiteRT-LM when the model has a
+`litert` artifact and the browser exposes `navigator.gpu` and `WebAssembly`;
+CPU through wllama when the model has a `cpu` artifact; `LlmStatus.unsupported`
+otherwise, including Node. Both implement `startLLM` and return `model`,
+`backend`, `contextSize`, `chat()` and `unload()`.
 
-1. WebGPU through LiteRT-LM when the model has a `litert` artifact and the
-   browser exposes `navigator.gpu` and `WebAssembly`.
-2. CPU through wllama when the model has a `cpu` artifact and the process
-   exposes `WebAssembly`.
-3. `LlmStatus.unsupported` otherwise, including Node.
+The CPU engine keeps a fifth of the logical cores free (at least one) and gives
+the rest to the engine, so 8 threads run with 7. `limits.maxThreads` only
+lowers the count. The vision path runs two ggml pools, sized by
+`scripts/patch-wllama.cjs` on every build.
 
-Both engines implement the internal `startLLM({ model, limits, signal,
-onProgress })` contract and return the runtime object with `model`, `backend`,
-`contextSize`, `chat()` and `unload()`. `createChat` starts the engine that
-matches the requested model.
-
-The CPU engine reads `navigator.hardwareConcurrency`, keeps a fifth of the
-logical cores free for the page (at least one) and gives the rest to the
-engine: 8 threads run with 7, 16 with 13, 4 with 3. `limits.maxThreads` only
-lowers the count, and phones follow the same rule; only the context window is
-smaller there. On an 8-thread desktop a 128-token image reaches its first token
-in 71.3 seconds with 7 threads, 82.3 seconds with 6 and 106.6 seconds with 4. A
-JavaScript probe was measured and rejected: it follows JS worker scaling, not
-the ggml pool, and its curve was too noisy to trust.
-
-The vision path runs two ggml pools, one for the projector and one for the
-model, so it needs twice the workers of a text model. wllama 3.8.1 pre-spawns
-only `n_threads` workers, which leaves the second pool without workers and
-stalls the encode at 3 or more threads. `scripts/patch-wllama.cjs` sizes the
-pool at twice the thread count on every build until the fix is released
-upstream; with it the image path runs at the heuristic count (7 threads on this
-8-thread desktop) instead of 2. Every CPU model uses one count for the whole
-load.
-
-The build bundles wllama from the installed package, so `yarn build` runs
-`scripts/patch-wllama.cjs` first. The script is idempotent and fails loudly when
-the installed wllama no longer matches the patch. `patches/wllama-pool.patch`
-holds the same change as an upstream diff for wllama.
-
-The CPU engine needs cross-origin isolation for its threads. Serve the page with
-both headers:
+The CPU engine needs cross-origin isolation for its threads:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-Then assert `crossOriginIsolated === true` in the page. Without isolation the
-engine falls back to one thread and image encoding becomes much slower, since
-the projector runs on the CPU.
+Assert `crossOriginIsolated === true` in the page; without isolation the engine
+falls back to one thread. Under `require-corp` every cross-origin subresource
+must be CORS enabled or carry `Cross-Origin-Resource-Policy`.
 
-Under `require-corp` every cross-origin subresource must be CORS enabled or
-carry `Cross-Origin-Resource-Policy`. Hugging Face downloads already qualify;
-third party images, fonts and embeds need `crossorigin="anonymous"` or must be
-self hosted. Chromium also accepts
-`Cross-Origin-Embedder-Policy: credentialless` when those assets cannot be
-changed. A page inside an iframe is isolated only when every ancestor sets the
-same headers.
+Both engines keep resumable parts in the origin private file system, under
+`wllama-store` and `litert-store`. Downloads fetch 32 MB ranges and resume from
+the last committed byte.
 
-Each engine keeps its own cache. One model stays loaded, so a switch between
-the CPU and GPU models skips the download but still loads the new engine. The
-previous model's files always stay, so a switch back skips the download.
-`clearModelCache()` deletes them all and frees the storage. Both engines store
-model files in the origin private file system as numbered parts, under
-`wllama-store` for the CPU engine and `litert-store` for the GPU engine. The GPU
-engine also reads a Cache Storage entry under `litertlm-models` when an older
-version stored the file. A quota failure keeps the parts already stored, so
-freeing disk lets the next attempt resume, and the running load streams the
-model from the network so the assistant still starts.
-
-Both engines store the files before they load them, and one download serves
-every caller. A failed load, a cancelled call or a repeated `createChat` reads
-the stored parts instead of downloading them again. A download fetches bounded
-ranges of 32 MB, commits each part as it arrives and retries a stalled or cut
-connection from the last committed byte, so a reload loses at most one part.
-Each attempt checks the file size and entity tag, and a changed model starts
-over. A host that ignores the range replays the stored prefix and keeps the
-parts already stored. Hosts without a writable file system still stream from
-the network; the CPU engine falls back to the wllama cache manager and the GPU
-engine to Cache Storage, without resuming.
-
-A CPU vision model downloads its projector with the model and stores both files
-as parts. A GPU vision model keeps its encoder in the single `.litertlm` file.
-
-Both engines are bundled into `dist/browser` and `dist/node` as dynamic chunks.
 The package ships the wllama binaries under `dist/assets/wllama` and the LiteRT
-wasm under `dist/assets/litert`; model weights remain external.
-
-LiteRT-LM needs WebGPU and the JSPI and relaxed SIMD wasm features, currently
-available in Chromium. It loads a 22.7 MB wasm binary from `dist/assets/litert`
-and the 2.0 GB model file. The GPU engine reports progress while the file
-downloads and 100% of the load phase while the model compiles.
-
-wllama needs the compat worker on the same origin. When the app serves the
-package from `node_modules` in development, auto resolution works. In
-production, copy `dist/assets/wllama` next to the app bundle so the resolved
-asset URLs stay valid. The LiteRT wasm glue finds its binary in the same
-directory, so copy `dist/assets/litert` beside the bundle as well.
+wasm under `dist/assets/litert`. Copy both folders next to the app bundle in
+production; wllama needs its compat worker on the same origin. LiteRT-LM needs
+WebGPU with the JSPI and relaxed SIMD wasm features.
 
 ## Node.js
 
 The package imports and runs without a DOM, so it works in scripts, tests, SSR
-and server side orchestration. Everything except inference is available: prompt
-assembly, budgets, status state and cancellation.
-
-Both engines need a browser: wllama needs a worker and a wasm runtime, and
-LiteRT-LM needs WebGPU. In Node, `createChat` reports
-`LlmStatus.unsupported` and `ChatStatus.offline` through `onStatus`, and the
-reply callbacks stay silent. `preloadModel` resolves `false` and reports the
-same unsupported status.
+and server side orchestration with prompt assembly, budgets, status and
+cancellation. Both engines need a browser, so `createChat` there reports
+`LlmStatus.unsupported` and `ChatStatus.offline`, the callbacks stay silent, and
+`preloadModel` resolves `false`.
 
 ```js
 const { createChat, preloadModel, ChatModelId, LlmRole } = require("@degreesign/chat");
@@ -731,16 +449,14 @@ const { createChat, preloadModel, ChatModelId, LlmRole } = require("@degreesign/
 import { createChat, preloadModel, ChatModelId, LlmRole } from "@degreesign/chat";
 ```
 
-The Node entries are `dist/node/chat.node.min.js` for `require` and
-`dist/node/chat.node.min.mjs` for `import`. The package exports map selects them
-through the `node` condition and the browser bundle through the `browser`
-condition.
+`require` resolves `dist/node/chat.node.min.js` and `import` resolves
+`dist/node/chat.node.min.mjs`, both through the exports map.
 
 ## React
 
 Call `createChat` from the send handler, keep the cancel function in a ref, and
-unmount it with the panel. The package never touches the DOM while it is
-imported or called, so the same module renders during SSR.
+unmount it with the panel. The package never touches the DOM, so the same
+module renders during SSR.
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -756,10 +472,7 @@ const useReply = () => {
     setReply("");
     cancelRef.current = createChat({
       model: ChatModelId.qwen3_vl_2b,
-      messages: [
-        ...history,
-        { role: LlmRole.user, content: text },
-      ],
+      messages: [...history, { role: LlmRole.user, content: text }],
       onResponse: setReply,
     });
   };
@@ -770,123 +483,65 @@ const useReply = () => {
 
 ## Types
 
-| Type | Description |
-| ---- | ----------- |
-| `ChatInput` | One request: model, messages, budgets, reasoning and callbacks. |
-| `ChatPreloadInput` | Model, limits, logging and status, the subset `preloadModel` needs. |
-| `DescribeImagesInput` | Target language, images, progress callback, limits and logging. |
-| `DescribeTranslatedInput` | English descriptions, target language, progress callback, limits and logging. |
-| `ImageDescription` | `descriptionEN`, the translated `description` and `durationMs`. |
-| `CancelChat` | The function returned by `createChat`. |
-| `ChatMessage` | One prompt turn, `role`, `content` and optional `images` and `audio`. |
-| `ChatStatusSnapshot` | Availability, engine status, backend, progress and request state. |
-| `LlmLimits` | Token, prompt, image, audio, thread and GPU share budgets, all overridable. |
-| `WllamaAssets` | Wasm, compat wasm and compat worker URLs. |
-
-The public enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`,
-`LlmBackend` and `LlmPhase`.
+The inputs are `ChatInput`, `ChatPreloadInput`, `DescribeImageInput`,
+`DescriptionEnhancedInput` and `TranslateTagsInput`, every image and tag input
+built on `CallOptions`; the results are `DescriptionEnhanced`, `EstimateReport`
+and `ImageTag`. `ChatMessage`, `ChatStatusSnapshot`, `LlmLimits`, `CancelChat`
+and `WllamaAssets` describe the rest; the deprecated types are
+`DescribeImagesInput`, `DescribeTranslatedInput` and `ImageDescription`. The
+enums are `ChatModelId`, `LlmRole`, `ChatStatus`, `LlmStatus`, `LlmBackend`,
+`LlmPhase`, `EstimateOperation`, `DescriptionEnhancedStage` and
+`ChatPreloadField`.
 
 ## Testing
 
-The suites live in `test/` and run against the local checkout.
-
 `yarn test:instruct` starts a local llama.cpp server with the Qwen3-VL 2B
-Instruct Q4_K_M build:
-
-```bash
-yarn test:instruct
-```
-
-It runs `llama serve` on `http://127.0.0.1:8080` with a 160k context, 4
-threads and CPU inference. llama.cpp
-downloads the weights on first run and caches them outside the repository.
-llama.cpp runs about 10x faster than wllama, so prefer the live server
-whenever a test needs real inference. Keep the server in its own terminal
-while the live and image suites run.
-
-The image suite bundles the browser harness, serves it from `test/drive.cjs`
-and proxies `/llama/` to the server on port 8080, so start `test:instruct`
-first:
-
-```bash
-yarn test:images
-```
-
-The fake-engine harness needs no server and never reaches the network.
+Instruct Q4_K_M build on `127.0.0.1:8080`, CPU only, caching the weights outside
+the repository. `yarn test:images` runs the browser suite against it, and the
+fake-engine harness needs no server. `yarn verify:node` checks the Node entry.
 
 ## Architecture
 
-An interactive map of the package lives at
-[degreesign.github.io/ds_chat/architecture.html](https://degreesign.github.io/ds_chat/architecture.html). It covers
-the two entries, every source module with line numbers, the helper edges and the
-send flow.
-
-A side-by-side comparison with `@mlc-ai/web-llm` for Gemma 4 E2B on WebGPU lives
-at [degreesign.github.io/ds_chat/vs_web_llm.html](https://degreesign.github.io/ds_chat/vs_web_llm.html).
+The [interactive map](https://degreesign.github.io/ds_chat/architecture.html)
+covers the two entries, every source module with line numbers, the helper edges
+and the send flow. A
+[comparison with `@mlc-ai/web-llm`](https://degreesign.github.io/ds_chat/vs_web_llm.html)
+covers Gemma 4 E2B on WebGPU.
 
 ## FAQ
 
 ### What is @degreesign/chat?
 
 A headless on-device inference controller. It loads one model, streams one reply
-and reports status; the app owns the chat history, storage and UI.
+and reports status; the app owns the chat history, storage and UI, passes the
+full prompt on every call and keeps the reply.
 
-### Does it store messages?
+### Does it support images or audio?
 
-No. The host passes the full prompt on every call and keeps the reply.
+Images work on models with vision support: put URLs in a user turn's `images`
+array. A model without vision drops them when the turn also has text, and an
+image-only turn reports `Model does not accept images`. No catalog model has an
+audio encoder, so `audio` behaves the same way.
 
-### Does it support images?
+### Does it need a server or runtime dependencies?
 
-Yes, on models with vision support. Put image URLs in a user turn's `images`
-array. Qwen3-VL 2B accepts images on the CPU engine and is the vision model in
-the catalog. Each image keeps its full frame and targets 128 vision tokens, at
-most 136, with both sides snapped to multiples of 32 px and the remainder
-cropped. The WebGPU build is text only, so a model without vision drops images
-when the turn also has text; an image-only turn reports
-`Model does not accept images`.
-
-### Does it support audio?
-
-No model in the catalog has an audio encoder. A user turn can still carry an
-audio URL in `audio`, and `limits.maxAudio` caps the clips (default 1), but a
-model without audio support drops the clip when the turn also has text, and an
-audio-only turn reports `Model does not accept audio`.
-
-### Does it need a server?
-
-No. Local chat, model download and inference work without a server. The package
-includes no server component.
-
-### Does it have runtime dependencies?
-
-No runtime dependencies. `@wllama/wllama`, `@wllama/wllama-compat` and
-`@litert-lm/core` are build-time dependencies, bundled into the dynamic engine
-chunks and their wasm assets, so consumers resolve no engine import and
-download no engine code beyond the chunk they use.
-
-### Where are the models stored?
-
-Both engines store model files in the origin private file system as resumable
-parts, under `wllama-store` for the CPU engine and `litert-store` for the GPU
-engine. The GPU engine also reads a Cache Storage entry under `litertlm-models`
-when an older version stored the file. The package stores no model data itself.
+No. Chat, download and inference run on the device, and the engines ship
+bundled, so a host imports no engine and wires no peer dependency.
 
 ### Which model should I pick?
 
-Qwen3-VL 2B supports reasoning and images on the CPU, and it runs on any browser
-with WebAssembly. Gemma 4 E2B limited supports reasoning on WebGPU, with faster
-text generation but a larger download and a slower first compile. Use Qwen for
-broad browser support and for images. Use Gemma on a device with a WebGPU
-adapter when text speed matters.
+Qwen3-VL 2B supports reasoning and images on the CPU, and runs on any browser
+with WebAssembly. Gemma 4 E2B supports reasoning on WebGPU with faster text, but
+a larger download and a slower first compile.
 
 ## Licensing
 
 The runtime code is MIT licensed. The inference engine and model weights are
-distributed by their authors under their own terms. Their items and terms are
-listed in `THIRD_PARTIES.md`. See `LICENSE`.
+distributed by their authors under their own terms, listed in
+`THIRD_PARTIES.md`. See `LICENSE`.
 
 ## Keywords
 
-`@degreesign/chat`, on-device AI chat, local LLM, wllama, litert, webgpu, gemma,
-wasm, chat controller, headless chat, TypeScript, browser, speech friendly
-replies.
+`@degreesign/chat`, on-device AI chat, local LLM, wllama, litert, webgpu,
+gemma, wasm, chat controller, headless chat, TypeScript, browser, speech
+friendly replies.

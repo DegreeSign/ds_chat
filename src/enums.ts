@@ -34,6 +34,30 @@ enum LlmPhase {
     load = `load`,
 }
 
+/** Operation an estimate covers */
+enum EstimateOperation {
+    analyze = `analyze`,
+    describe = `describe`,
+    translate = `translate`,
+    tags = `tags`,
+    translateTags = `translateTags`,
+}
+
+/** Stage of an enhanced description */
+enum DescriptionEnhancedStage {
+    translate = `translate`,
+    tags = `tags`,
+    translateTags = `translateTags`,
+}
+
+/** Fields of a preload request */
+enum ChatPreloadField {
+    model = `model`,
+    limits = `limits`,
+    logging = `logging`,
+    onStatus = `onStatus`,
+}
+
 /** File system failure names */
 enum StoreFault {
     quota = `QuotaExceededError`,
@@ -71,6 +95,9 @@ export {
     LlmStatus,
     LlmBackend,
     LlmPhase,
+    EstimateOperation,
+    DescriptionEnhancedStage,
+    ChatPreloadField,
     StoreFault,
     ChatModelId,
     BuiltinTool,

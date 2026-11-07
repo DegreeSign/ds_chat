@@ -1,5 +1,12 @@
 export { clearModelCache, createChat, preloadModel } from './chat';
-export { describeImages, describeModelId, describeTranslated, imageReplyTokens } from './describe';
+export {
+    describeImage,
+    describeModelId,
+    descriptionEnhanced,
+    imageReplyTokens,
+    translateTags,
+} from './describe';
+export { describeImages, describeTranslated } from './deprecated';
 export { gpuAdapter } from './models';
 export {
     builtinTools,
@@ -13,6 +20,9 @@ export {
     LlmStatus,
     LlmBackend,
     LlmPhase,
+    EstimateOperation,
+    DescriptionEnhancedStage,
+    ChatPreloadField,
     ChatModelId,
     BuiltinTool,
     WebSearchProvider,
@@ -24,9 +34,17 @@ export type {
     ChatInput,
     ChatPreloadInput,
     CancelChat,
+    CallOptions,
+    EstimateEntry,
+    EstimateReport,
+    DescribeImageInput,
+    DescriptionEnhancedInput,
+    DescriptionEnhanced,
+    ImageTag,
+    TranslateTagsInput,
+    ImageDescription,
     DescribeImagesInput,
     DescribeTranslatedInput,
-    ImageDescription,
     WllamaAssets,
     ChatTool,
     ChatToolCall,

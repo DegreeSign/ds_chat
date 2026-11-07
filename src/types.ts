@@ -1,6 +1,9 @@
 import type {
     ChatModelId,
+    ChatPreloadField,
     ChatStatus,
+    DescriptionEnhancedStage,
+    EstimateOperation,
     LlmBackend,
     LlmPhase,
     LlmRole,
@@ -298,12 +301,109 @@ interface ChatInput {
 }
 
 /** Model preload request */
-type ChatPreloadInput = Pick<ChatInput, `model` | `limits` | `logging` | `onStatus`>;
+type ChatPreloadInput = Pick<ChatInput, ChatPreloadField>;
 
 /** Stop request or model */
 type CancelChat = () => void;
 
-/** Described image result */
+/** Seconds estimated per operation */
+interface EstimateEntry {
+    operation: EstimateOperation,
+    /** Seconds */
+    est: number,
+}
+
+/** Estimate handed to the caller */
+interface EstimateReport {
+    /** Sum of breakdown, seconds */
+    totalEst: number,
+    /** Per-operation seconds, call order */
+    breakdown: EstimateEntry[],
+}
+
+/** Options shared by every call */
+interface CallOptions {
+    /** Stop request */
+    signal?: AbortSignal,
+    /** Budget overrides */
+    limits?: Partial<LlmLimits>,
+    /** Logging option, off */
+    logging?: boolean,
+    /** Status change callback */
+    onStatus?: (snapshot: ChatStatusSnapshot) => void,
+    /** Duration estimate callback */
+    onEstimate?: (estimate: EstimateReport) => void,
+}
+
+/** One image description request */
+interface DescribeImageInput extends CallOptions {
+    /** One image URL */
+    image: string,
+    /** Additional rules */
+    systemRulesOverride?: string,
+    /** Generation speed callback */
+    onSpeed?: (tokensPerSecond: number) => void,
+    /** Streamed text callback */
+    onText?: (text: string) => void,
+}
+
+/** English text enhancement request */
+interface DescriptionEnhancedInput extends CallOptions {
+    /** English description */
+    descriptionEN: string,
+    /** Target language name */
+    targetLanguage: string,
+    /** Target language code */
+    targetCode: string,
+    /** Whether tags are generated */
+    withTags?: boolean,
+    /** Whether description is translated */
+    withDescription?: boolean,
+    /** Text model override */
+    model?: ChatModelId,
+    /** Running stage callback */
+    onStage?: (stage: DescriptionEnhancedStage) => void,
+    /** Generation speed callback */
+    onSpeed?: (tokensPerSecond: number) => void,
+    /** Streamed text callback */
+    onText?: (text: string, stage: DescriptionEnhancedStage) => void,
+}
+
+/** Gallery tag with translations */
+interface ImageTag {
+    /** English tag */
+    en: string,
+    /** Translation keyed by language code */
+    [code: string]: string,
+}
+
+/** Stored tags translation request */
+interface TranslateTagsInput extends CallOptions {
+    /** Tags to translate */
+    tags: ImageTag[],
+    /** Target language name */
+    targetLanguage: string,
+    /** Target language code */
+    targetCode: string,
+    /** Text model override */
+    model?: ChatModelId,
+    /** Streamed text callback */
+    onText?: (text: string) => void,
+}
+
+/** Enhanced English description */
+interface DescriptionEnhanced {
+    /** Translated description, English fallback */
+    description: string,
+    /** Whether translation succeeded */
+    translated: boolean,
+    /** English and translated tags */
+    tags: ImageTag[],
+    /** Suggestive content flag, undefined unknown */
+    nsfw?: boolean,
+}
+
+/** @deprecated to be removed after Nov 2027 */
 interface ImageDescription {
     /** Vision description */
     descriptionEN: string,
@@ -313,7 +413,7 @@ interface ImageDescription {
     durationMs: number,
 }
 
-/** One batch image description request */
+/** @deprecated to be removed after Nov 2027 */
 interface DescribeImagesInput {
     /** Target description language */
     targetLanguage: string,
@@ -346,7 +446,7 @@ interface DescribeImagesInput {
     additionalRules?: string,
 }
 
-/** Batch translation request */
+/** @deprecated to be removed after Nov 2027 */
 interface DescribeTranslatedInput {
     /** Ordered English descriptions */
     descriptions: string[],
@@ -849,6 +949,15 @@ export type {
     ChatPreloadInput,
     ChatState,
     CancelChat,
+    CallOptions,
+    EstimateEntry,
+    EstimateReport,
+    DescribeImageInput,
+    DescriptionEnhancedInput,
+    DescriptionEnhancedStage,
+    DescriptionEnhanced,
+    ImageTag,
+    TranslateTagsInput,
     ImageDescription,
     DescribeImagesInput,
     DescribeTranslatedInput,

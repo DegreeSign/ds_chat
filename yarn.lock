@@ -9,6 +9,11 @@
   dependencies:
     "@jridgewell/trace-mapping" "0.3.9"
 
+"@degreesign/storage@^1.1.6":
+  version "1.1.6"
+  resolved "https://registry.yarnpkg.com/@degreesign/storage/-/storage-1.1.6.tgz#155d18f08271456942e1f257fdd32e29dcec04fe"
+  integrity sha512-pP8rzxwqHVdLKAaduT1lhv5m9jCFN9k9EHTfNzM0J94vbEaNbGexpTI34sBtdiAiAn9aPSDZHiggARXFNEp3bw==
+
 "@degreesign/utils@^1.0.5":
   version "1.0.5"
   resolved "https://registry.yarnpkg.com/@degreesign/utils/-/utils-1.0.5.tgz#d1b33cf15499329f4792786e4c406577af3df264"

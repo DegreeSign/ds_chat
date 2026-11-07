@@ -6,15 +6,17 @@ import {
     preloadModel,
 } from "../src/index";import { createChatOn, createPreloadOn } from "../src/chat";
 import {
-    createDescribeOn,
-    createTranslateOn,
-    describeImages,
-    describeTranslated,
-    imageNote,
+    createDescribeImageOn,
+    createDescriptionEnhancedOn,
+    describeImage,
+    descriptionEnhanced,
     imageReplyTokens,
-    imageRules,
-    imageSystem,
+    imageTranslateTokens,
 } from "../src/describe";
+import {
+    createDescribeImagesOn,
+    createDescribeTranslatedOn,
+} from "../src/deprecated";
 import { createRuntime } from "../src/service";
 import {
     buildMessages,
@@ -83,14 +85,23 @@ import {
 } from "../src/engines/images";
 import {
     ChatModelId,
+    ChatPreloadField,
     ChatStatus,
     BuiltinTool,
+    DescriptionEnhancedStage,
+    EstimateOperation,
     LlmBackend,
     LlmPhase,
     LlmRole,
     LlmStatus,
     WebSearchProvider,
 } from "../src/enums";
+import {
+    estimateReport,
+    recordEstimate,
+    resetEstimates,
+} from "../src/estimate";
+import { imageNote, imageSystem } from "../src/prompts";
 import {
     builtinTools,
     calculateTool,
@@ -122,6 +133,7 @@ import type {
     ChatModel,
     ChatStatusSnapshot,
     ChatTool,
+    EstimateReport,
     EngineChatParams,
     EngineMessage,
     ImageSize,
@@ -317,13 +329,24 @@ const definitions: Array<{
                 assertEqual(typeof createChat, `function`, `createChat`);
                 assertEqual(typeof preloadModel, `function`, `preloadModel`);
                 assertEqual(typeof clearModelCache, `function`, `clearModelCache`);
-                assertEqual(typeof describeImages, `function`, `describeImages`);
+                assertEqual(typeof describeImage, `function`, `describeImage`);
                 assertEqual(
-                    typeof describeTranslated,
+                    typeof descriptionEnhanced,
                     `function`,
-                    `describeTranslated`,
+                    `descriptionEnhanced`,
+                );
+                assertEqual(
+                    typeof entry.describeImages,
+                    `function`,
+                    `deprecated describeImages`,
+                );
+                assertEqual(
+                    typeof entry.describeTranslated,
+                    `function`,
+                    `deprecated describeTranslated`,
                 );
                 assertEqual(imageReplyTokens, 128, `imageReplyTokens`);
+                assertEqual(imageTranslateTokens, 256, `imageTranslateTokens`);
                 assertEqual(typeof createChatOn, `function`, `createChatOn`);
                 assertEqual(typeof createPreloadOn, `function`, `createPreloadOn`);
                 assertEqual(typeof createRuntime, `function`, `createRuntime`);
@@ -333,7 +356,10 @@ const definitions: Array<{
                     [
                         `BuiltinTool`,
                         `ChatModelId`,
+                        `ChatPreloadField`,
                         `ChatStatus`,
+                        `DescriptionEnhancedStage`,
+                        `EstimateOperation`,
                         `LlmBackend`,
                         `LlmPhase`,
                         `LlmRole`,
@@ -344,21 +370,24 @@ const definitions: Array<{
                         `clearModelCache`,
                         `createChat`,
                         `currencyTool`,
+                        `describeImage`,
                         `describeImages`,
                         `describeModelId`,
                         `describeTranslated`,
+                        `descriptionEnhanced`,
                         `gpuAdapter`,
                         `imageReplyTokens`,
                         `preloadModel`,
+                        `translateTags`,
                         `webSearchTool`,
                     ].join(`,`),
                     `public names`,
                 );
                 assertEqual(`createChatOn` in entry, false, `internal chat factory`);
                 assertEqual(
-                    `createTranslateOn` in entry,
+                    `createDescriptionEnhancedOn` in entry,
                     false,
-                    `internal translate factory`,
+                    `internal enhance factory`,
                 );
                 assertEqual(ChatStatus.online, 0, `online`);
                 assertEqual(ChatStatus.away, 1, `away`);
@@ -368,6 +397,21 @@ const definitions: Array<{
                 assertEqual(LlmBackend.gpu, `gpu`, `gpu backend`);
                 assertEqual(LlmPhase.download, `download`, `download phase`);
                 assertEqual(LlmRole.assistant, `assistant`, `assistant role`);
+                assertEqual(
+                    ChatPreloadField.logging,
+                    `logging`,
+                    `preload field`,
+                );
+                assertEqual(
+                    DescriptionEnhancedStage.tags,
+                    `tags`,
+                    `enhance stage`,
+                );
+                assertEqual(
+                    EstimateOperation.tags,
+                    `tags`,
+                    `estimate operation`,
+                );
                 assertEqual(ChatModelId.qwen3_vl_2b, `qwen3-vl-2b`, `qwen id`);
                 assertEqual(
                     ChatModelId.qwen3_vl_2b_instruct,
@@ -1433,6 +1477,21 @@ const definitions: Array<{
                 partial.flush();
                 assertEqual(partialText.join(``), `hi `, `held no leak`);
                 assertEqual(partialReason.join(``), `x`, `held reasoning`);
+                const
+                    ellipsisReason: string[] = [],
+                    ellipsisText: string[] = [],
+                    ellipsis = createThinkSplitter(
+                        value => ellipsisReason.push(value),
+                        value => ellipsisText.push(value),
+                    );
+                ellipsis.feed(`wait ... done`);
+                ellipsis.flush();
+                assertEqual(
+                    ellipsisText.join(``),
+                    `wait ... done`,
+                    `ellipsis stays text`,
+                );
+                assertEqual(ellipsisReason.join(``), ``, `ellipsis not reason`);
             },
         },
         {
@@ -2373,74 +2432,47 @@ const definitions: Array<{
             },
         },
         {
-            name: `describe/english`,
+            name: `describe/image`,
             run: async () => {
                 const
-                    events: Array<[number, string?, string?, number?]> = [],
-                    statuses: ChatStatusSnapshot[] = [];
-                let described = 0;
+                    statuses: ChatStatusSnapshot[] = [],
+                    streams: string[] = [],
+                    speeds: number[] = [],
+                    estimates: EstimateReport[] = [];
+                resetEstimates();
                 const
                     cpu = createFakeEngine({
                         backend: LlmBackend.cpu,
-                        chatImpl: async () => {
-                            await sleep(10);
-                            return `A red square ${++described}`;
-                        },
+                        chatText: `A red square`,
+                        onChat: params => params.onSpeed?.(42),
                     }),
                     runtime = createRuntime({
                         engines: { cpu: cpu.engine },
                         backend: LlmBackend.cpu,
-                    }),
-                    results = await createDescribeOn(runtime)({
-                        targetLanguage: `en`,
-                        images: [`one`, `two`],
-                        currentIndex: (index, descriptionEN, description, durationMs) =>
-                            events.push([index, descriptionEN, description, durationMs]),
-                        onStatus: value => statuses.push(value),
                     });
+                const described = await createDescribeImageOn(runtime)({
+                    image: `one`,
+                    onText: value => streams.push(value),
+                    onSpeed: value => speeds.push(value),
+                    onEstimate: value => estimates.push(value),
+                    onStatus: value => statuses.push(value),
+                });
+                assertEqual(described, `A red square`, `english description`);
                 assertEqual(cpu.calls.start, 1, `describer load`);
-                assertEqual(cpu.calls.chat, 2, `one chat per image`);
+                assertEqual(cpu.calls.chat, 1, `one chat per image`);
                 assertEqual(cpu.requests[0].limits.maxReplyTokens, 128, `budget`);
-                assertEqual(results.length, 2, `two results`);
-                assertEqual(results[0].descriptionEN, `A red square 1`, `first english`);
-                assertEqual(results[1].descriptionEN, `A red square 2`, `second english`);
-                assertEqual(results[0].description, results[0].descriptionEN, `english kept`);
-                assertEqual(results[0].durationMs > 0, true, `first duration`);
-                assertEqual(results[1].durationMs > 0, true, `second duration`);
-                assertEqual(events.length, 6, `three events per image`);
-                assertEqual(events[0][0], 0, `first index`);
-                assertEqual(events[0][1], undefined, `first pending`);
-                assertEqual(events[0][3], undefined, `pending duration`);
-                assertEqual(events[1][1], `A red square 1`, `first english event`);
-                assertEqual(events[1][2], undefined, `first awaiting translation`);
-                assertEqual(events[1][3], results[0].durationMs, `first event duration`);
-                assertEqual(events[2][0], 1, `second index`);
-                assertEqual(events[3][1], `A red square 2`, `second english event`);
                 assertEqual(
-                    events[3][3],
-                    results[1].durationMs,
-                    `second event duration`,
+                    cpu.requests[0].limits.imageTokens,
+                    192,
+                    `vision budget`,
                 );
-                assertEqual(events[4][2], `A red square 1`, `first final`);
-                assertEqual(events[4][3], results[0].durationMs, `first final duration`);
-                assertEqual(events[5][2], `A red square 2`, `second final`);
-                assertEqual(
-                    events[5][3],
-                    results[1].durationMs,
-                    `second final duration`,
-                );
+                assertEqual(cpu.requests[0].temperature, 0.1, `temperature`);
+                assertEqual(cpu.requests[0].repeatPenalty, 1, `penalty`);
                 assertEqual(cpu.requests[0].messages.length, 2, `two turns`);
-                assertEqual(cpu.requests[0].temperature, 0.3, `describer temperature`);
-                assertEqual(cpu.requests[0].repeatPenalty, 1, `describer penalty`);
-                assertEqual(cpu.requests[0].limits.imageTokens, 192, `vision budget`);
-                assertEqual(cpu.requests[0].messages[1].role, LlmRole.user, `user role`);
-                assertEqual(cpu.requests[0].messages[1].images?.[0], `one`, `first image`);
-                assertEqual(cpu.requests[1].messages[1].images?.[0], `two`, `second image`);
-                assertEqual(cpu.requests[0].messages[0].role, LlmRole.system, `system role`);
                 assertEqual(
                     cpu.requests[0].messages[0].content,
-                    `${imageSystem} ${imageRules}`,
-                    `system note`,
+                    imageSystem,
+                    `default rules`,
                 );
                 assertEqual(
                     cpu.requests[0].messages[1].content,
@@ -2448,492 +2480,503 @@ const definitions: Array<{
                     `image note`,
                 );
                 assertEqual(
-                    statuses[0].model,
-                    ChatModelId.qwen3_vl_2b_instruct,
-                    `describer status`,
+                    cpu.requests[0].messages[1].images?.[0],
+                    `one`,
+                    `one image`,
                 );
-                assertEqual(statuses[0].requesting, false, `idle status`);
-                assertEqual(statuses[0].supportsImages, true, `vision status`);
+                assertEqual(streams.length > 0, true, `stream reported`);
+                assertEqual(speeds[0], 42, `speed forwarded`);
+                assertEqual(estimates.length, 1, `one estimate`);
+                assertEqual(estimates[0].breakdown.length, 2, `two stages`);
                 assertEqual(
-                    statuses.some(value => value.requesting),
+                    estimates[0].breakdown[0].operation,
+                    EstimateOperation.analyze,
+                    `analysis stage`,
+                );
+                assertEqual(
+                    estimates[0].breakdown[1].operation,
+                    EstimateOperation.describe,
+                    `describe stage`,
+                );
+                assertEqual(estimates[0].totalEst, 120, `fallback total`);
+                assertEqual(
+                    statuses.some(value => value.requesting === true),
                     true,
-                    `requesting status`,
-                );
-                assertEqual(
-                    statuses[statuses.length - 1].requesting,
-                    false,
-                    `final status`,
-                );
-                assertEqual(statuses[statuses.length - 1].ready, true, `final ready`);
-                assertEqual(statuses[statuses.length - 1].percent, 100, `final percent`);
-                assertEqual(
-                    statuses[statuses.length - 1].error,
-                    undefined,
-                    `final error`,
+                    `request reported`,
                 );
             },
         },
         {
-            name: `describe/translation`,
+            name: `describe/image failure`,
             run: async () => {
-                await withGpu(async () => {
-                    const
-                        events: Array<[number, string?, string?, number?]> = [],
-                        statuses: ChatStatusSnapshot[] = [],
-                        prompts: string[] = [];
-                    let described = 0;
-                    const
-                        cpu = createFakeEngine({
-                            backend: LlmBackend.cpu,
-                            chatImpl: async () => `description ${++described}`,
-                        }),
-                        gpu = createFakeEngine({
-                            backend: LlmBackend.gpu,
-                            chatImpl: async params => {
-                                prompts.push(
-                                    params.messages
-                                        .map(message => `${message.content}`)
-                                        .join(`\n`),
-                                );
-                                return `translated ${prompts.length}`;
-                            },
-                        }),
-                        runtime = createRuntime({
-                            engines: { cpu: cpu.engine, litert: gpu.engine },
-                        }),
-                        results = await createDescribeOn(runtime)({
-                            targetLanguage: `German`,
-                            images: [`one`, `two`],
-                            currentIndex: (index, descriptionEN, description, durationMs) =>
-                                events.push([index, descriptionEN, description, durationMs]),
-                            onStatus: value => statuses.push(value),
-                        });
-                    assertEqual(
-                        cpu.models[0].id,
-                        ChatModelId.qwen3_vl_2b_instruct,
-                        `describer model`,
-                    );
-                    assertEqual(
-                        gpu.models[0].id,
-                        ChatModelId.gemma4_e2b_limited,
-                        `translator model`,
-                    );
-                    const translateSystem = [
-                        `You are a precise translator.`,
-                        `Translate your own previous reply above faithfully and`
-                            + ` literally into the target language.`,
-                        `Never translate the user's request or instructions.`,
-                        `Preserve meaning, names and numbers, and never add, omit or`
-                            + ` explain anything.`,
-                    ].join(` `);
-                    const translatePrompt = `Now please translate your previous reply`
-                        + ` above faithfully into German. Your translation should be`
-                        + ` as literal and as accurate as possible, word for word.`
-                        + ` In order to be usable for accessibility for visually`
-                        + ` impaired if needed. Reply only by the translation`
-                        + ` without any addition or explanation`;
-                    assertEqual(cpu.calls.start, 1, `describer start`);
-                    assertEqual(gpu.calls.start, 1, `translator start`);
-                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 128, `describer budget`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 128, `budget`);
-                    assertEqual(cpu.requests[0].messages.length, 2, `describer turns`);
-                    assertEqual(cpu.requests[0].temperature, 0.3, `describer temperature`);
-                    assertEqual(cpu.requests[0].repeatPenalty, 1, `describer penalty`);
-                    assertEqual(cpu.requests[0].limits.imageTokens, 192, `vision budget`);
-                    assertEqual(
-                        cpu.requests[0].messages[0].content,
-                        `${imageSystem} ${imageRules}`,
-                        `describer system`,
-                    );
-                    assertEqual(cpu.requests[0].messages[1].role, LlmRole.user, `ask turn`);
-                    assertEqual(cpu.requests[0].messages[1].content, imageNote, `ask note`);
-                    assertEqual(gpu.requests[0].messages.length, 4, `translation turns`);
-                    assertEqual(gpu.requests[0].messages[0].role, LlmRole.system, `system turn`);
-                    assertEqual(
-                        gpu.requests[0].messages[0].content,
-                        translateSystem,
-                        `system note`,
-                    );
-                    assertEqual(
-                        gpu.requests[0].messages[1].content,
-                        `[image] describe this image in English very accurately`,
-                        `translation image note`,
-                    );
-                    assertEqual(
-                        gpu.requests[0].messages[2].role,
-                        LlmRole.assistant,
-                        `english turn`,
-                    );
-                    assertEqual(
-                        gpu.requests[0].messages[2].content,
-                        `description 1`,
-                        `english content`,
-                    );
-                    assertEqual(
-                        gpu.requests[0].messages[3].role,
-                        LlmRole.user,
-                        `prompt turn`,
-                    );
-                    assertEqual(
-                        gpu.requests[0].messages[3].content,
-                        translatePrompt,
-                        `prompt note`,
-                    );
-                    assertEqual(results[0].descriptionEN, `description 1`, `first english`);
-                    assertEqual(results[0].description, `translated 1`, `first translation`);
-                    assertEqual(results[1].description, `translated 2`, `second translation`);
-                    assert(
-                        typeof results[0].durationMs == `number`,
-                        `first duration`,
-                    );
-                    assert(
-                        typeof results[1].durationMs == `number`,
-                        `second duration`,
-                    );
-                    assert(prompts[0].includes(`German`), `target language`);
-                    assert(prompts[0].includes(`description 1`), `source text`);
-                    assertEqual(events.length, 6, `three events per image`);
-                    assertEqual(events[1][3], results[0].durationMs, `english duration`);
-                    assertEqual(events[4][2], `translated 1`, `first final`);
-                    assertEqual(events[4][3], results[0].durationMs, `first final duration`);
-                    assertEqual(events[5][2], `translated 2`, `second final`);
-                    assertEqual(events[5][3], results[1].durationMs, `second final duration`);
-                    assertEqual(
-                        statuses.some(value =>
-                            value.model == ChatModelId.gemma4_e2b_limited),
-                        true,
-                        `translator status`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].model,
-                        ChatModelId.gemma4_e2b_limited,
-                        `translator final`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].supportsImages,
-                        false,
-                        `translator vision`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].ready,
-                        true,
-                        `translator ready`,
-                    );
-                });
-            },
-        },
-        {
-            name: `describe/translated`,
-            run: async () => {
-                await withGpu(async () => {
-                    const
-                        events: Array<[number, string?, string?]> = [],
-                        statuses: ChatStatusSnapshot[] = [],
-                        gpu = createFakeEngine({
-                            backend: LlmBackend.gpu,
-                            chatImpl: async params =>
-                                `translated ${params.messages[2]?.content}`,
-                        }),
-                        runtime = createRuntime({
-                            engines: { litert: gpu.engine },
-                        }),
-                        results = await createTranslateOn(runtime)({
-                            descriptions: [`plain one`, `plain two`],
-                            targetLanguage: `German`,
-                            currentIndex: (index, descriptionEN, description) =>
-                                events.push([index, descriptionEN, description]),
-                            onStatus: value => statuses.push(value),
-                        });
-                    assertEqual(gpu.calls.start, 1, `translator start`);
-                    assertEqual(gpu.calls.chat, 2, `one chat per description`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 128, `budget`);
-                    assertEqual(gpu.requests[0].messages.length, 4, `four turns`);
-                    assertEqual(results[0], `translated plain one`, `first translation`);
-                    assertEqual(results[1], `translated plain two`, `second translation`);
-                    assertEqual(events.length, 2, `two events`);
-                    assertEqual(events[0][0], 0, `first index`);
-                    assertEqual(events[0][1], `plain one`, `first english`);
-                    assertEqual(events[0][2], `translated plain one`, `first event`);
-                    assertEqual(events[1][0], 1, `second index`);
-                    assertEqual(events[1][1], `plain two`, `second english`);
-                    assertEqual(events[1][2], `translated plain two`, `second event`);
-                    assertEqual(
-                        statuses[statuses.length - 1].model,
-                        ChatModelId.gemma4_e2b_limited,
-                        `translator final`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].requesting,
-                        false,
-                        `translator done`,
-                    );
-                });
-            },
-        },
-        {
-            name: `describe/translated english`,
-            run: async () => {
-                const
-                    gpu = createFakeEngine({ backend: LlmBackend.gpu }),
-                    runtime = createRuntime({
-                        engines: { litert: gpu.engine },
-                    }),
-                    results = await createTranslateOn(runtime)({
-                        descriptions: [`plain one`],
-                        targetLanguage: `en`,
-                    });
-                assertEqual(results[0], `plain one`, `english kept`);
-                assertEqual(gpu.calls.start, 0, `no load`);
-            },
-        },
-        {
-            name: `describe/translated refusal`,
-            run: async () => {
-                await withGpu(async () => {
-                    const
-                        gpu = createFakeEngine({
-                            backend: LlmBackend.gpu,
-                            chatImpl: async () => `"CANNOT TRANSLATE."`,
-                        }),
-                        runtime = createRuntime({
-                            engines: { litert: gpu.engine },
-                        }),
-                        results = await createTranslateOn(runtime)({
-                            descriptions: [`plain one`],
-                            targetLanguage: `fa`,
-                        });
-                    assertEqual(results[0], `plain one`, `english kept on refusal`);
-                });
-            },
-        },
-        {
-            name: `describe/refusal`,
-            run: async () => {
-                await withGpu(async () => {
-                    const
-                        events: Array<[number, string?, string?, number?]> = [],
-                        cpu = createFakeEngine({
-                            backend: LlmBackend.cpu,
-                            chatImpl: async () => `plain english`,
-                        }),
-                        gpu = createFakeEngine({
-                            backend: LlmBackend.gpu,
-                            chatImpl: async () => `"CANNOT TRANSLATE."`,
-                        }),
-                        runtime = createRuntime({
-                            engines: { cpu: cpu.engine, litert: gpu.engine },
-                        }),
-                        results = await createDescribeOn(runtime)({
-                            targetLanguage: `fa`,
-                            images: [`one`],
-                            limits: { maxReplyTokens: 64 },
-                            currentIndex: (index, descriptionEN, description, durationMs) =>
-                                events.push([index, descriptionEN, description, durationMs]),
-                        });
-                    assertEqual(cpu.requests[0].limits.maxReplyTokens, 64, `describer budget`);
-                    assertEqual(gpu.requests[0].limits.maxReplyTokens, 64, `translator budget`);
-                    assertEqual(results[0].description, `plain english`, `english kept`);
-                    assertEqual(events[2][2], `plain english`, `refusal event`);
-                    assertEqual(events[2][3], results[0].durationMs, `refusal duration`);
-                });
-            },
-        },
-        {
-            name: `describe/no gpu`,
-            run: async () => {
-                await withGpu(async () => {
-                    const
-                        events: Array<[number, string?, string?, number?]> = [],
-                        statuses: ChatStatusSnapshot[] = [],
-                        cpu = createFakeEngine({
-                            backend: LlmBackend.cpu,
-                            chatImpl: async () => `plain english`,
-                        }),
-                        runtime = createRuntime({
-                            engines: { cpu: cpu.engine },
-                            backend: LlmBackend.cpu,
-                        }),
-                        results = await createDescribeOn(runtime)({
-                            targetLanguage: `fr`,
-                            images: [`one`],
-                            currentIndex: (index, descriptionEN, description, durationMs) =>
-                                events.push([index, descriptionEN, description, durationMs]),
-                            onStatus: value => statuses.push(value),
-                        });
-                    assertEqual(cpu.calls.start, 1, `describer load`);
-                    assertEqual(results[0].description, `plain english`, `english fallback`);
-                    assertEqual(events.length, 3, `three events`);
-                    assertEqual(events[2][2], `plain english`, `fallback event`);
-                    assertEqual(events[2][3], results[0].durationMs, `fallback duration`);
-                    assertEqual(
-                        statuses.some(value =>
-                            value.model == ChatModelId.gemma4_e2b_limited),
-                        false,
-                        `no translator status`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].model,
-                        ChatModelId.qwen3_vl_2b_instruct,
-                        `describer final`,
-                    );
-                }, null);
-            },
-        },
-        {
-            name: `describe/translation failure`,
-            run: async () => {
-                await withGpu(async () => {
-                    const
-                        events: Array<[number, string?, string?, number?]> = [],
-                        statuses: ChatStatusSnapshot[] = [],
-                        cpu = createFakeEngine({
-                            backend: LlmBackend.cpu,
-                            chatImpl: async () => `plain english`,
-                        }),
-                        gpu = createFakeEngine({
-                            backend: LlmBackend.gpu,
-                            failStart: true,
-                        }),
-                        runtime = createRuntime({
-                            engines: { cpu: cpu.engine, litert: gpu.engine },
-                        }),
-                        results = await createDescribeOn(runtime)({
-                            targetLanguage: `de`,
-                            images: [`one`],
-                            currentIndex: (index, descriptionEN, description, durationMs) =>
-                                events.push([index, descriptionEN, description, durationMs]),
-                            onStatus: value => statuses.push(value),
-                        });
-                    assertEqual(gpu.calls.start, 1, `translator attempted`);
-                    assertEqual(results[0].description, `plain english`, `english kept`);
-                    assertEqual(events[2][2], `plain english`, `fallback event`);
-                    assertEqual(events[2][3], results[0].durationMs, `failure duration`);
-                    assertEqual(
-                        statuses[statuses.length - 1].model,
-                        ChatModelId.gemma4_e2b_limited,
-                        `translator final`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].error,
-                        `start failed`,
-                        `translator error`,
-                    );
-                    assertEqual(
-                        statuses[statuses.length - 1].status,
-                        LlmStatus.error,
-                        `translator failed`,
-                    );
-                });
-            },
-        },
-        {
-            name: `describe/empty and failures`,
-            run: async () => {
-                const
-                    emptyStatuses: ChatStatusSnapshot[] = [],
-                    loadStatuses: ChatStatusSnapshot[] = [],
-                    replyStatuses: ChatStatusSnapshot[] = [],
-                    idle = createFakeEngine({ backend: LlmBackend.cpu }),
-                    idleRuntime = createRuntime({
-                        engines: { cpu: idle.engine },
-                        backend: LlmBackend.cpu,
-                    }),
-                    empty = await createDescribeOn(idleRuntime)({
-                        targetLanguage: `de`,
-                        images: [],
-                        onStatus: value => emptyStatuses.push(value),
-                    }),
-                    failed = createFakeEngine({
-                        backend: LlmBackend.cpu,
-                        failStart: true,
-                    }),
-                    failedRuntime = createRuntime({
-                        engines: { cpu: failed.engine },
-                        backend: LlmBackend.cpu,
-                    }),
-                    loadError = await errorOf(() => createDescribeOn(failedRuntime)({
-                        targetLanguage: `en`,
-                        images: [`one`],
-                        onStatus: value => loadStatuses.push(value),
-                    })),
-                    silent = createFakeEngine({
-                        backend: LlmBackend.cpu,
-                        chatImpl: async () => ``,
-                    }),
-                    silentRuntime = createRuntime({
-                        engines: { cpu: silent.engine },
-                        backend: LlmBackend.cpu,
-                    }),
-                    silentResults = await createDescribeOn(silentRuntime)({
-                        targetLanguage: `en`,
-                        images: [`one`],
-                        onStatus: value => replyStatuses.push(value),
-                    });
-                assertEqual(empty.length, 0, `no results`);
-                assertEqual(idle.calls.start, 0, `empty skips load`);
-                assertEqual(emptyStatuses.length, 0, `empty skips status`);
-                assertEqual(loadError, `start failed`, `load error`);
-                assertEqual(
-                    loadStatuses[loadStatuses.length - 1].error,
-                    `start failed`,
-                    `load status`,
-                );
-                assertEqual(
-                    loadStatuses[loadStatuses.length - 1].requesting,
-                    false,
-                    `load done`,
-                );
-                // empty reply kept, error reported
-                assertEqual(silentResults.length, 1, `empty kept`);
-                assertEqual(silentResults[0].descriptionEN, ``, `empty english`);
-                assertEqual(
-                    replyStatuses[replyStatuses.length - 1].error,
-                    `No description`,
-                    `reply status`,
-                );
-            },
-        },
-        {
-            name: `describe/failed image isolation`,
-            run: async () => {
-                const
-                    statuses: ChatStatusSnapshot[] = [],
-                    events: Array<[number, string?, string?]> = [];
-                let described = 0;
+                resetEstimates();
                 const
                     cpu = createFakeEngine({
                         backend: LlmBackend.cpu,
                         chatImpl: async () => {
-                            if (++described > 1) throw new Error(`image failed`);
-                            return `A red square`;
+                            throw new Error(`image failed`);
+                        },
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    });
+                let error = ``;
+                await createDescribeImageOn(runtime)({
+                    image: `one`,
+                }).catch(reason => {
+                    error = `${(reason as Error)?.message || reason}`;
+                });
+                assertEqual(error, `image failed`, `failure thrown`);
+                assertEqual(cpu.calls.chat, 1, `one attempt`);
+            },
+        },
+        {
+            name: `describe/image rules`,
+            run: async () => {
+                resetEstimates();
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatText: `A red square`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    });
+                await createDescribeImageOn(runtime)({
+                    image: `one`,
+                    systemRulesOverride: `host rules`,
+                });
+                assertEqual(
+                    cpu.requests[0].messages[0].content,
+                    `host rules`,
+                    `rules override`,
+                );
+            },
+        },
+        {
+            name: `describe/image empty`,
+            run: async () => {
+                resetEstimates();
+                const
+                    statuses: ChatStatusSnapshot[] = [],
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatText: ``,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    text = await createDescribeImageOn(runtime)({
+                        image: `one`,
+                        onStatus: value => statuses.push(value),
+                    });
+                assertEqual(text, ``, `empty text`);
+                assertEqual(
+                    statuses[statuses.length - 1].error,
+                    `No description`,
+                    `empty error`,
+                );
+            },
+        },
+        {
+            name: `describe/enhanced`,
+            run: async () => {
+                resetEstimates();
+                const
+                    replies: string[] = [],
+                    estimates: EstimateReport[] = [],
+                    stages: string[] = [];
+                let call = 0;
+                replies.push(
+                    `Ein roter Baum`,
+                    `tree, sky, nsfw`,
+                    `1. Baum\n2. Himmel\n3. nsfw`,
+                );
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () => replies[call++] || ``,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `A red tree`,
+                        targetLanguage: `German`,
+                        targetCode: `de`,
+                        model: ChatModelId.qwen3_vl_2b,
+                        onEstimate: value => estimates.push(value),
+                        onStage: value => stages.push(value),
+                    });
+                assertEqual(cpu.calls.start, 1, `text model load`);
+                assertEqual(cpu.calls.chat, 3, `three text calls`);
+                assertEqual(result.description, `Ein roter Baum`, `translated`);
+                assertEqual(result.tags.length, 3, `three tags`);
+                assertEqual(result.tags[0].en, `tree`, `first tag`);
+                assertEqual(result.tags[0].de, `baum`, `first tag translation`);
+                assertEqual(result.nsfw, true, `nsfw tag`);
+                assertEqual(
+                    stages.join(`,`),
+                    `translate,tags,translateTags`,
+                    `stages`,
+                );
+                assertEqual(estimates.length, 1, `one estimate`);
+                assertEqual(estimates[0].breakdown.length, 3, `three stages`);
+                assertEqual(estimates[0].totalEst, 25, `fallback total`);
+            },
+        },
+        {
+            name: `describe/enhanced english`,
+            run: async () => {
+                resetEstimates();
+                let call = 0;
+                const
+                    estimates: EstimateReport[] = [],
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () => call++ == 0 ? `tree, sky` : ``,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `A red tree`,
+                        targetLanguage: `English`,
+                        targetCode: `en`,
+                        model: ChatModelId.qwen3_vl_2b,
+                        onEstimate: value => estimates.push(value),
+                    });
+                assertEqual(cpu.calls.chat, 1, `tags only`);
+                assertEqual(result.description, `A red tree`, `english kept`);
+                assertEqual(result.tags.length, 2, `two tags`);
+                assertEqual(result.nsfw, false, `not nsfw`);
+                assertEqual(estimates[0].breakdown.length, 1, `tags stage`);
+                assertEqual(
+                    estimates[0].breakdown[0].operation,
+                    EstimateOperation.tags,
+                    `tags operation`,
+                );
+            },
+        },
+        {
+            name: `describe/enhanced refusal`,
+            run: async () => {
+                resetEstimates();
+                let call = 0;
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () =>
+                            call++ == 0
+                                ? `"CANNOT TRANSLATE."`
+                                : `tree, sky`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `A red tree`,
+                        targetLanguage: `German`,
+                        targetCode: `de`,
+                        model: ChatModelId.qwen3_vl_2b,
+                    });
+                assertEqual(result.description, `A red tree`, `english kept`);
+                assertEqual(result.translated, false, `not translated`);
+                assertEqual(result.tags.length, 2, `tags kept`);
+            },
+        },
+        {
+            name: `describe/enhanced nsfw last`,
+            run: async () => {
+                resetEstimates();
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatText: `sky, tree, cloud, nsfw`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `A red tree`,
+                        targetLanguage: `English`,
+                        targetCode: `en`,
+                        model: ChatModelId.qwen3_vl_2b,
+                    });
+                assertEqual(result.tags.length, 3, `three tags`);
+                assertEqual(result.tags[2].en, `nsfw`, `nsfw last`);
+                assertEqual(result.nsfw, true, `nsfw flagged`);
+            },
+        },
+        {
+            name: `describe/enhanced empty`,
+            run: async () => {
+                resetEstimates();
+                let estimates = 0;
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatText: `reply`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `   `,
+                        targetLanguage: `German`,
+                        targetCode: `de`,
+                        model: ChatModelId.qwen3_vl_2b,
+                        onEstimate: () => { estimates += 1; },
+                    });
+                assertEqual(result.description, ``, `empty description`);
+                assertEqual(result.tags.length, 0, `no tags`);
+                assertEqual(cpu.calls.start, 0, `no load`);
+                assertEqual(estimates, 0, `no estimate`);
+            },
+        },
+        {
+            name: `describe/enhanced no tags`,
+            run: async () => {
+                resetEstimates();
+                const
+                    estimates: EstimateReport[] = [],
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatText: `Ein roter Baum`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `A red tree`,
+                        targetLanguage: `German`,
+                        targetCode: `de`,
+                        withTags: false,
+                        model: ChatModelId.qwen3_vl_2b,
+                        onEstimate: value => estimates.push(value),
+                    });
+                assertEqual(cpu.calls.chat, 1, `translation only`);
+                assertEqual(result.description, `Ein roter Baum`, `translated`);
+                assertEqual(result.tags.length, 0, `no tags`);
+                assertEqual(result.nsfw, undefined, `nsfw unknown`);
+                assertEqual(estimates[0].breakdown.length, 1, `translate stage`);
+                assertEqual(
+                    estimates[0].breakdown[0].operation,
+                    EstimateOperation.translate,
+                    `translate operation`,
+                );
+            },
+        },
+        {
+            name: `describe/enhanced failure`,
+            run: async () => {
+                resetEstimates();
+                let call = 0;
+                const
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatImpl: async () => {
+                            if (call++ == 0) return `Ein roter Baum`;
+                            throw new Error(`tags failed`);
                         },
                     }),
                     runtime = createRuntime({
                         engines: { cpu: cpu.engine },
                         backend: LlmBackend.cpu,
                     }),
-                    results = await createDescribeOn(runtime)({
+                    result = await createDescriptionEnhancedOn(runtime)({
+                        descriptionEN: `A red tree`,
+                        targetLanguage: `German`,
+                        targetCode: `de`,
+                        model: ChatModelId.qwen3_vl_2b,
+                    });
+                assertEqual(result.description, `Ein roter Baum`, `translation kept`);
+                assertEqual(result.tags.length, 0, `tags empty`);
+                assertEqual(result.nsfw, undefined, `nsfw unknown`);
+            },
+        },
+        {
+            name: `describe/estimates`,
+            run: () => {
+                resetEstimates();
+                const fallback = estimateReport([
+                    EstimateOperation.analyze,
+                    EstimateOperation.describe,
+                    EstimateOperation.tags,
+                ]);
+                assertEqual(fallback.totalEst, 126, `fallback total`);
+                assertEqual(fallback.breakdown[1].est, 25, `describe fallback`);
+                recordEstimate({
+                    operation: EstimateOperation.analyze,
+                    seconds: 3,
+                });
+                recordEstimate({
+                    operation: EstimateOperation.tags,
+                    seconds: 2,
+                });
+                const measured = estimateReport([
+                    EstimateOperation.analyze,
+                    EstimateOperation.tags,
+                ]);
+                assertEqual(measured.totalEst, 5, `measured total`);
+                recordEstimate({
+                    operation: EstimateOperation.tags,
+                    seconds: 0,
+                });
+                assertEqual(
+                    estimateReport([EstimateOperation.tags]).breakdown[0].est,
+                    2,
+                    `zero ignored`,
+                );
+                assertEqual(
+                    localStorage.getItem(`degreesign-chat-estimates-v1`)
+                        != null,
+                    true,
+                    `estimate stored`,
+                );
+                resetEstimates();
+                assertEqual(
+                    estimateReport([EstimateOperation.analyze]).breakdown[0].est,
+                    95,
+                    `reset fallback`,
+                );
+                assertEqual(
+                    localStorage.getItem(`degreesign-chat-estimates-v1`),
+                    null,
+                    `estimate cleared`,
+                );
+            },
+        },
+        {
+            name: `describe/images wrapper`,
+            run: async () => {
+                resetEstimates();
+                const
+                    events: Array<[number, string?, string?, number?]> = [],
+                    cpu = createFakeEngine({
+                        backend: LlmBackend.cpu,
+                        chatText: `A red square`,
+                    }),
+                    runtime = createRuntime({
+                        engines: { cpu: cpu.engine },
+                        backend: LlmBackend.cpu,
+                    }),
+                    results = await createDescribeImagesOn(runtime)({
                         targetLanguage: `en`,
                         images: [`one`, `two`],
-                        currentIndex: (index, descriptionEN, description) =>
-                            events.push([index, descriptionEN, description]),
-                        onStatus: value => statuses.push(value),
+                        currentIndex: (
+                            index,
+                            descriptionEN,
+                            description,
+                            durationMs,
+                        ) => events.push([
+                            index,
+                            descriptionEN,
+                            description,
+                            durationMs,
+                        ]),
                     });
-                // second image fails, first kept
                 assertEqual(results.length, 2, `two results`);
-                assertEqual(results[0].descriptionEN, `A red square`, `first kept`);
-                assertEqual(results[1].descriptionEN, ``, `second empty`);
-                assertEqual(cpu.calls.chat, 2, `both images tried`);
                 assertEqual(
-                    events.some(([index, en]) => index == 0 && en == `A red square`),
-                    true,
-                    `first event`,
+                    results[0].descriptionEN,
+                    `A red square`,
+                    `first english`,
                 );
                 assertEqual(
-                    statuses.some(value => value.error == `image failed`),
-                    true,
-                    `failure reported`,
+                    results[0].description,
+                    `A red square`,
+                    `english kept`,
                 );
+                assertEqual(cpu.calls.chat, 2, `one chat per image`);
+                assertEqual(events.length, 6, `three events per image`);
+                assertEqual(events[0][1], undefined, `first start`);
+                assertEqual(events[1][1], `A red square`, `first english ready`);
+                assertEqual(events[2][2], `A red square`, `first final`);
+                assertEqual(events[3][0], 1, `second start`);
+            },
+        },
+        {
+            name: `describe/images gpu`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        cpu = createFakeEngine({
+                            backend: LlmBackend.cpu,
+                            chatText: `A red square`,
+                        }),
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            chatText: `Ein rotes Quadrat`,
+                        }),
+                        runtime = createRuntime({
+                            engines: {
+                                cpu: cpu.engine,
+                                litert: gpu.engine,
+                            },
+                        }),
+                        results = await createDescribeImagesOn(runtime)({
+                            targetLanguage: `German`,
+                            images: [`one`],
+                        });
+                    assertEqual(
+                        results[0].descriptionEN,
+                        `A red square`,
+                        `english description`,
+                    );
+                    assertEqual(
+                        results[0].description,
+                        `Ein rotes Quadrat`,
+                        `translated description`,
+                    );
+                    assertEqual(gpu.calls.chat, 1, `one translation`);
+                    assertEqual(
+                        gpu.requests[0].limits.maxReplyTokens,
+                        256,
+                        `translation budget`,
+                    );
+                });
+            },
+        },
+        {
+            name: `describe/translated wrapper`,
+            run: async () => {
+                await withGpu(async () => {
+                    const
+                        events: Array<[number, string?, string?]> = [],
+                        gpu = createFakeEngine({
+                            backend: LlmBackend.gpu,
+                            chatText: `Ein Baum`,
+                        }),
+                        runtime = createRuntime({
+                            engines: { litert: gpu.engine },
+                        }),
+                        results = await createDescribeTranslatedOn(runtime)({
+                            targetLanguage: `German`,
+                            descriptions: [`A tree`],
+                            currentIndex: (
+                                index,
+                                descriptionEN,
+                                description,
+                            ) => events.push([
+                                index,
+                                descriptionEN,
+                                description,
+                            ]),
+                        });
+                    assertEqual(results.length, 1, `one result`);
+                    assertEqual(results[0], `Ein Baum`, `translated`);
+                    assertEqual(events.length, 1, `one event`);
+                    assertEqual(events[0][2], `Ein Baum`, `event translation`);
+                });
             },
         },
         {
@@ -5278,18 +5321,17 @@ const definitions: Array<{
                     logs.push(args.map(value => `${value}`).join(` `));
                 };
                 try {
-                    await createDescribeOn(runtime)({
-                        targetLanguage: `en`,
-                        images: [`one`],
+                    await createDescribeImageOn(runtime)({
+                        image: `one`,
                         logging: true,
                     });
                     assert(
-                        logs.some(line => line.startsWith(`Describe start`)),
+                        logs.some(line => line.startsWith(`Describe image start`)),
                         `describe start log`,
                     );
                     assert(
-                        logs.some(line => line.includes(`Describe english`)),
-                        `describe english log`,
+                        logs.some(line => line.includes(`Describe image done`)),
+                        `describe done log`,
                     );
                     assert(
                         logs.some(line => line.includes(`logged description`)),
@@ -5308,9 +5350,8 @@ const definitions: Array<{
                         `speed log`,
                     );
                     logs.length = 0;
-                    await createDescribeOn(runtime)({
-                        targetLanguage: `en`,
-                        images: [`one`],
+                    await createDescribeImageOn(runtime)({
+                        image: `one`,
                     });
                     assertEqual(logs.length, 0, `logs stay off`);
                 } finally {

@@ -169,9 +169,8 @@ const
     thinkOpenTags = [
         `<|channel>thought\n`,
         `<|channel>thought`,
-        `...`,
     ],
-    thinkCloseTags = [`<channel|>`, `...`],
+    thinkCloseTags = [`<channel|>`],
     /** Content parts of user turn */
     userContent = (
         text: string,

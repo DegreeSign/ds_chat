@@ -29,6 +29,27 @@ declare enum LlmPhase {
     download = "download",
     load = "load"
 }
+/** Operation an estimate covers */
+declare enum EstimateOperation {
+    analyze = "analyze",
+    describe = "describe",
+    translate = "translate",
+    tags = "tags",
+    translateTags = "translateTags"
+}
+/** Stage of an enhanced description */
+declare enum DescriptionEnhancedStage {
+    translate = "translate",
+    tags = "tags",
+    translateTags = "translateTags"
+}
+/** Fields of a preload request */
+declare enum ChatPreloadField {
+    model = "model",
+    limits = "limits",
+    logging = "logging",
+    onStatus = "onStatus"
+}
 /** File system failure names */
 declare enum StoreFault {
     quota = "QuotaExceededError",
@@ -56,4 +77,4 @@ declare enum WebSearchProvider {
     wikipedia = "wikipedia",
     duckduckgo = "duckduckgo"
 }
-export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, StoreFault, ChatModelId, BuiltinTool, WebSearchProvider, };
+export { LlmRole, ChatStatus, LlmStatus, LlmBackend, LlmPhase, EstimateOperation, DescriptionEnhancedStage, ChatPreloadField, StoreFault, ChatModelId, BuiltinTool, WebSearchProvider, };

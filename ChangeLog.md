@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.0
+
+- Add `describeImage`, describes one image in English.
+- Add `descriptionEnhanced`, translates and tags one description.
+- Add `translateTags`, translates stored tags in place.
+- Add `EstimateOperation`, names five estimated operations.
+- Add `EstimateReport` and `EstimateEntry`, per-operation seconds.
+- Add `onEstimate` to both single-item requests.
+- Add `DescribeImageInput`, one image request.
+- Add `DescriptionEnhancedInput`, one English text request.
+- Add `TranslateTagsInput`, one stored tags request.
+- Add `DescriptionEnhancedStage` enum, enhance pass names.
+- Add `ChatPreloadField` enum, preload request keys.
+- Add `DescriptionEnhanced`, translation, tags and nsfw.
+- Add `ImageTag`, gallery tag with translations.
+- Deprecate `describeImages`, use `describeImage`.
+- Deprecate `describeTranslated`, use `descriptionEnhanced`.
+- Deprecate `DescribeImagesInput` and `DescribeTranslatedInput`.
+- Deprecate `ImageDescription`, use `DescriptionEnhanced`.
+
 ## 1.5.0
 
 - Add `ChatInput.onPromptSpeed`, live prompt processing speed.

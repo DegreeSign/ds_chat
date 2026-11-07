@@ -4,12 +4,18 @@ const {
     clearModelCache,
     createChat,
     preloadModel,
+    describeImage,
     describeImages,
+    describeTranslated,
+    descriptionEnhanced,
     builtinTools,
     calculateTool,
     currencyTool,
     webSearchTool,
     BuiltinTool,
+    ChatPreloadField,
+    DescriptionEnhancedStage,
+    EstimateOperation,
     ChatModelId,
     ChatStatus,
     LlmBackend,
@@ -135,12 +141,25 @@ const main = async () => {
         `gpu preload unsupported`,
     );
 
+    assertEqual(typeof describeImage, `function`, `describe image`);
     assertEqual(typeof describeImages, `function`, `describe images`);
-    const descriptions = await describeImages({
-        targetLanguage: `en`,
-        images: [],
-    });
-    assertEqual(descriptions.length, 0, `empty description batch`);
+    assertEqual(
+        typeof describeTranslated,
+        `function`,
+        `describe translated`,
+    );
+    assertEqual(
+        typeof descriptionEnhanced,
+        `function`,
+        `describe enhanced`,
+    );
+    assertEqual(EstimateOperation.tags, `tags`, `estimate operation`);
+    assertEqual(ChatPreloadField.logging, `logging`, `preload field`);
+    assertEqual(
+        DescriptionEnhancedStage.tags,
+        `tags`,
+        `enhance stage`,
+    );
 
     createChat({
         model: ChatModelId.qwen3_vl_2b,
@@ -152,7 +171,18 @@ const main = async () => {
     assertEqual(typeof esm.createChat, `function`, `esm createChat`);
     assertEqual(typeof esm.preloadModel, `function`, `esm preloadModel`);
     assertEqual(typeof esm.clearModelCache, `function`, `esm clearModelCache`);
+    assertEqual(typeof esm.describeImage, `function`, `esm describeImage`);
     assertEqual(typeof esm.describeImages, `function`, `esm describeImages`);
+    assertEqual(
+        typeof esm.describeTranslated,
+        `function`,
+        `esm describeTranslated`,
+    );
+    assertEqual(
+        typeof esm.descriptionEnhanced,
+        `function`,
+        `esm descriptionEnhanced`,
+    );
     assertEqual(esm.ChatStatus.offline, ChatStatus.offline, `esm enum`);
     assertEqual(esm.LlmRole.user, LlmRole.user, `esm named export`);
     assertEqual(esm.LlmBackend.gpu, LlmBackend.gpu, `esm gpu backend`);

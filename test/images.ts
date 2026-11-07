@@ -2,7 +2,7 @@
 // Usage: yarn test:images
 // Needs server and build/test fixtures
 
-import { createDescribeOn } from '../src/describe';
+import { createDescribeImageOn } from '../src/describe';
 import { buildMessages } from '../src/engines/engine';
 import { resizeImages } from '../src/engines/images';
 import { LlmBackend, LlmPhase, LlmStatus } from '../src/enums';
@@ -112,7 +112,7 @@ const loadFixtures = async (): Promise<Array<{ index: number, data: string }>> =
 const main = async () => {
     const
         fixtures = await loadFixtures(),
-        describe = createDescribeOn(createForwardingRuntime());
+        describe = createDescribeImageOn(createForwardingRuntime());
     if (!fixtures.length) {
         console.log(
             `[images] no fixtures found in build/test, expected test/image_0.png`,
@@ -129,15 +129,21 @@ const main = async () => {
         return;
     }
     console.log(`[images] describing ${fixtures.length} fixtures`);
-    const results = await describe({
-        targetLanguage: `en`,
-        images: fixtures.map(item => item.data),
-    });
-    const rows = results.map((item, position) => ({
-        image: `image_${fixtures[position].index}`,
-        durationMs: item.durationMs,
-        description: item.descriptionEN,
-    }));
+    const rows: Array<{
+        image: string,
+        durationMs: number,
+        description: string,
+    }> = [];
+    for (const fixture of fixtures) {
+        const
+            startedAt = Date.now(),
+            description = await describe({ image: fixture.data });
+        rows.push({
+            image: `image_${fixture.index}`,
+            durationMs: Date.now() - startedAt,
+            description,
+        });
+    };
     report({ pass: rows.length, fail: 0, skipped: false, rows });
 };
 
