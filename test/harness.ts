@@ -45,6 +45,8 @@ import {
 import {
     cpuFiles,
     storedBlobs,
+    streamBlobs,
+    tailBlob,
     toWllamaMessages,
     visionLimits,
 } from "../src/engines/wllama";
@@ -4380,6 +4382,142 @@ const definitions: Array<{
                         undefined,
                         `cpu removed`,
                     );
+                } finally {
+                    globalThis.fetch = original;
+                    await cpuStore.purge();
+                };
+            },
+        },
+        {
+            name: `store/tail blob range`,
+            run: async () => {
+                const
+                    url = `https://example.test/tail.gguf`,
+                    body = new Uint8Array(5000)
+                        .map((_, index) => (index * 3) % 251),
+                    storedSize = 3000,
+                    stored = new Blob([body.slice(0, storedSize)]),
+                    ranges: string[] = [],
+                    original = globalThis.fetch;
+                globalThis.fetch = (async (
+                    _input: RequestInfo | URL,
+                    init?: RequestInit,
+                ) => {
+                    const match = /bytes=(\d+)-(\d+)/.exec(
+                        ((init?.headers || {}) as Record<string, string>)
+                            .Range || ``,
+                    );
+                    if (!match) throw new Error(`range missing`);
+                    const
+                        start = Number(match[1]),
+                        end = Number(match[2]);
+                    ranges.push(match[0]);
+                    return new Response(body.slice(start, end + 1), {
+                        status: 206,
+                        headers: {
+                            'content-range': `bytes ${start}-${end}/${body.length}`,
+                        },
+                    });
+                }) as typeof fetch;
+                try {
+                    const blob = tailBlob({
+                        url,
+                        stored,
+                        storedSize,
+                        total: body.length,
+                    });
+                    assertEqual(blob.size, body.length, `tail size`);
+                    const
+                        head = new Uint8Array(
+                            await blob.slice(0, 1000).arrayBuffer()),
+                        tail = new Uint8Array(
+                            await blob.slice(4000, 5000).arrayBuffer()),
+                        mixed = new Uint8Array(
+                            await blob.slice(2500, 3500).arrayBuffer()),
+                        whole = new Uint8Array(
+                            await blob.slice(0, body.length).arrayBuffer());
+                    assertEqual(head[999], body[999], `tail stored bytes`);
+                    assertEqual(tail[999], body[4999], `tail remote bytes`);
+                    assertEqual(mixed[499], body[2999], `tail stored edge`);
+                    assertEqual(mixed[500], body[3000], `tail remote edge`);
+                    assertEqual(whole[4999], body[4999], `tail whole file`);
+                    assertEqual(
+                        `|${ranges.join(`|`)}|`,
+                        `|bytes=4000-4999|bytes=3000-3499|bytes=3000-4999|`,
+                        `tail ranges fetched`);
+                } finally {
+                    globalThis.fetch = original;
+                };
+            },
+        },
+        {
+            name: `store/stream blobs`,
+            run: async () => {
+                const
+                    model: ChatModel = {
+                        id: ChatModelId.qwen3_vl_2b,
+                        reasoning: true,
+                        cpu: {
+                            repo: `test/stream`,
+                            file: `model.gguf`,
+                            mmproj: { repo: `test/stream`, file: `mmproj.gguf` },
+                        },
+                    },
+                    files = cpuFiles(model),
+                    bodies = new Map([
+                        [files[0].url, new Uint8Array(1200)
+                            .map((_, index) => index % 251)],
+                        [files[1].url, new Uint8Array(800)
+                            .map((_, index) => (index + 5) % 251)],
+                    ]),
+                    heads: string[] = [],
+                    ranges: string[] = [],
+                    original = globalThis.fetch;
+                globalThis.fetch = (async (
+                    input: RequestInfo | URL,
+                    init?: RequestInit,
+                ) => {
+                    const url = `${input}`;
+                    const body = bodies.get(url) || new Uint8Array();
+                    if (init?.method == `HEAD`) {
+                        heads.push(url);
+                        return new Response(null, {
+                            status: 200,
+                            headers: { 'content-length': `${body.length}` },
+                        });
+                    };
+                    const match = /bytes=(\d+)-(\d+)/.exec(
+                        ((init?.headers || {}) as Record<string, string>)
+                            .Range || ``,
+                    );
+                    if (!match) throw new Error(`range missing`);
+                    const
+                        start = Number(match[1]),
+                        end = Number(match[2]);
+                    ranges.push(`${url} ${match[0]}`);
+                    return new Response(body.slice(start, end + 1), {
+                        status: 206,
+                        headers: {
+                            'content-range': `bytes ${start}-${end}/${body.length}`,
+                        },
+                    });
+                }) as typeof fetch;
+                try {
+                    await cpuStore.purge();
+                    const blobs = await streamBlobs(model);
+                    assertEqual(blobs.length, 2, `stream blob count`);
+                    assertEqual(blobs[0].size, 1200, `stream model size`);
+                    assertEqual(blobs[1].size, 800, `stream projector size`);
+                    const
+                        modelBytes = new Uint8Array(
+                            await blobs[0].slice(0, 1200).arrayBuffer()),
+                        projectorBytes = new Uint8Array(
+                            await blobs[1].slice(0, 800).arrayBuffer());
+                    assertEqual(modelBytes[1199], 1199 % 251, `stream model tail`);
+                    assertEqual(projectorBytes[799], 804 % 251,
+                        `stream projector tail`);
+                    assertEqual(heads.length, 2, `stream head sizes`);
+                    assertEqual(ranges.length, 2, `stream range count`);
                 } finally {
                     globalThis.fetch = original;
                     await cpuStore.purge();

@@ -9,7 +9,7 @@ import {
     replyOptions,
     runEngineChat,
 } from './engine';
-import { createModelStore, isQuotaError } from './store';
+import { createModelStore } from './store';
 import { heuristicThreads } from './threads';
 import { contentBuffer, imageTokens } from './images';
 import { log } from '../log';
@@ -141,9 +141,121 @@ const
         instance: Wllama,
         model: ChatModel,
     ): Promise<boolean> => {
-        const entries = await instance.cacheManager.list();
-        return cpuFiles(model).every(file =>
-            entries.some(entry => entryOf(entry, file.name)));
+        const
+            files = cpuFiles(model),
+            models = await instance.modelManager.getModels()
+                .catch(() => []);
+        return !!files.length && models.some(entry => entry.url == files[0].url);
+    },
+    /** Complete legacy cache blobs */
+    cachedBlobs = async (
+        instance: Wllama,
+        model: ChatModel,
+    ): Promise<Blob[] | undefined> => {
+        const files = cpuFiles(model);
+        if (!files.length) return undefined;
+        const
+            models = await instance.modelManager.getModels()
+                .catch(() => []),
+            hit = models.find(entry => entry.url == files[0].url);
+        return hit ? await hit.open().catch(() => undefined) : undefined;
+    },
+    /** Read one HTTP byte range */
+    fetchRange = async (
+        url: string,
+        start: number,
+        end: number,
+        signal?: AbortSignal,
+    ): Promise<ArrayBuffer> => {
+        const response = await fetch(url, {
+            signal,
+            headers: { Range: `bytes=${start}-${end - 1}` },
+        });
+        // range keeps memory flat
+        if (response.status != 206) {
+            await response.body?.cancel().catch(() => { });
+            throw new Error(`Model range failed`);
+        };
+        return await response.arrayBuffer();
+    },
+    /** Remote file size in bytes */
+    remoteSize = async (
+        url: string,
+        signal?: AbortSignal,
+    ): Promise<number> => {
+        const response = await fetch(url, { method: `HEAD`, signal });
+        await response.body?.cancel().catch(() => { });
+        const size = Number(response.headers.get(`content-length`)) || 0;
+        if (!response.ok || !size) throw new Error(`Model size unknown`);
+        return size;
+    },
+    /** Stored prefix and network blob */
+    tailBlob = ({
+        url,
+        stored,
+        storedSize,
+        total,
+        signal,
+    }: {
+        url: string,
+        stored?: Blob,
+        storedSize: number,
+        total: number,
+        signal?: AbortSignal,
+    }): Blob => {
+        const limit = Math.max(0, Math.min(storedSize, total));
+        return {
+            size: total,
+            /** Blob-compatible range */
+            slice: (start?: number, end?: number) => ({
+                /** Read from both copies */
+                arrayBuffer: async (): Promise<ArrayBuffer> => {
+                    const
+                        first = Math.max(0, Math.min(start ?? 0, total)),
+                        last = Math.max(first, Math.min(end ?? total, total));
+                    if (last <= first) return new ArrayBuffer(0);
+                    // stored prefix holds the range
+                    if (stored && last <= limit)
+                        return await stored.slice(first, last).arrayBuffer();
+                    // range starts past the prefix
+                    if (!stored || first >= limit)
+                        return await fetchRange(url, first, last, signal);
+                    // range crosses the prefix end
+                    const
+                        head = await stored.slice(first, limit).arrayBuffer(),
+                        tail = await fetchRange(url, limit, last, signal),
+                        merged = new Uint8Array(
+                            head.byteLength + tail.byteLength,
+                        );
+                    merged.set(new Uint8Array(head));
+                    merged.set(new Uint8Array(tail), head.byteLength);
+                    return merged.buffer;
+                },
+            }),
+        } as unknown as Blob;
+    },
+    /** Stored tails and network blobs */
+    streamBlobs = async (
+        model: ChatModel,
+        signal?: AbortSignal,
+    ): Promise<Blob[]> => {
+        const blobs: Blob[] = [];
+        for (const file of cpuFiles(model)) {
+            if (signal?.aborted) throw new Error(`Cancelled`);
+            const
+                stored = await store.stored(file.url),
+                // metadata may know the total
+                total = stored?.total || await remoteSize(file.url, signal);
+            if (!total) throw new Error(`Model size unknown`);
+            blobs.push(tailBlob({
+                url: file.url,
+                stored: stored?.file,
+                storedSize: Math.min(stored?.size || 0, total),
+                total,
+                signal,
+            }));
+        };
+        return blobs;
     },
     /** CPU files as stored blobs */
     storedBlobs = async ({
@@ -262,10 +374,7 @@ const
             threads = Math.min(heuristicThreads(cores), limits.maxThreads),
             instance = await getWllama(),
             complete = await filesStored(model),
-            projectorFile = cpu.mmproj?.file,
-            modelFileUrl = modelUrl(cpu.repo, cpu.file),
-            projectorUrl = projectorFile
-                ? modelUrl(cpu.mmproj?.repo ?? cpu.repo, projectorFile) : ``;
+            projectorFile = cpu.mmproj?.file;
         if (signal?.aborted) {
             await dropWllama();
             throw new Error(`Cancelled`);
@@ -295,48 +404,26 @@ const
             n_keep: Math.max(64, Math.round(contextSize / 16)),
             ...visionLimits(model),
         };
-        let
-            /** Full storage skips the cache */
-            quotaFull = false;
         try {
             // complete store skips network
             let blobs = complete
                 ? await storedBlobs({ model, signal, onProgress })
                 : undefined;
-            if (!blobs && !complete && !await filesCached(instance, model)
-                .catch(() => false))
+            // complete legacy cache skips download
+            if (!blobs)
+                blobs = await cachedBlobs(instance, model);
+            if (!blobs)
                 blobs = await storedBlobs({ model, signal, onProgress })
                     .catch(error => {
                         if (signal?.aborted) throw new Error(`Cancelled`);
-                        // stream when the store fails
+                        // failed store streams its tail
                         if (logging) console.log(`Local model store failed`, error);
-                        quotaFull = isQuotaError(error);
                         return undefined;
                     });
-            if (blobs) {
-                onProgress(1, LlmPhase.load);
-                await instance.loadModel(blobs, loadParams);
-            } else {
-                await instance.loadModelFromUrl(
-                    projectorUrl
-                        ? { url: modelFileUrl, mmprojUrl: projectorUrl }
-                        : modelFileUrl,
-                    {
-                        ...loadParams,
-                        useCache: !quotaFull,
-                        // abort download when cancelled
-                        signal,
-                        progressCallback: ({ loaded, total }) => {
-                            const progress = total ? loaded / total : 0;
-                            // final progress starts loading
-                            onProgress(
-                                progress,
-                                progress >= 1 ? LlmPhase.load : LlmPhase.download,
-                            );
-                        },
-                    },
-                );
-            };
+            // no copy reads stored tail
+            if (!blobs) blobs = await streamBlobs(model, signal);
+            onProgress(1, LlmPhase.load);
+            await instance.loadModel(blobs, loadParams);
         } catch (error) {
             // failed download leaves worker unusable
             await dropWllama();
@@ -408,6 +495,8 @@ export {
     cpuFiles,
     startLLM,
     storedBlobs,
+    streamBlobs,
+    tailBlob,
     toWllamaMessages,
     visionLimits,
     wllamaEngine,

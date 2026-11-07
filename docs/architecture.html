@@ -526,7 +526,7 @@ f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 363);
 f(`models`, `runtime`, `models.ts`, `src/models.ts`, 137);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 659);
-f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 414);
+f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 503);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
 f(`litert`, `engines`, `litert.ts`, `src/engines/litert.ts`, 677);
 f(`store`, `engines`, `store.ts`, `src/engines/store.ts`, 538);
@@ -958,7 +958,7 @@ n(`engine`, `runEngineChat`, 612, `runEngineChat`,
 n(`wllama`, `visionLimits`, 42, `visionLimits`,
     `(model) => object`,
     `Only the instruct builds set a 16 to 128 image token window`);
-n(`wllama`, `wllamaEngine`, 388, `wllamaEngine`, `LlmEngine`,
+n(`wllama`, `wllamaEngine`, 475, `wllamaEngine`, `LlmEngine`,
     `backend cpu, startLLM, cached, purge`);
 n(`wllama`, `resolveAssets`, 59, `resolveAssets`, `(overrides?) => WllamaAssets`,
     `Merge per-start overrides over the auto-resolved asset URLs`);
@@ -975,11 +975,27 @@ n(`wllama`, `filesStored`, 130, `filesStored`, `(model) => Promise<boolean>`,
     `Every CPU file including the projector is complete in the store`);
 n(`wllama`, `filesCached`, 140, `filesCached`,
     `(instance, model) => Promise<boolean>`,
-    `Every CPU file is complete in the wllama cache manager`);
-n(`wllama`, `storedBlobs`, 149, `storedBlobs`,
+    `The cache manager holds a valid model with its projector`);
+n(`wllama`, `cachedBlobs`, 151, `cachedBlobs`,
+    `(instance, model) => Promise<Blob[]?>`,
+    `Open the valid cache manager entry, undefined when absent`);
+n(`wllama`, `fetchRange`, 164, `fetchRange`,
+    `(url, start, end, signal) => Promise<ArrayBuffer>`,
+    `Read one byte range, a non 206 response fails the load`);
+n(`wllama`, `remoteSize`, 182, `remoteSize`,
+    `(url, signal) => Promise<number>`,
+    `Remote file size from a HEAD content length`);
+n(`wllama`, `tailBlob`, 193, `tailBlob`,
+    `({ url, stored, storedSize, total, signal }) => Blob`,
+    `Blob-compatible file that reads the stored prefix from disk and the`
+    + ` missing tail over range requests`);
+n(`wllama`, `streamBlobs`, 238, `streamBlobs`,
+    `(model, signal) => Promise<Blob[]>`,
+    `Every CPU file as a tail blob, no copy written`);
+n(`wllama`, `storedBlobs`, 261, `storedBlobs`,
     `({ model, signal, onProgress }) => Promise<Blob[]?>`,
     `Read every CPU file from the store, resuming the parts already stored`);
-n(`wllama`, `toWllamaMessages`, 176, `toWllamaMessages`,
+n(`wllama`, `toWllamaMessages`, 288, `toWllamaMessages`,
     `(messages) => Promise<WllamaMessage[]>`,
     `Map text, image and audio parts to wllama content segments`);
 n(`wllama`, `dropWllama`, 106, `dropWllama`, `() => Promise<void>`,
@@ -989,19 +1005,20 @@ n(`wllama`, `runtime`, 33, `runtime`,
     `The resumable store, the GPU probe log filter and the log switch`);
 n(`threads`, `heuristicThreads`, 2, `heuristicThreads`, `(cores) => number`,
     `Logical cores minus a fifth, at least one core free, minimum 1`);
-n(`wllama`, `startLLM`, 238, `startLLM`, `(params) => Promise<LlmRuntime>`,
-    `Pick 4k or 8k context, load the model and projector from stored blobs,`
-    + ` fall back to the cache or network, skip the cache when storage is full,`
-    + ` take the heuristic thread count lowered by the caller budget, warm the`
-    + ` graphs at load, shift a full context, set no image limits except the`
-    + ` instruct describer's 16 to 128 window, abortable`);
-n(`wllama`, `cached`, 391, `cached`, `(model) => Promise<boolean>`,
+n(`wllama`, `startLLM`, 350, `startLLM`, `(params) => Promise<LlmRuntime>`,
+    `Pick 4k or 8k context, load the model and projector from the complete`
+    + ` store, a valid legacy cache or the store download, stream the stored`
+    + ` tail over range requests when no copy fits, take the heuristic thread`
+    + ` count lowered by the caller budget, warm the graphs at load, shift a`
+    + ` full context, set no image limits except the instruct describer's 16`
+    + ` to 128 window, abortable`);
+n(`wllama`, `cached`, 478, `cached`, `(model) => Promise<boolean>`,
     `Every file including the projector is stored or in the cache manager`);
-n(`wllama`, `chat`, 203, `chatOn`, `(instance, model, params)`,
+n(`wllama`, `chat`, 315, `chatOn`, `(instance, model, params)`,
     `Reject unsupported images or audio, map parts, pass abortSignal, stream`);
-n(`wllama`, `unload`, 382, `runtime.unload`, `() => Promise<void>`,
+n(`wllama`, `unload`, 469, `runtime.unload`, `() => Promise<void>`,
     `Exit the worker through dropWllama, a crashed one is not reused`);
-n(`wllama`, `purge`, 398, `purge`, `() => Promise<void>`,
+n(`wllama`, `purge`, 485, `purge`, `() => Promise<void>`,
     `Delete the CPU store and clear the wllama cache manager`);
 
 // LiteRT relations
@@ -1330,7 +1347,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.5.1`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.6.0`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`
@@ -1560,10 +1577,9 @@ e(`wllama.startLLM`, `getWllama`, `call`);
 e(`wllama.startLLM`, `dropWllama`, `call`);
 e(`wllama.startLLM`, `wllama.cpuFiles`, `call`);
 e(`wllama.startLLM`, `wllama.filesStored`, `call`);
-e(`wllama.startLLM`, `wllama.filesCached`, `call`);
+e(`wllama.startLLM`, `wllama.cachedBlobs`, `call`);
 e(`wllama.startLLM`, `wllama.storedBlobs`, `call`);
-e(`wllama.startLLM`, `store.isQuotaError`, `call`);
-e(`wllama.startLLM`, `engine.modelUrl`, `call`);
+e(`wllama.startLLM`, `wllama.streamBlobs`, `call`);
 e(`wllama.startLLM`, `entryOf`, `call`);
 e(`wllama.startLLM`, `models.snapshots`, `call`);
 e(`wllama.startLLM`, `wllama.chat`, `inner`);
@@ -1580,9 +1596,14 @@ e(`wllama.cpuFiles`, `engine.modelUrl`, `call`);
 e(`wllama.filesStored`, `wllama.cpuFiles`, `call`);
 e(`wllama.filesStored`, `store.stored`, `call`);
 e(`wllama.filesCached`, `wllama.cpuFiles`, `call`);
-e(`wllama.filesCached`, `wllama.entryOf`, `call`);
+e(`wllama.cachedBlobs`, `wllama.cpuFiles`, `call`);
 e(`wllama.storedBlobs`, `wllama.cpuFiles`, `call`);
 e(`wllama.storedBlobs`, `store.download`, `call`);
+e(`wllama.streamBlobs`, `wllama.cpuFiles`, `call`);
+e(`wllama.streamBlobs`, `store.stored`, `call`);
+e(`wllama.streamBlobs`, `wllama.remoteSize`, `call`);
+e(`wllama.streamBlobs`, `wllama.tailBlob`, `call`);
+e(`wllama.tailBlob`, `wllama.fetchRange`, `call`);
 e(`wllama.cached`, `wllama.filesStored`, `call`);
 e(`wllama.cached`, `wllama.filesCached`, `call`);
 e(`wllama.cached`, `getWllama`, `call`);

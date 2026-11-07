@@ -13,6 +13,16 @@ cpuFiles: (model: ChatModel) => Array<{
     name: string;
     url: string;
 }>, 
+/** Stored prefix and network blob */
+tailBlob: ({ url, stored, storedSize, total, signal, }: {
+    url: string;
+    stored?: Blob;
+    storedSize: number;
+    total: number;
+    signal?: AbortSignal;
+}) => Blob, 
+/** Stored tails and network blobs */
+streamBlobs: (model: ChatModel, signal?: AbortSignal) => Promise<Blob[]>, 
 /** CPU files as stored blobs */
 storedBlobs: ({ model, signal, onProgress, }: {
     model: ChatModel;
@@ -23,4 +33,4 @@ storedBlobs: ({ model, signal, onProgress, }: {
 toWllamaMessages: (messages: EngineMessage[]) => Promise<WllamaMessage[]>, 
 /** Start CPU runtime engine entry */
 startLLM: ({ model, limits, onProgress, signal, logging, assets: overrides, }: StartLlmParams) => Promise<LlmRuntime>, wllamaEngine: LlmEngine;
-export { cpuFiles, startLLM, storedBlobs, toWllamaMessages, visionLimits, wllamaEngine, };
+export { cpuFiles, startLLM, storedBlobs, streamBlobs, tailBlob, toWllamaMessages, visionLimits, wllamaEngine, };

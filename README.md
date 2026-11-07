@@ -549,6 +549,11 @@ reuse the loaded runtime. One model stays resident, and a new model replaces it.
 An interrupted download keeps every part it committed and resumes from the last
 one on the next attempt, including after a reload.
 
+When the storage is full, the CPU engine reads the parts already on disk and
+streams only the missing tail over HTTP, so a nearly complete download still
+loads without writing a second copy. The WebGPU engine streams the whole file
+in that case.
+
 Qwen3-VL 2B downloads a vision projector of about 445 MB with the model, so its
 total download is about 1.5 GB. It runs on the CPU engine, with a 4096 token
 context on a phone and 8192 on a desktop. Its projector uses the same CPU thread
