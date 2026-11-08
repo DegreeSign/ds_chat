@@ -1,5 +1,5 @@
-import { LlmRole } from '../enums';
-import { mobileDevice } from '../models';
+import { LlmRole } from '../types/enums';
+import { mobileDevice } from '../core/models';
 import {
     gpuImageSize,
     imageTokens as defaultImageTokens,

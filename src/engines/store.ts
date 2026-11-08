@@ -1,4 +1,4 @@
-import { LlmPhase, StoreFault } from '../enums';
+import { LlmPhase, StoreFault } from '../types/enums';
 import { contentLength } from './engine';
 import type {
     ModelStore,

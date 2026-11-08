@@ -1,9 +1,9 @@
-import { ChatModelId } from './enums';
+import { ChatModelId } from '../types/enums';
 import type {
     ChatModel,
     GpuNavigator,
     MobileNavigator,
-} from './types';
+} from '../types';
 
 /** Default model probed once */
 let defaultModel: Promise<ChatModelId | undefined> | undefined;

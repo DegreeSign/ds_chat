@@ -4,9 +4,9 @@
 import { litertEngine } from '../src/engines/litert';
 import { wllamaEngine } from '../src/engines/wllama';
 import { resolveLlmLimits } from '../src/engines/engine';
-import { findLlmModel } from '../src/models';
-import { createRuntime } from '../src/service';
-import { ChatModelId, LlmRole, LlmStatus } from '../src/enums';
+import { findLlmModel } from '../src/core/models';
+import { createRuntime } from '../src/chat/service';
+import { ChatModelId, LlmRole, LlmStatus } from '../src/types/enums';
 import type {
     ChatModel,
     LlmEngine,

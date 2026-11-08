@@ -1,4 +1,4 @@
-import { WebSearchProvider } from '../enums';
+import { WebSearchProvider } from '../types/enums';
 import { clampNumber, plainText } from './text';
 import type {
     ChatTool,

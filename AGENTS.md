@@ -16,8 +16,8 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   bundles them into `dist` as dynamic chunks; the consumer resolves no engine.
 - The package imports no DOM at module load. `createChat` runs in Node and
   React; inference reports `LlmStatus.unsupported` without a browser.
-- Put every interface and type in `src/types.ts`, and every enum in
-  `src/enums.ts`.
+- Put every interface and type in `src/types/index.ts`, and every enum in
+  `src/types/enums.ts`.
 - Pass an object parameter when a function takes more than one input.
 - Keep lines short, at most 100 columns.
 - Chain a run of adjacent `const` or `let` declarations into one statement: the
@@ -66,7 +66,7 @@ Load `npm` skill of `@degreesign/skills` on start (probably already installed)
   there between runs, are never committed and are never deleted.
 - Image tests read the full frames kept in `build/test`; never substitute
   another image, a screenshot, or a crop. The fixtures validate
-  `describeImages` in `src/describe.ts`.
+  `describeImages` in `src/describe/describe.ts`.
 - Verify with `yarn typecheck`, capped at 60 seconds per run.
 - Never run release, publish or deploy commands.
 - Node >= 24. The source is TypeScript built with webpack and `tsc`, imports

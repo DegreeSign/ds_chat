@@ -1,13 +1,13 @@
-export { clearModelCache, createChat, preloadModel } from './chat';
+export { clearModelCache, createChat, preloadModel } from './chat/chat';
 export {
     describeImage,
     describeModelId,
     descriptionEnhanced,
     imageReplyTokens,
     translateTags,
-} from './describe';
-export { describeImages, describeTranslated } from './deprecated';
-export { gpuAdapter } from './models';
+} from './describe/describe';
+export { describeImages, describeTranslated } from './describe/deprecated';
+export { gpuAdapter } from './core/models';
 export {
     builtinTools,
     calculateTool,
@@ -26,7 +26,7 @@ export {
     ChatModelId,
     BuiltinTool,
     WebSearchProvider,
-} from './enums';
+} from './types/enums';
 export type {
     ChatMessage,
     LlmLimits,

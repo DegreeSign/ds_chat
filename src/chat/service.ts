@@ -1,6 +1,6 @@
-import { litertEngine } from './engines/litert';
-import { wllamaEngine } from './engines/wllama';
-import { ChatModelId, LlmBackend, LlmPhase, LlmStatus } from './enums';
+import { litertEngine } from '../engines/litert';
+import { wllamaEngine } from '../engines/wllama';
+import { ChatModelId, LlmBackend, LlmPhase, LlmStatus } from '../types/enums';
 import type {
     ChatModel,
     GpuNavigator,
@@ -11,7 +11,7 @@ import type {
     RuntimeDeps,
     RuntimeLoadParams,
     RuntimeLoadWaiter,
-} from './types';
+} from '../types';
 
 /** One model load in flight */
 interface RuntimeLoad {

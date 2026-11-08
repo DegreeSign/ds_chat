@@ -93,7 +93,7 @@ console.log = (...args) => write(args.map(a =>
             : (() => { try { return JSON.stringify(a); } catch { return String(a); } })()
 ).join(" "));
 
-// the app prompt, src/describe.ts
+// the app prompt, src/describe/describe.ts
 const imageSystem = [
     "Write fully detailed, factual image descriptions for low-vision readers.",
     "Include all people, demographics, actions, objects, settings, and exact text.",

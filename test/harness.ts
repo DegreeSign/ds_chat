@@ -4,7 +4,7 @@ import {
     clearModelCache,
     createChat,
     preloadModel,
-} from "../src/index";import { createChatOn, createPreloadOn } from "../src/chat";
+} from "../src/index";import { createChatOn, createPreloadOn } from "../src/chat/chat";
 import {
     createDescribeImageOn,
     createDescriptionEnhancedOn,
@@ -12,12 +12,12 @@ import {
     descriptionEnhanced,
     imageReplyTokens,
     imageTranslateTokens,
-} from "../src/describe";
+} from "../src/describe/describe";
 import {
     createDescribeImagesOn,
     createDescribeTranslatedOn,
-} from "../src/deprecated";
-import { createRuntime } from "../src/service";
+} from "../src/describe/deprecated";
+import { createRuntime } from "../src/chat/service";
 import {
     buildMessages,
     createThinkSplitter,
@@ -43,7 +43,7 @@ import {
     resolveLlmModel,
     supportsAudio,
     supportsImages,
-} from "../src/models";
+} from "../src/core/models";
 import {
     cpuFiles,
     storedBlobs,
@@ -95,13 +95,13 @@ import {
     LlmRole,
     LlmStatus,
     WebSearchProvider,
-} from "../src/enums";
+} from "../src/types/enums";
 import {
     estimateReport,
     recordEstimate,
     resetEstimates,
-} from "../src/estimate";
-import { imageNote, imageSystem } from "../src/prompts";
+} from "../src/describe/estimate";
+import { imageNote, imageSystem } from "../src/describe/prompts";
 import {
     builtinTools,
     calculateTool,

@@ -1,4 +1,4 @@
-import { BuiltinTool } from '../enums';
+import { BuiltinTool } from '../types/enums';
 import { calculateTool } from './calculator';
 import { currencyTool } from './currency';
 import { webSearchTool } from './search';

@@ -521,16 +521,16 @@ const step = (ids, text) => ({ ids, text });
 
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 56);
-f(`enums`, `entry`, `enums.ts`, `src/enums.ts`, 105);
-f(`types`, `entry`, `types.ts`, `src/types.ts`, 1009);
-f(`chat`, `entry`, `chat.ts`, `src/chat.ts`, 304);
-f(`describe`, `entry`, `describe.ts`, `src/describe.ts`, 601);
-f(`prompts`, `entry`, `prompts.ts`, `src/prompts.ts`, 105);
-f(`estimate`, `entry`, `estimate.ts`, `src/estimate.ts`, 55);
-f(`deprecated`, `entry`, `deprecated.ts`, `src/deprecated.ts`, 155);
-f(`log`, `entry`, `log.ts`, `src/log.ts`, 7);
-f(`llm`, `runtime`, `service.ts`, `src/service.ts`, 362);
-f(`models`, `runtime`, `models.ts`, `src/models.ts`, 137);
+f(`enums`, `entry`, `enums.ts`, `src/types/enums.ts`, 105);
+f(`types`, `entry`, `types.ts`, `src/types/index.ts`, 1009);
+f(`chat`, `entry`, `chat.ts`, `src/chat/chat.ts`, 304);
+f(`describe`, `entry`, `describe.ts`, `src/describe/describe.ts`, 595);
+f(`prompts`, `entry`, `prompts.ts`, `src/describe/prompts.ts`, 107);
+f(`estimate`, `entry`, `estimate.ts`, `src/describe/estimate.ts`, 55);
+f(`deprecated`, `entry`, `deprecated.ts`, `src/describe/deprecated.ts`, 155);
+f(`log`, `runtime`, `log.ts`, `src/core/log.ts`, 7);
+f(`llm`, `runtime`, `service.ts`, `src/chat/service.ts`, 362);
+f(`models`, `runtime`, `models.ts`, `src/core/models.ts`, 137);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 645);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 501);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
@@ -1426,7 +1426,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.1`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.2`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`

@@ -1,7 +1,7 @@
 import type { CacheEntry, Wllama, WllamaLogger } from '@wllama/wllama/esm/index.js';
 import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
-import { cpuContextWindow, mobileCpuContextWindow, mobileDevice } from '../models';
+import { cpuContextWindow, mobileCpuContextWindow, mobileDevice } from '../core/models';
 import {
     hasAudio,
     hasImages,
@@ -12,8 +12,8 @@ import {
 import { createModelStore } from './store';
 import { heuristicThreads } from './threads';
 import { contentBuffer, imageTokens } from './images';
-import { log } from '../log';
-import { ChatModelId, LlmBackend, LlmPhase } from '../enums';
+import { log } from '../core/log';
+import { ChatModelId, LlmBackend, LlmPhase } from '../types/enums';
 import type {
     ChatModel,
     EngineChatParams,

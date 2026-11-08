@@ -2,10 +2,10 @@
 // Usage: yarn test:images
 // Needs server and build/test fixtures
 
-import { createDescribeImageOn } from '../src/describe';
+import { createDescribeImageOn } from '../src/describe/describe';
 import { buildMessages } from '../src/engines/engine';
 import { resizeImages } from '../src/engines/images';
-import { LlmBackend, LlmPhase, LlmStatus } from '../src/enums';
+import { LlmBackend, LlmPhase, LlmStatus } from '../src/types/enums';
 import type {
     EngineMessage,
     Runtime,

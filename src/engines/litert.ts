@@ -2,7 +2,7 @@ import { rNum } from '@degreesign/utils';
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
-import { litertContextWindow, mobileDevice, mobileLitertContextWindow } from '../models';
+import { litertContextWindow, mobileDevice, mobileLitertContextWindow } from '../core/models';
 import {
     contentLength,
     hasAudio,
@@ -13,8 +13,8 @@ import {
 } from './engine';
 import { createModelStore, isQuotaError } from './store';
 import { contentBuffer } from './images';
-import { log } from '../log';
-import { LlmBackend, LlmPhase } from '../enums';
+import { log } from '../core/log';
+import { LlmBackend, LlmPhase } from '../types/enums';
 import type {
     ChatModel,
     EngineChunk,

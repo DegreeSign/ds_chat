@@ -3,16 +3,16 @@ import {
     resolveLlmModel,
     supportsAudio,
     supportsImages,
-} from './models';
+} from '../core/models';
 import { runtime } from './service';
-import { resolveLlmLimits } from './engines/engine';
+import { resolveLlmLimits } from '../engines/engine';
 import {
     ChatModelId,
     ChatStatus,
     LlmPhase,
     LlmRole,
     LlmStatus,
-} from './enums';
+} from '../types/enums';
 import type {
     ActiveCall,
     CancelChat,
@@ -21,7 +21,7 @@ import type {
     ChatState,
     ChatStatusSnapshot,
     Runtime,
-} from './types';
+} from '../types';
 
 const
     /** Build one status snapshot */

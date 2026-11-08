@@ -2,15 +2,15 @@ import {
     createDescribeImageOn,
     createDescriptionEnhancedOn,
 } from './describe';
-import { gpuAdapter } from './models';
-import { runtime } from './service';
-import { ChatModelId, DescriptionEnhancedStage } from './enums';
+import { gpuAdapter } from '../core/models';
+import { runtime } from '../chat/service';
+import { ChatModelId, DescriptionEnhancedStage } from '../types/enums';
 import type {
     DescribeImagesInput,
     DescribeTranslatedInput,
     ImageDescription,
     Runtime,
-} from './types';
+} from '../types';
 
 const
     /** Whether a language needs translation */

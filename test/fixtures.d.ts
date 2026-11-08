@@ -1,4 +1,4 @@
-import type { LlmBackend } from '../src/enums';
+import type { LlmBackend } from '../src/types/enums';
 import type {
     ChatModel,
     EngineChatParams,
