@@ -940,6 +940,9 @@ n(`models`, `mobileLitertWindow`, 70, `size`,
 n(`models`, `mobileDevice`, 72, `mobileDevice`,
     `(nav?) => boolean`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
+n(`models`, `contextWindow`, 84, `contextWindow`,
+    `(model) => number`,
+    `The CPU or LiteRT window of one catalog entry, smaller on a phone`);
 n(`models`, `findLlmModel`, 84, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
@@ -969,71 +972,81 @@ n(`engine`, `limits`, 23, `defaultLlmLimits`, `LlmLimits`,
     + ` and a 0.5 GPU busy share`);
 n(`engine`, `gpuReasoning`, 36, `gpuReasoningTokens`, `1200`,
     `Reasoning budget of the GPU engine, thought plus answer`);
-n(`engine`, `estimate`, 40, `promptTokenEstimate`,
+n(`engine`, `estimate`, 44, `promptTokenEstimate`,
     `(messages, imageTokens) => number`,
     `Rough prompt tokens, four characters each and one image budget`);
-n(`engine`, `budgetLimit`, 58, `budgetLimit`,
+n(`engine`, `fitBudget`, 38, `contextReserveTokens · minReplyTokens`,
+    `128 · 64`,
+    `Template headroom and the smallest generated reply`);
+n(`engine`, `fitPrompt`, 62, `fitPrompt`,
+    `(messages, budgetTokens, imageTokens) => EngineMessage[]`,
+    `Drop oldest turn pairs until the prompt fits its token budget`);
+n(`engine`, `fitContext`, 77, `fitContext`,
+    `({ model, limits, messages, reasoning }) => { messages, maxTokens }`,
+    `Fit the prompt and cap the reply to the model context window`);
+n(`engine`, `budgetLimit`, 112, `budgetLimit`,
     `(value, fallback, min) => number`,
     `Finite values at or above the floor are floored, anything else falls back`);
-n(`engine`, `resolveLimits`, 67, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
+n(`engine`, `resolveLimits`, 121, `resolveLlmLimits`, `(partial?, gpu?) => LlmLimits`,
     `Clamp every budget and the 0.05 to 1 GPU share, then fill every default,`
     + ` 1200 reasoning on the GPU`);
-n(`engine`, `replyOptions`, 126, `replyOptions`, `(limits, reasoning) => object`,
-    `One sampling config: stream, temperature 0.7, reasoning or reply budget`);
-n(`engine`, `modelUrl`, 140, `modelUrl`, `(repo, file) => string`,
+n(`engine`, `replyOptions`, 180, `replyOptions`,
+    `(limits, reasoning, temperature?, maxTokens?) => object`,
+    `One sampling config: stream, temperature 0.7, fitted or default budget`);
+n(`engine`, `modelUrl`, 195, `modelUrl`, `(repo, file) => string`,
     `Resolve one model file on huggingface.co`);
-n(`engine`, `contentLength`, 143, `contentLength`, `(response) => number`,
+n(`engine`, `contentLength`, 198, `contentLength`, `(response) => number`,
     `Declared size of one download, zero when the host hides it`);
-n(`engine`, `hasPart`, 146, `hasPart`, `(messages, type) => boolean`,
+n(`engine`, `hasPart`, 201, `hasPart`, `(messages, type) => boolean`,
     `Whether any built turn carries an image or audio part`);
-n(`engine`, `hasImages`, 154, `hasImages`, `(messages) => boolean`,
+n(`engine`, `hasImages`, 209, `hasImages`, `(messages) => boolean`,
     `Whether any built turn carries an image part`);
-n(`engine`, `hasAudio`, 157, `hasAudio`, `(messages) => boolean`,
+n(`engine`, `hasAudio`, 212, `hasAudio`, `(messages) => boolean`,
     `Whether any built turn carries an audio part`);
-n(`engine`, `userContent`, 166, `userContent`, `(text, images, audio) => content`,
+n(`engine`, `userContent`, 221, `userContent`, `(text, images, audio) => content`,
     `Text first, then each image, then each audio clip, or plain text`);
-n(`engine`, `contentParts`, 179, `contentParts`, `(content) => EngineContentPart[]`,
+n(`engine`, `contentParts`, 234, `contentParts`, `(content) => EngineContentPart[]`,
     `Flatten string or part content for a merge`);
-n(`engine`, `mergeContent`, 186, `mergeContent`, `(first, next) => content`,
+n(`engine`, `mergeContent`, 241, `mergeContent`, `(first, next) => content`,
     `Join same-role turns and collapse adjacent text parts`);
-n(`engine`, `buildMessages`, 205, `buildMessages`,
+n(`engine`, `buildMessages`, 260, `buildMessages`,
     `(messages, limits?) => EngineMessage[]`,
     `Keep text and media, cap images and audio newest first, fold system,`
     + ` drop leading assistant, merge same roles`);
-n(`engine`, `createThinkSplitter`, 273, `createThinkSplitter`,
+n(`engine`, `createThinkSplitter`, 328, `createThinkSplitter`,
     `(onReason, onText) => { feed, flush }`,
     `Separates inline reasoning markers from the visible reply`);
-n(`engine`, `findTag`, 282, `findTag`, `(data, tags) => { at, tag }`,
+n(`engine`, `findTag`, 346, `findTag`, `(data, tags) => { at, tag }`,
     `Earliest occurrence of any marker`);
-n(`engine`, `holdPartial`, 294, `holdPartial`, `(data, tags) => string`,
+n(`engine`, `holdPartial`, 349, `holdPartial`, `(data, tags) => string`,
     `Holds back the longest suffix that may still become a marker`);
-n(`engine`, `feed`, 307, `feed`, `(text) => void`,
+n(`engine`, `feed`, 362, `feed`, `(text) => void`,
     `Consume a chunk, switch on the current in-reason state`);
-n(`engine`, `flush`, 339, `flush`, `() => void`, `Emit whatever was held back`);
-n(`engine`, `stall`, 346, `firstReplyTimeout · firstVisionReplyTimeout`
+n(`engine`, `flush`, 394, `flush`, `() => void`, `Emit whatever was held back`);
+n(`engine`, `stall`, 402, `firstReplyTimeout · firstVisionReplyTimeout`
     + ` · idleReplyTimeout · promptSpeedTick`,
     `300000 desktop · 3000000 mobile · 840000 floor · 30000 idle · 500 live`,
     `First chunk budget per device, a vision floor over it, the silence`
     + ` between two chunks, and the live prompt tick`);
-n(`engine`, `stallError`, 356, `StallError`, `class Error`,
+n(`engine`, `stallError`, 411, `StallError`, `class Error`,
     `A stream that stopped producing chunks`);
-n(`engine`, `timeout`, 360, `withTimeout`, `(work, ms, message) => Promise`,
+n(`engine`, `timeout`, 415, `withTimeout`, `(work, ms, message) => Promise`,
     `Race one promise against a timeout`);
-n(`engine`, `close`, 378, `closeStream`, `(iterator) => void`,
+n(`engine`, `close`, 433, `closeStream`, `(iterator) => void`,
     `Read the pending abort rejection, then close the stream so a stopped`
     + ` engine keeps no unhandled promise`);
-n(`engine`, `logs`, 390, `logChatCall`, `(model, messages) => void`,
+n(`engine`, `logs`, 445, `logChatCall`, `(model, messages) => void`,
     `Message text and media data are censored, the caller checks the flag`);
-n(`engine`, `streamReply`, 406, `streamReply`, `(params) => Promise<string?>`,
+n(`engine`, `streamReply`, 461, `streamReply`, `(params) => Promise<string?>`,
     `Run the chunk loop, read inline or structured reasoning, collect reply`
     + ` and thought, measure the streamed token speed, stream prefill`
     + ` progress or estimate, stop a silent engine, log when enabled,`
     + ` honour stop`);
 
-n(`engine`, `runEngineChat`, 598, `runEngineChat`,
+n(`engine`, `runEngineChat`, 653, `runEngineChat`,
     `(model, params, start, stopped) => Promise<string?>`,
-    `Build the prompt and media parts, estimate its tokens, log when enabled,`
-    + ` pass both speed callbacks and stream one reply`);
+    `Build the prompt and media parts, fit it to the context window, log`
+    + ` when enabled, pass both speed callbacks and stream one reply`);
 n(`wllama`, `visionLimits`, 46, `visionLimits`,
     `(model) => object`,
     `Only the instruct builds set a 16 to 128 image token window`);
@@ -1426,7 +1439,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.2`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.3`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`
@@ -1666,6 +1679,9 @@ e(`streamReply`, `logs`, `call`);
 e(`streamReply`, `types.params`, `type`);
 e(`runEngineChat`, `buildMessages`, `call`);
 e(`runEngineChat`, `estimate`, `call`);
+e(`runEngineChat`, `fitContext`, `call`);
+e(`runEngineChat`, `fitPrompt`, `inner`);
+e(`runEngineChat`, `fitContext`, `inner`);
 e(`runEngineChat`, `logs`, `call`);
 e(`runEngineChat`, `streamReply`, `call`);
 e(`runEngineChat`, `types.params`, `type`);
@@ -1691,6 +1707,7 @@ e(`wllamaEngine`, `wllama.startLLM`, `inner`);
 e(`wllamaEngine`, `wllama.cached`, `inner`);
 e(`wllamaEngine`, `wllama.purge`, `inner`);
 e(`wllama.startLLM`, `resolveAssets`, `call`);
+e(`wllama.startLLM`, `models.contextWindow`, `inner`);
 e(`wllama.startLLM`, `getWllama`, `call`);
 e(`wllama.startLLM`, `dropWllama`, `call`);
 e(`wllama.startLLM`, `wllama.cpuFiles`, `call`);
@@ -1746,9 +1763,7 @@ e(`litert.startLLM`, `litert.wasmLog`, `call`);
 e(`litert.startLLM`, `litert.settings`, `call`);
 e(`litert.settings`, `litert.visionTokens`, `inner`);
 e(`litert.startLLM`, `assets.defaultLitertAssets`, `call`);
-e(`litert.startLLM`, `models.litertWindow`, `call`);
-e(`litert.startLLM`, `models.mobileLitertWindow`, `call`);
-e(`litert.startLLM`, `models.mobileDevice`, `call`);
+e(`litert.startLLM`, `models.contextWindow`, `call`);
 e(`litert.startLLM`, `litert.cacheOpen`, `call`);
 e(`litert.startLLM`, `litert.cacheModel`, `call`);
 e(`litert.startLLM`, `litert.fetchModel`, `call`);

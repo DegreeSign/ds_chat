@@ -1214,6 +1214,7 @@ const definitions: Array<{
                             mod,
                             params,
                             messages,
+                            maxTokens: params.limits.maxReplyTokens,
                             session,
                         }))
                             text += chunk.choices?.[0]?.delta?.content || ``;
@@ -1575,6 +1576,61 @@ const definitions: Array<{
                 assertEqual(built, `ok`, `engine run`);
                 assertEqual(sent[0].role, `system`, `engine system`);
                 assertEqual(sent[1].content, `hi`, `engine user`);
+            },
+        },
+        {
+            name: `engine/context-fit`,
+            run: async () => {
+                const
+                    model = modelOf(ChatModelId.qwen3_vl_2b),
+                    long = `x`.repeat(2000),
+                    captured: { messages: EngineMessage[], maxTokens: number }[] = [],
+                    history: { role: LlmRole, content: string }[] = [];
+                for (let i = 0; i < 20; i++)
+                    history.push(
+                        userMessage(long),
+                        { role: LlmRole.assistant, content: long },
+                    );
+                const built = await runEngineChat({
+                    model,
+                    params: {
+                        messages: [
+                            { role: LlmRole.system, content: `sys` },
+                            ...history,
+                        ],
+                        limits: {
+                            ...defaultLlmLimits,
+                            maxReplyTokens: 100000,
+                            promptCharBudget: 1000000,
+                        },
+                        reasoning: false,
+                        onReason: () => { },
+                        onText: () => { },
+                    },
+                    stopped: () => false,
+                    start: async (messages, maxTokens) => {
+                        captured.push({ messages, maxTokens });
+                        return streamOf({
+                            choices: [{ delta: { content: `ok` } }],
+                        });
+                    },
+                });
+                assertEqual(built, `ok`, `fit reply`);
+                assertEqual(captured.length, 1, `fit call`);
+                assert(
+                    captured[0].maxTokens <= cpuContextWindow,
+                    `reply fits context`,
+                );
+                assert(captured[0].maxTokens >= 64, `reply minimum kept`);
+                assert(
+                    captured[0].messages.length < history.length + 1,
+                    `old turns dropped`,
+                );
+                assertEqual(
+                    captured[0].messages[0].role,
+                    LlmRole.system,
+                    `system kept`,
+                );
             },
         },
         {

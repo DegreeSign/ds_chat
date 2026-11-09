@@ -21,7 +21,7 @@ toLitertMessages: (messages: EngineMessage[], keepMedia?: boolean) => Promise<Li
 /** Whether conversation holds incoming history */
 continuesHistory: (sent: EngineMessage[], history: EngineMessage[]) => boolean, 
 /** Stream LiteRT reply as chunks */
-streamLitert: ({ engine, mod, params, messages, session, }: StreamLitertParams) => AsyncGenerator<EngineChunk>, 
+streamLitert: ({ engine, mod, params, messages, maxTokens, session, }: StreamLitertParams) => AsyncGenerator<EngineChunk>, 
 /** Engine settings with vision budget */
 litertSettings: ({ model, limits, contextSize, source, mod, }: LitertSettingsParams) => LitertSettings, litertEngine: LlmEngine;
 export { cacheModel, continuesHistory, gpuShare, litertEngine, litertSettings, maxRestMs, releaseDevice, restFor, streamLitert, throttledDevice, toLitertMessages, visionTokens, };

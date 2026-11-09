@@ -1,5 +1,5 @@
 import { LlmRole } from '../types/enums';
-import { mobileDevice } from '../core/models';
+import { contextWindow, mobileDevice } from '../core/models';
 import {
     gpuImageSize,
     imageTokens as defaultImageTokens,
@@ -34,7 +34,11 @@ const
     },
     /** GPU reasoning and answer budget */
     gpuReasoningTokens = 1200,
-    /** Characters per prompt token */
+    /** Headroom for the chat template */
+    contextReserveTokens = 128,
+    /** Smallest generated reply */
+    minReplyTokens = 64,
+    /** Characters per token */
     promptCharsPerToken = 4,
     /** Rough prompt token count */
     promptTokenEstimate = (
@@ -53,6 +57,61 @@ const
                     : imageTokens;
         };
         return Math.round(count);
+    },
+    /** Drop oldest turns over budget */
+    fitPrompt = (
+        messages: EngineMessage[],
+        budgetTokens: number,
+        imageTokens: number,
+    ): EngineMessage[] => {
+        const fitted = [...messages];
+        while (promptTokenEstimate(fitted, imageTokens) > budgetTokens) {
+            // keep the newest turn
+            const users = fitted.filter(message =>
+                message.role == `user`).length;
+            if (users < 2) break;
+            const drop = fitted[0]?.role == `system` ? 1 : 2;
+            fitted.splice(
+                drop,
+                fitted[drop + 1]?.role == `assistant` ? 2 : 1,
+            );
+        };
+        return fitted;
+    },
+    /** Prompt and reply fit context */
+    fitContext = ({
+        model,
+        limits,
+        messages,
+        reasoning,
+    }: {
+        model: ChatModel,
+        limits: LlmLimits,
+        messages: EngineMessage[],
+        reasoning: boolean,
+    }): { messages: EngineMessage[], maxTokens: number } => {
+        const
+            contextSize = contextWindow(model),
+            prompt = fitPrompt(
+                messages,
+                contextSize - minReplyTokens - contextReserveTokens,
+                limits.imageTokens,
+            ),
+            available = contextSize
+                - promptTokenEstimate(prompt, limits.imageTokens)
+                - contextReserveTokens;
+        return {
+            messages: prompt,
+            maxTokens: Math.max(
+                minReplyTokens,
+                Math.min(
+                    reasoning
+                        ? limits.maxReasoningTokens
+                        : limits.maxReplyTokens,
+                    available,
+                ),
+            ),
+        };
     },
     /** Clamp a budget, with fallback */
     budgetLimit = (
@@ -127,12 +186,13 @@ const
         limits: LlmLimits,
         reasoning: boolean,
         temperature = 0.7,
+        maxTokens?: number,
     ) => ({
         stream: true as const,
         temperature,
-        max_tokens: reasoning
+        max_tokens: maxTokens ?? (reasoning
             ? limits.maxReasoningTokens
-            : limits.maxReplyTokens,
+            : limits.maxReplyTokens),
     }),
     /** Model host */
     hfBase = `https://huggingface.co`,
@@ -602,12 +662,19 @@ const
         stopped,
         onStall,
     }: EngineRunParams): Promise<string | undefined> => {
-        const messages = await resizeImages(
-            buildMessages(params.messages, params.limits),
-            model.litert ? gpuImageSize : undefined,
-            params.limits.imageTokens,
-        );
-        if (params.logging) logChatCall(model, messages);
+        const
+            built = await resizeImages(
+                buildMessages(params.messages, params.limits),
+                model.litert ? gpuImageSize : undefined,
+                params.limits.imageTokens,
+            ),
+            fitted = fitContext({
+                model,
+                limits: params.limits,
+                messages: built,
+                reasoning: params.reasoning,
+            });
+        if (params.logging) logChatCall(model, fitted.messages);
         return await streamReply({
             model,
             logging: params.logging,
@@ -616,14 +683,14 @@ const
             onSpeed: params.onSpeed,
             onPromptSpeed: params.onPromptSpeed,
             promptTokens: promptTokenEstimate(
-                messages,
+                fitted.messages,
                 params.limits.imageTokens,
             ),
-            start: () => start(messages),
+            start: () => start(fitted.messages, fitted.maxTokens),
             stopped,
             onStall,
             // vision prefill needs minutes
-            firstTimeoutMs: hasImages(messages)
+            firstTimeoutMs: hasImages(fitted.messages)
                 ? firstVisionReplyTimeout
                 : firstReplyTimeout,
         });

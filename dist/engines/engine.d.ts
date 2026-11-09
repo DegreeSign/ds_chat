@@ -5,7 +5,7 @@ defaultLlmLimits: LlmLimits,
 /** Merge budgets over backend defaults */
 resolveLlmLimits: (overrides?: Partial<LlmLimits>, gpu?: boolean) => LlmLimits, 
 /** Sampling options for every stream */
-replyOptions: (limits: LlmLimits, reasoning: boolean, temperature?: number) => {
+replyOptions: (limits: LlmLimits, reasoning: boolean, temperature?: number, maxTokens?: number) => {
     stream: true;
     temperature: number;
     max_tokens: number;

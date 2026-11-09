@@ -836,6 +836,8 @@ interface StreamLitertParams {
     mod: LitertModule,
     params: EngineChatParams,
     messages: EngineMessage[],
+    /** Fitted output budget */
+    maxTokens: number,
     session: LitertSession,
 }
 
@@ -907,7 +909,8 @@ interface EngineRunParams {
     model: ChatModel,
     params: EngineChatParams,
     /** Open engine stream */
-    start: (messages: EngineMessage[]) => Promise<AsyncIterable<unknown>>,
+    start: (messages: EngineMessage[], maxTokens: number) =>
+        Promise<AsyncIterable<unknown>>,
     /** Generation stopped flag */
     stopped: () => boolean,
     /** Slow stream callback */

@@ -80,6 +80,15 @@ const
         return /Android|iPhone|iPad|iPod|Mobile/i.test(agent)
             || (/Macintosh/.test(agent) && client.maxTouchPoints > 1);
     },
+    /** Context window of one model */
+    contextWindow = (model: ChatModel): number =>
+        model.litert
+            ? mobileDevice()
+                ? mobileLitertContextWindow
+                : litertContextWindow
+            : mobileDevice()
+                ? mobileCpuContextWindow
+                : cpuContextWindow,
     /** Find catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
         id ? llmModels.find(model => model.id == id) : undefined,
@@ -127,6 +136,7 @@ export {
     mobileCpuContextWindow,
     litertContextWindow,
     mobileLitertContextWindow,
+    contextWindow,
     mobileDevice,
     findLlmModel,
     gpuAdapter,

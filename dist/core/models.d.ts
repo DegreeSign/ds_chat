@@ -11,6 +11,8 @@ litertContextWindow = 32768, // max 32_768
 mobileLitertContextWindow = 16384, // max 32_768
 /** Whether this client is mobile */
 mobileDevice: (nav?: MobileNavigator) => boolean, 
+/** Context window of one model */
+contextWindow: (model: ChatModel) => number, 
 /** Find catalog entry by id */
 findLlmModel: (id?: string) => ChatModel | undefined, 
 /** Whether browser has WebGPU adapter */
@@ -23,4 +25,4 @@ resolveLlmModel: (id?: ChatModelId) => Promise<ChatModel | undefined>,
 supportsImages: (model: ChatModel) => boolean, 
 /** Whether a model accepts audio */
 supportsAudio: (model: ChatModel) => boolean;
-export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileLitertContextWindow, mobileDevice, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };
+export { llmModels, cpuContextWindow, mobileCpuContextWindow, litertContextWindow, mobileLitertContextWindow, contextWindow, mobileDevice, findLlmModel, gpuAdapter, defaultLlmModel, resolveLlmModel, supportsImages, supportsAudio, };

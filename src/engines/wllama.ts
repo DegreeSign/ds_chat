@@ -1,7 +1,7 @@
 import type { CacheEntry, Wllama, WllamaLogger } from '@wllama/wllama/esm/index.js';
 import { defaultWllamaAssets } from '../assets/browser';
 import { loadWllama } from './loader';
-import { cpuContextWindow, mobileCpuContextWindow, mobileDevice } from '../core/models';
+import { contextWindow } from '../core/models';
 import {
     hasAudio,
     hasImages,
@@ -318,14 +318,19 @@ const
             model,
             params,
             stopped: () => !!params.signal?.aborted,
-            start: async messages => {
+            start: async (messages, maxTokens) => {
                 if (hasImages(messages) && !instance.supportInputModality(`image`))
                     throw new Error(`Model does not accept images`);
                 if (hasAudio(messages) && !instance.supportInputModality(`audio`))
                     throw new Error(`Model does not accept audio`);
                 return await instance.createChatCompletion({
                     messages: await toWllamaMessages(messages),
-                    ...replyOptions(params.limits, params.reasoning, params.temperature),
+                    ...replyOptions(
+                        params.limits,
+                        params.reasoning,
+                        params.temperature,
+                        maxTokens,
+                    ),
                     // stream prompt timings per chunk
                     timings_per_token: true,
                     // stream prefill progress chunks
@@ -353,7 +358,7 @@ const
         loggingOn = logging === true;
         const
             /** Context window for this device */
-            contextSize = mobileDevice() ? mobileCpuContextWindow : cpuContextWindow,
+            contextSize = contextWindow(model),
             cpu = model.cpu;
         if (!cpu) throw new Error(`Model has no CPU artifact`);
         const

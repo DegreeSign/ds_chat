@@ -2,7 +2,7 @@ import { rNum } from '@degreesign/utils';
 import type { GpuArtisanConfig } from '@litert-lm/core';
 import { defaultLitertAssets } from '../assets/browser';
 import { loadLitert } from './litertLoader';
-import { litertContextWindow, mobileDevice, mobileLitertContextWindow } from '../core/models';
+import { contextWindow } from '../core/models';
 import {
     contentLength,
     hasAudio,
@@ -306,11 +306,17 @@ const
         mod,
         params,
         messages,
+        maxTokens,
         session,
     }: StreamLitertParams): AsyncGenerator<EngineChunk> {
         const
             last = messages[messages.length - 1],
-            options = replyOptions(params.limits, params.reasoning, params.temperature);
+            options = replyOptions(
+                params.limits,
+                params.reasoning,
+                params.temperature,
+                maxTokens,
+            );
         if (last?.role != `user`) throw new Error(`No user turn`);
         const
             history = messages.slice(0, -1),
@@ -447,13 +453,20 @@ const
                     params,
                     stopped: () => !!params.signal?.aborted,
                     onStall: reset,
-                    start: async messages => {
+                    start: async (messages, maxTokens) => {
                         if (params.signal?.aborted) throw new Error(`Cancelled`);
                         if (hasImages(messages) && !model.litert?.vision)
                             throw new Error(`Model does not accept images`);
                         if (hasAudio(messages) && !model.litert?.audio)
                             throw new Error(`Model does not accept audio`);
-                        return streamLitert({ engine, mod, params, messages, session });
+                        return streamLitert({
+                            engine,
+                            mod,
+                            params,
+                            messages,
+                            maxTokens,
+                            session,
+                        });
                     },
                 }),
                 conversation = session.conversation;
@@ -516,8 +529,7 @@ const
         const litert = model.litert;
         if (!litert) throw new Error(`Model has no LiteRT artifact`);
         const
-            contextSize = mobileDevice()
-                ? mobileLitertContextWindow : litertContextWindow,
+            contextSize = contextWindow(model),
             mod = await loadLitert(),
             scope = globalThis as { Module?: unknown },
             previous = scope.Module;

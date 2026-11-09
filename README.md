@@ -1,9 +1,9 @@
 # @degreesign/chat
 
-Headless on-device AI chat for browsers, workers and Node: one model in memory,
-one streamed reply, no UI. A wllama CPU engine and a LiteRT-LM WebGPU engine
-handle text and image turns, downloads resume after a reload, and every export
-is typed.
+Plug-and-play on-device AI chat for browsers, workers and Node: one model in
+memory, unlimited offline replies in any UI. The package picks the engine,
+manages the download, fits the prompt and reuses the cache; a wllama CPU engine
+and a LiteRT-LM WebGPU engine run it all locally, and every export is typed.
 
 [![npm version](https://img.shields.io/npm/v/@degreesign/chat.svg)](https://www.npmjs.com/package/@degreesign/chat)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](#licensing)
@@ -12,8 +12,19 @@ is typed.
 [![architecture](https://img.shields.io/badge/architecture-view-blue.svg)](https://degreesign.github.io/ds_chat/architecture.html)
 [![comparison](https://img.shields.io/badge/comparison-web--llm-blue.svg)](https://degreesign.github.io/ds_chat/vs_web_llm.html)
 
+## Demo
+
+[Open the showcase](https://degreesign.github.io/ds_chat/) for a live chat demo
+in the browser, or browse the [architecture
+map](https://degreesign.github.io/ds_chat/architecture.html). The demo downloads
+a model once, about 1.5 GB on the CPU engine or 2.0 GB on WebGPU, and then
+answers on the device.
+
+**[Open the live showcase →](https://degreesign.github.io/ds_chat/)**
+
 ## Table of contents
 
+- [Demo](#demo)
 - [Why](#why)
 - [Install](#install) 
 - [Quick start](#quick-start) 
@@ -39,8 +50,10 @@ is typed.
   with the network off.
 - On device: weights download once, then every reply is generated locally,
   with no API key and no per-reply cost.
-- Headless and stateless: results arrive through callbacks, no UI is rendered
-  and no history is kept; the host passes the whole message list.
+- Plug and play: the package picks the engine, fits the prompt, resumes the
+  download and reuses the cache, with no setup.
+- Headless and stateless: results arrive through callbacks, so any UI can
+  render them, and no history is kept; the host passes the whole message list.
 - Two engines behind one runtime: CPU through wllama, WebGPU through LiteRT-LM.
 - Typed and portable: declarations for every export, and importing it works in
   browsers, workers, React and Node.
@@ -366,6 +379,9 @@ user:      {next turn}
   and empty messages are skipped.
 - `maxContentLength` clips each message and `promptCharBudget` bounds the whole
   prompt; image and audio payloads do not count against it.
+- Every prompt is fitted to the model context window: oldest non-system turns
+  are dropped until the prompt and a 64-token reply fit, and the reply budget
+  is capped to the remaining window with 128 tokens reserved for the template.
 - System messages are folded into one leading system turn.
 - Images and audio come from the newest turns first, capped by `maxImages`
   (default 2) and `maxAudio` (default 1). Older parts are dropped, text stays.

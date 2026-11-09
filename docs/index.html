@@ -1,0 +1,3946 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Local AI chat, offline after one download | @degreesign/chat</title>
+        <link rel="icon" href="favicon.svg" type="image/svg+xml">
+        <meta
+            name="description"
+            content="Local, on-device chat with WebGPU and automatic CPU
+            fallback. Download the model once, then reply offline for as long
+            as you want. No API key, no account, no per-reply cost."
+        >
+        <meta name="theme-color" content="#0d1117">
+        <link rel="canonical" href="https://degreesign.github.io/ds_chat/">
+        <meta
+            property="og:title"
+            content="Local AI chat. One download. Offline for as long as you want."
+        >
+        <meta
+            property="og:description"
+            content="GPU-ready chat with CPU fallback. No API key, no server,
+            no per-reply bill."
+        >
+        <meta property="og:type" content="website">
+        <meta property="og:site_name" content="@degreesign/chat">
+        <meta name="twitter:card" content="summary">
+        <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "FAQPage",
+                "mainEntity": [
+                    {
+                        "@type": "Question",
+                        "name": "Do I need a GPU?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "No. WebGPU when available, otherwise the CPU engine."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "How big is the download?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "About 1.5 GB on CPU or 2.0 GB on GPU. Cached once."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Does it really work offline?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "Yes. After the first download, the model runs locally."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "How is it free?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "MIT package with no per-reply fee. You pay for the download."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "What happens if I clear the cache?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "The next send downloads it again. No hidden copy, no account."
+                        }
+                    },
+                    {
+                        "@type": "Question",
+                        "name": "Does it collect anything?",
+                        "acceptedAnswer": {
+                            "@type": "Answer",
+                            "text": "No key, no server, no upload. The package writes no history."
+                        }
+                    }
+                ]
+            }
+        </script>
+        <script>
+            document.documentElement.classList.add("js");
+        </script>
+        <style>
+            :root {
+                --paper: #f6f3ec;
+                --paper-2: #efeae0;
+                --ink: #15171c;
+                --ink-2: #3f4652;
+                --muted: #646b77;
+                --faint: #756b5c;
+                --line: #ded7ca;
+                --card: #fffdf8;
+                --dark: #0d1117;
+                --dark-2: #151b23;
+                --teal: #0f766e;
+                --blue: #2563eb;
+                --violet: #7c3aed;
+                --radius: 20px;
+                --max: 1160px;
+                --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+                    sans-serif;
+                --serif: "Iowan Old Style", "Palatino Linotype", Palatino,
+                    Georgia, serif;
+                --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            }
+
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+            }
+
+            [hidden] {
+                display: none !important;
+            }
+
+            html {
+                scroll-behavior: smooth;
+                scroll-padding-top: 24px;
+            }
+
+            body {
+                background: var(--paper);
+                color: var(--ink);
+                font: 400 17px/1.65 var(--sans);
+                margin: 0;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            a {
+                color: inherit;
+                text-decoration: none;
+            }
+
+            img,
+            svg,
+            canvas {
+                display: block;
+                max-width: 100%;
+            }
+
+            button {
+                font: inherit;
+            }
+
+            code {
+                font-family: var(--mono);
+            }
+
+            :focus-visible {
+                border-radius: 4px;
+                outline: 2px solid var(--blue);
+                outline-offset: 3px;
+            }
+
+            .shell {
+                margin-inline: auto;
+                max-width: var(--max);
+                width: 90%;
+            }
+
+            .sr-only {
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+                height: 1px;
+                overflow: hidden;
+                position: absolute;
+                white-space: nowrap;
+                width: 1px;
+            }
+
+            .skip {
+                background: var(--ink);
+                border-radius: 0 0 8px 0;
+                color: var(--paper);
+                left: 0;
+                padding: 10px 16px;
+                position: absolute;
+                top: -60px;
+                z-index: 80;
+            }
+
+            .skip:focus {
+                top: 0;
+            }
+
+            /* Hero */
+            .hero {
+                background:
+                    radial-gradient(
+                        1100px 600px at 78% -10%,
+                        rgba(37, 99, 235, 0.35),
+                        transparent 60%
+                    ),
+                    radial-gradient(
+                        900px 500px at 8% 8%,
+                        rgba(15, 118, 110, 0.3),
+                        transparent 55%
+                    ),
+                    var(--dark);
+                color: #f8fafc;
+                overflow: hidden;
+                padding: 96px 0 0;
+                position: relative;
+            }
+
+            .hero::after {
+                background: rgba(255, 255, 255, 0.08);
+                bottom: 0;
+                content: "";
+                height: 1px;
+                inset-inline: 0;
+                position: absolute;
+            }
+
+            .hero-grid {
+                align-items: center;
+                display: grid;
+                gap: clamp(32px, 5vw, 72px);
+                grid-template-columns: 1.05fr 0.95fr;
+                padding-bottom: 64px;
+            }
+
+            .brand {
+                align-items: center;
+                color: #f8fafc;
+                display: flex;
+                flex: none;
+                font: 600 15px/1 var(--mono);
+                gap: 10px;
+                letter-spacing: -0.01em;
+            }
+
+            .brand-mark {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 9px;
+                display: grid;
+                height: 30px;
+                place-items: center;
+                width: 30px;
+            }
+
+            .brand-mark svg {
+                height: 17px;
+                width: 17px;
+            }
+
+            .hero-brand {
+                margin-bottom: 30px;
+                width: fit-content;
+            }
+
+            .eyebrow {
+                align-items: center;
+                color: var(--teal);
+                display: flex;
+                font: 500 12px/1 var(--mono);
+                gap: 9px;
+                letter-spacing: 0.14em;
+                margin: 0 0 18px;
+                text-transform: uppercase;
+            }
+
+            .hero .eyebrow {
+                color: #8ea0b8;
+            }
+
+            .eyebrow .dot {
+                background: #34d399;
+                border-radius: 50%;
+                box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.14);
+                height: 7px;
+                width: 7px;
+            }
+
+            h1 {
+                font-family: var(--serif);
+                font-size: clamp(2.4rem, 5.6vw, 4.2rem);
+                font-weight: 600;
+                letter-spacing: -0.045em;
+                line-height: 0.98;
+                margin: 0;
+                text-wrap: balance;
+            }
+
+            .grad {
+                background: linear-gradient(
+                    100deg,
+                    #5eead4 0%,
+                    #60a5fa 48%,
+                    #c4b5fd 100%
+                );
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+            }
+
+            .lead {
+                color: var(--ink-2);
+                font-size: clamp(1rem, 1.4vw, 1.12rem);
+                line-height: 1.65;
+                margin: 22px 0 0;
+                max-width: 56ch;
+            }
+
+            .hero .lead {
+                color: #aab4c2;
+                max-width: 52ch;
+            }
+
+            .actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                margin-top: 30px;
+            }
+
+            .button {
+                align-items: center;
+                border-radius: 999px;
+                display: inline-flex;
+                font: 600 14px/1 var(--sans);
+                gap: 10px;
+                padding: 13px 22px;
+                transition: background 0.2s ease, border-color 0.2s ease,
+                    transform 0.2s ease;
+            }
+
+            .button:hover {
+                transform: translateY(-2px);
+            }
+
+            .button.primary {
+                background: #f8fafc;
+                color: var(--dark);
+            }
+
+            .button.primary:hover {
+                background: #fff;
+            }
+
+            .button.ghost {
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.22);
+                color: #e2e8f0;
+            }
+
+            .button.ghost:hover {
+                background: rgba(255, 255, 255, 0.09);
+                border-color: rgba(255, 255, 255, 0.34);
+            }
+
+            .button.ink {
+                background: var(--ink);
+                color: #fff;
+            }
+
+            .button.ink:hover {
+                background: #2b3038;
+            }
+
+            .button:disabled {
+                cursor: not-allowed;
+                opacity: 0.38;
+            }
+
+            .hero-note {
+                color: #77849a;
+                font: 500 12px/1.5 var(--mono);
+                margin: 24px 0 0;
+            }
+
+            /* Hero console */
+            .console {
+                background: linear-gradient(
+                    180deg,
+                    rgba(255, 255, 255, 0.08),
+                    rgba(255, 255, 255, 0.03)
+                );
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 24px;
+                box-shadow: 0 40px 80px -40px rgba(0, 0, 0, 0.8);
+                padding: 18px;
+            }
+
+            .console-top {
+                align-items: center;
+                color: #7f8b9e;
+                display: flex;
+                font: 500 11.5px/1 var(--mono);
+                gap: 12px;
+                letter-spacing: 0.02em;
+            }
+
+            .lights {
+                display: flex;
+                gap: 5px;
+            }
+
+            .lights i {
+                background: #2b3442;
+                border-radius: 50%;
+                height: 7px;
+                width: 7px;
+            }
+
+            .lights i:nth-child(1) {
+                background: #f87171;
+            }
+
+            .lights i:nth-child(2) {
+                background: #fbbf24;
+            }
+
+            .lights i:nth-child(3) {
+                background: #34d399;
+            }
+
+            .console-title {
+                flex: 1;
+            }
+
+            .live {
+                align-items: center;
+                color: #6ee7b7;
+                display: inline-flex;
+                gap: 6px;
+            }
+
+            .live i {
+                animation: pulse 2s infinite;
+                background: #34d399;
+                border-radius: 50%;
+                height: 6px;
+                width: 6px;
+            }
+
+            @keyframes pulse {
+                0%,
+                100% {
+                    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+                    opacity: 1;
+                }
+
+                50% {
+                    box-shadow: 0 0 0 5px rgba(52, 211, 153, 0);
+                    opacity: 0.55;
+                }
+            }
+
+            .console-chat {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                display: grid;
+                gap: 10px;
+                margin: 16px 0 14px;
+                padding: 16px;
+            }
+
+            .cmsg {
+                border-radius: 14px;
+                font-size: 14px;
+                line-height: 1.55;
+                margin: 0;
+                max-width: 88%;
+                padding: 10px 14px;
+            }
+
+            .cmsg.user {
+                align-self: flex-end;
+                background: #f8fafc;
+                border-bottom-right-radius: 4px;
+                color: var(--dark);
+            }
+
+            .cmsg.bot {
+                align-self: flex-start;
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-bottom-left-radius: 4px;
+                color: #e6edf6;
+            }
+
+            .caret {
+                animation: blink 1.1s steps(1) infinite;
+                background: #5eead4;
+                display: inline-block;
+                height: 1em;
+                margin-left: 3px;
+                vertical-align: text-bottom;
+                width: 1px;
+            }
+
+            @keyframes blink {
+                50% {
+                    opacity: 0;
+                }
+            }
+
+            .console-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .console-chips span {
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 999px;
+                color: #93a0b4;
+                font: 500 11px/1 var(--mono);
+                padding: 6px 10px;
+            }
+
+            /* Stats */
+            .stats {
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                padding-bottom: 26px;
+            }
+
+            .stats div {
+                border-right: 1px solid rgba(255, 255, 255, 0.08);
+                padding: 22px 0 4px 22px;
+            }
+
+            .stats div:first-child {
+                padding-left: 0;
+            }
+
+            .stats div:last-child {
+                border-right: 0;
+            }
+
+            .stats strong {
+                color: #f8fafc;
+                display: block;
+                font-family: var(--serif);
+                font-size: clamp(1.7rem, 3vw, 2.4rem);
+                font-weight: 600;
+                letter-spacing: -0.03em;
+                line-height: 1;
+            }
+
+            .stats span {
+                color: #7d8a9e;
+                display: block;
+                font: 500 11.5px/1 var(--mono);
+                letter-spacing: 0.08em;
+                margin-top: 6px;
+                text-transform: uppercase;
+            }
+
+            /* Sections */
+            .section {
+                padding: clamp(72px, 9vw, 116px) 0;
+            }
+
+            .section.band {
+                background: var(--paper-2);
+                border-block: 1px solid var(--line);
+            }
+
+            .section-head {
+                margin-bottom: 42px;
+                max-width: 740px;
+            }
+
+            .section-head .lead {
+                margin-top: 16px;
+            }
+
+            h2 {
+                font-family: var(--serif);
+                font-size: clamp(2rem, 4vw, 3.3rem);
+                font-weight: 600;
+                letter-spacing: -0.04em;
+                line-height: 1.03;
+                margin: 0;
+                text-wrap: balance;
+            }
+
+            h3 {
+                font: 600 18px/1.25 var(--sans);
+                letter-spacing: -0.01em;
+                margin: 0 0 8px;
+            }
+
+            .cards {
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .card {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: var(--radius);
+                min-width: 0;
+                padding: 26px;
+                transition: border-color 0.25s ease, box-shadow 0.25s ease,
+                    transform 0.25s ease;
+            }
+
+            .card:hover {
+                border-color: #cfc6b6;
+                box-shadow: 0 24px 50px -34px rgba(21, 23, 28, 0.5);
+                transform: translateY(-4px);
+            }
+
+            .icon {
+                align-items: center;
+                background: linear-gradient(
+                    135deg,
+                    rgba(15, 118, 110, 0.12),
+                    rgba(37, 99, 235, 0.12)
+                );
+                border: 1px solid rgba(15, 118, 110, 0.18);
+                border-radius: 12px;
+                color: var(--teal);
+                display: flex;
+                height: 40px;
+                justify-content: center;
+                margin-bottom: 18px;
+                width: 40px;
+            }
+
+            .icon svg {
+                height: 20px;
+                width: 20px;
+            }
+
+            .card p {
+                color: var(--ink-2);
+                font-size: 15.5px;
+                line-height: 1.6;
+                margin: 0;
+            }
+
+            .tags {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 16px;
+            }
+
+            .tags span {
+                background: rgba(15, 118, 110, 0.07);
+                border-radius: 999px;
+                color: var(--teal);
+                font: 600 11px/1 var(--mono);
+                padding: 5px 9px;
+            }
+
+            .fine {
+                color: var(--muted);
+                font-size: 13px;
+                line-height: 1.55;
+                margin: 16px 0 0;
+            }
+
+            .fine code,
+            td code {
+                background: rgba(15, 118, 110, 0.07);
+                border-radius: 4px;
+                padding: 1px 5px;
+            }
+
+            /* Steps */
+            .steps {
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .step {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: var(--radius);
+                padding: 26px;
+            }
+
+            .step > span {
+                align-items: center;
+                background: var(--ink);
+                border-radius: 50%;
+                color: #fff;
+                display: inline-flex;
+                font: 600 12px/1 var(--mono);
+                height: 38px;
+                justify-content: center;
+                width: 38px;
+            }
+
+            .step h3 {
+                font: 600 18px/1.2 var(--sans);
+                margin: 18px 0 8px;
+            }
+
+            .step p {
+                color: var(--ink-2);
+                font-size: 15.5px;
+                margin: 0;
+            }
+
+            /* Demo window */
+            .demo-window {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 24px;
+                box-shadow: 0 30px 70px -40px rgba(21, 23, 28, 0.55);
+                overflow: hidden;
+            }
+
+            .demo-bar {
+                align-items: center;
+                background: var(--dark);
+                color: #8b97aa;
+                display: flex;
+                font: 500 11.5px/1 var(--mono);
+                gap: 12px;
+                padding: 13px 18px;
+            }
+
+            .demo-bar-title {
+                color: #c6d0de;
+                flex: 1;
+                letter-spacing: 0.02em;
+            }
+
+            .demo-bar-title span {
+                color: #f8fafc;
+            }
+
+            .demo-body {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 232px;
+                min-height: 300px;
+            }
+
+            .thread {
+                background: var(--paper);
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                max-height: 380px;
+                min-height: 300px;
+                overflow-y: auto;
+                padding: 22px;
+            }
+
+            .thread-empty {
+                color: var(--muted);
+                font-size: 14px;
+                margin: auto;
+                max-width: 38ch;
+                text-align: center;
+            }
+
+            .thread-empty svg {
+                color: var(--teal);
+                height: 26px;
+                margin: 0 auto 12px;
+                opacity: 0.7;
+                width: 26px;
+            }
+
+            .bubble {
+                border-radius: 14px;
+                font-size: 14px;
+                line-height: 1.55;
+                max-width: 86%;
+                padding: 10px 14px;
+            }
+
+            .bubble-body {
+                margin: 0;
+                overflow-wrap: anywhere;
+                white-space: normal;
+            }
+
+            .bubble.user .bubble-body {
+                white-space: pre-wrap;
+            }
+
+            .bubble-body p {
+                margin: 0 0 8px;
+            }
+
+            .bubble-body > :first-child {
+                margin-top: 0;
+            }
+
+            .bubble-body > :last-child {
+                margin-bottom: 0;
+            }
+
+            .bubble-body h1,
+            .bubble-body h2,
+            .bubble-body h3,
+            .bubble-body h4,
+            .bubble-body h5,
+            .bubble-body h6 {
+                font: 600 15px/1.35 var(--sans);
+                letter-spacing: -0.01em;
+                margin: 12px 0 6px;
+            }
+
+            .bubble-body ul,
+            .bubble-body ol {
+                margin: 6px 0 8px;
+                padding-left: 18px;
+            }
+
+            .bubble-body li {
+                margin: 3px 0;
+            }
+
+            .bubble-body strong {
+                font-weight: 600;
+            }
+
+            .bubble-body code {
+                background: rgba(15, 118, 110, 0.07);
+                border-radius: 4px;
+                font-family: var(--mono);
+                font-size: 12.5px;
+                padding: 1px 5px;
+            }
+
+            .bubble-body pre {
+                background: rgba(21, 23, 28, 0.06);
+                border-radius: 8px;
+                margin: 8px 0;
+                overflow-x: auto;
+                padding: 10px;
+            }
+
+            .bubble-body pre code {
+                background: none;
+                border-radius: 0;
+                padding: 0;
+            }
+
+            .bubble-body a {
+                color: var(--teal);
+                text-decoration: underline;
+                text-underline-offset: 2px;
+            }
+
+            .bubble-body hr {
+                border: 0;
+                border-top: 1px solid var(--line);
+                margin: 10px 0;
+            }
+
+            .bubble.user {
+                align-self: flex-end;
+                background: var(--ink);
+                border-bottom-right-radius: 4px;
+                color: #fff;
+            }
+
+            .bubble.assistant {
+                align-self: flex-start;
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-bottom-left-radius: 4px;
+            }
+
+            .bubble.assistant.streaming
+                .bubble-body > :last-child::after,
+            .bubble.assistant.streaming
+                .bubble-body > ul:last-child > li:last-child::after,
+            .bubble.assistant.streaming
+                .bubble-body > ol:last-child > li:last-child::after,
+            .bubble.assistant.streaming
+                .bubble-body > pre:last-child > code::after {
+                animation: blink 1s steps(1) infinite;
+                background: var(--ink);
+                content: "";
+                display: inline-block;
+                height: 1em;
+                margin-left: 2px;
+                vertical-align: text-bottom;
+                width: 1px;
+            }
+
+            .bubble.assistant.streaming
+                .bubble-body > ul:last-child::after,
+            .bubble.assistant.streaming
+                .bubble-body > ol:last-child::after,
+            .bubble.assistant.streaming
+                .bubble-body > pre:last-child::after {
+                content: none;
+                display: none;
+            }
+
+            .demo-rail {
+                background: var(--paper-2);
+                border-left: 1px solid var(--line);
+                display: flex;
+                flex-direction: column;
+                padding: 22px;
+            }
+
+            .rail-label {
+                color: #6b6253;
+                font: 600 10.5px/1 var(--mono);
+                letter-spacing: 0.1em;
+                margin: 0 0 12px;
+                text-transform: uppercase;
+            }
+
+            .rail-label.spaced {
+                margin-top: 20px;
+            }
+
+            .rail-row {
+                align-items: baseline;
+                border-bottom: 1px solid rgba(222, 215, 202, 0.7);
+                display: flex;
+                gap: 12px;
+                justify-content: space-between;
+                padding: 7px 0;
+            }
+
+            .rail-row span {
+                color: var(--muted);
+                font-size: 12.5px;
+            }
+
+            .rail-row strong {
+                color: var(--ink);
+                font: 600 11.5px/1.4 var(--mono);
+                text-align: right;
+            }
+
+            .rail-speed {
+                color: var(--teal);
+                font: 600 22px/1 var(--serif);
+                margin: 0 0 20px;
+                min-height: 24px;
+            }
+
+            .rail-reset {
+                background: transparent;
+                border: 1px solid var(--line);
+                border-radius: 999px;
+                color: var(--ink-2);
+                cursor: pointer;
+                font: 600 11.5px/1 var(--sans);
+                margin-top: auto;
+                padding: 9px 14px;
+                transition: background 0.2s ease, border-color 0.2s ease;
+            }
+
+            .rail-reset:hover {
+                background: var(--card);
+                border-color: #cfc6b6;
+            }
+
+            .demo-controls {
+                border-top: 1px solid var(--line);
+                padding: 18px 22px 22px;
+            }
+
+            .status {
+                color: var(--muted);
+                font: 11.5px/1.5 var(--mono);
+                margin: 0 0 10px;
+                min-height: 18px;
+            }
+
+            .status[data-kind="error"] {
+                color: #a33d2c;
+            }
+
+            progress {
+                accent-color: var(--teal);
+                appearance: none;
+                -webkit-appearance: none;
+                background: var(--paper-2);
+                border: 0;
+                border-radius: 999px;
+                display: block;
+                height: 6px;
+                margin: 0 0 14px;
+                overflow: hidden;
+                width: 100%;
+            }
+
+            progress::-webkit-progress-bar {
+                background: var(--paper-2);
+                border-radius: 999px;
+            }
+
+            progress::-webkit-progress-value {
+                background: var(--teal);
+                border-radius: 999px;
+            }
+
+            progress::-moz-progress-bar {
+                background: var(--teal);
+                border-radius: 999px;
+            }
+
+            .demo-form {
+                display: flex;
+                gap: 10px;
+                margin-top: 16px;
+            }
+
+            .demo-form input {
+                background: var(--paper);
+                border: 1px solid var(--line);
+                border-radius: 999px;
+                color: var(--ink);
+                flex: 1;
+                font: 15px var(--sans);
+                min-height: 46px;
+                min-width: 0;
+                padding: 10px 17px;
+            }
+
+            .demo-form input::placeholder {
+                color: var(--faint);
+            }
+
+            .demo-form .button {
+                flex: none;
+                font-size: 13px;
+                padding: 12px 18px;
+            }
+
+            .demo-form .button.ghost {
+                background: transparent;
+                border-color: var(--line);
+                color: var(--ink);
+            }
+
+            .demo-form .button.ghost:hover {
+                background: var(--card);
+                border-color: var(--ink);
+            }
+
+            .demo-meta {
+                align-items: start;
+                display: grid;
+                gap: 14px;
+                grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+                margin-top: 16px;
+            }
+
+            .warn {
+                background: rgba(15, 118, 110, 0.07);
+                border: 1px solid rgba(15, 118, 110, 0.14);
+                border-radius: 12px;
+                color: var(--ink-2);
+                font-size: 12px;
+                line-height: 1.55;
+                margin: 0;
+                padding: 10px 12px;
+            }
+
+            .warn strong {
+                color: var(--ink);
+            }
+
+            .network {
+                color: var(--faint);
+                font: 10.5px/1.5 var(--mono);
+                letter-spacing: 0.03em;
+                margin: 0;
+                text-transform: uppercase;
+            }
+
+            .network.off {
+                color: #a33d2c;
+            }
+
+            .demo-system {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                margin: 0 0 18px;
+                padding: 14px 16px;
+            }
+
+            .demo-system label {
+                color: var(--muted);
+                display: block;
+                font: 600 10.5px/1 var(--mono);
+                letter-spacing: 0.08em;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+            }
+
+            .demo-system textarea {
+                background: var(--paper);
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                color: var(--ink);
+                display: block;
+                font: 14px/1.5 var(--sans);
+                min-height: 44px;
+                padding: 10px 12px;
+                resize: vertical;
+                width: 100%;
+            }
+
+            .demo-system textarea:focus {
+                border-color: var(--teal);
+                outline: none;
+            }
+
+            .demo-system p {
+                color: var(--muted);
+                font-size: 12px;
+                margin: 8px 0 0;
+            }
+
+            /* Case study */
+            .case-grid {
+                align-items: center;
+                display: grid;
+                gap: clamp(32px, 5vw, 64px);
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .case-lockup {
+                align-items: center;
+                display: flex;
+                gap: 10px;
+                margin: 0 0 14px;
+            }
+
+            .case-lockup img {
+                height: 38px;
+                width: 38px;
+            }
+
+            .case-lockup span {
+                font: 600 18px/1 var(--serif);
+                letter-spacing: -0.02em;
+            }
+
+            .case-copy h2 {
+                margin-top: 2px;
+            }
+
+            .case-points {
+                display: grid;
+                gap: 12px;
+                list-style: none;
+                margin: 24px 0 0;
+                padding: 0;
+            }
+
+            .case-points li {
+                color: var(--ink-2);
+                display: grid;
+                font-size: 14.5px;
+                gap: 10px;
+                grid-template-columns: 96px 1fr;
+                line-height: 1.5;
+            }
+
+            .case-points span {
+                color: var(--teal);
+                font: 600 10.5px/1.6 var(--mono);
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+
+            .case-actions {
+                align-items: center;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 16px;
+                margin-top: 28px;
+            }
+
+            .case-meta {
+                color: #5f6673;
+                font: 500 11.5px/1.5 var(--mono);
+            }
+
+            .case-visual {
+                align-items: flex-end;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+            }
+
+            .case-shot {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 20px;
+                box-shadow: 0 34px 70px -40px rgba(21, 23, 28, 0.6);
+                margin: 0;
+                max-width: 430px;
+                overflow: hidden;
+                transform: rotate(-0.8deg);
+                transition: box-shadow 0.3s ease, transform 0.3s ease;
+                width: 100%;
+            }
+
+            .case-shot:hover {
+                box-shadow: 0 42px 80px -40px rgba(21, 23, 28, 0.65);
+                transform: rotate(0deg) translateY(-3px);
+            }
+
+            .case-shot img {
+                display: block;
+                height: auto;
+                width: 100%;
+            }
+
+            .case-shot figcaption {
+                color: var(--muted);
+                font: 500 11px/1.5 var(--mono);
+                padding: 10px 15px 12px;
+            }
+
+            .case-chip {
+                align-items: center;
+                backdrop-filter: blur(10px);
+                background: rgba(13, 17, 23, 0.9);
+                border-radius: 999px;
+                bottom: 46px;
+                color: #6ee7b7;
+                display: flex;
+                font: 600 10.5px/1 var(--mono);
+                gap: 7px;
+                letter-spacing: 0.04em;
+                padding: 9px 13px;
+                position: absolute;
+                right: -8px;
+                text-transform: uppercase;
+            }
+
+            .case-chip i {
+                background: #34d399;
+                border-radius: 50%;
+                height: 6px;
+                width: 6px;
+            }
+
+            .case-note {
+                color: #5f6673;
+                font: 500 10.5px/1.5 var(--mono);
+                margin: 14px 0 0;
+                max-width: 430px;
+                text-align: right;
+            }
+
+            /* Models */
+            .model-grid {
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .model-card {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: var(--radius);
+                max-width: 100%;
+                min-width: 0;
+                padding: 28px;
+            }
+
+            .model-top {
+                align-items: center;
+                display: flex;
+                gap: 12px;
+                justify-content: space-between;
+                margin-bottom: 12px;
+            }
+
+            .model-top h3 {
+                font: 600 22px/1.2 var(--serif);
+                letter-spacing: -0.02em;
+                margin: 0;
+            }
+
+            .badge {
+                background: var(--ink);
+                border-radius: 999px;
+                color: #fff;
+                flex: none;
+                font: 600 10.5px/1 var(--mono);
+                letter-spacing: 0.06em;
+                padding: 6px 10px;
+                text-transform: uppercase;
+            }
+
+            .badge.teal {
+                background: rgba(15, 118, 110, 0.1);
+                color: var(--teal);
+            }
+
+            .model-card > p {
+                color: var(--ink-2);
+                font-size: 14.5px;
+                margin: 0 0 18px;
+            }
+
+            table {
+                border-collapse: collapse;
+                font-size: 14px;
+                width: 100%;
+            }
+
+            th {
+                border-bottom: 1px solid var(--line);
+                color: var(--muted);
+                font: 600 10.5px/1 var(--mono);
+                letter-spacing: 0.08em;
+                padding: 9px 0;
+                text-align: left;
+                text-transform: uppercase;
+            }
+
+            td {
+                border-bottom: 1px solid rgba(222, 215, 202, 0.6);
+                color: var(--ink-2);
+                padding: 11px 0;
+                vertical-align: top;
+            }
+
+            td:last-child,
+            th:last-child {
+                text-align: right;
+            }
+
+            tbody tr:last-child td {
+                border-bottom: 0;
+            }
+
+            td .yes {
+                color: var(--teal);
+                font-weight: 600;
+            }
+
+            td .no {
+                color: var(--faint);
+            }
+
+            .model-card table {
+                min-width: 340px;
+            }
+
+            .table-wrap {
+                max-width: 100%;
+                min-width: 0;
+                overflow-x: auto;
+            }
+
+            .limits {
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                margin-top: 18px;
+            }
+
+            .limit-card {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: var(--radius);
+                padding: 22px 24px;
+            }
+
+            .limit-card h3 {
+                font: 600 16px/1.2 var(--sans);
+                margin: 0 0 12px;
+            }
+
+            .limit-card ul {
+                color: var(--ink-2);
+                font-size: 13.5px;
+                line-height: 1.55;
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+
+            .limit-card li {
+                align-items: baseline;
+                border-bottom: 1px solid rgba(222, 215, 202, 0.6);
+                display: flex;
+                gap: 14px;
+                justify-content: space-between;
+                padding: 6px 0;
+            }
+
+            .limit-card li:last-child {
+                border-bottom: 0;
+            }
+
+            .limit-card li span {
+                color: var(--muted);
+            }
+
+            .limit-card li strong {
+                color: var(--ink);
+                font: 600 11.5px/1.4 var(--mono);
+                text-align: right;
+            }
+
+            /* Architecture */
+            .section.dark {
+                background:
+                    radial-gradient(
+                        800px 400px at 80% 0%,
+                        rgba(37, 99, 235, 0.22),
+                        transparent 60%
+                    ),
+                    radial-gradient(
+                        600px 300px at 10% 90%,
+                        rgba(15, 118, 110, 0.18),
+                        transparent 60%
+                    ),
+                    var(--dark);
+                border: 0;
+                color: #f8fafc;
+            }
+
+            .section.dark .eyebrow {
+                color: #7dd3fc;
+            }
+
+            .section.dark .lead {
+                color: #9aa6b8;
+            }
+
+            .arch-grid {
+                align-items: center;
+                display: grid;
+                gap: clamp(32px, 5vw, 64px);
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .arch-points {
+                display: grid;
+                gap: 10px;
+                list-style: none;
+                margin: 24px 0 0;
+                padding: 0;
+            }
+
+            .arch-points li {
+                align-items: baseline;
+                color: #9aa6b8;
+                display: flex;
+                font-size: 14.5px;
+                gap: 12px;
+                line-height: 1.5;
+            }
+
+            .arch-points span {
+                color: #7dd3fc;
+                font: 600 11px/1 var(--mono);
+            }
+
+            .arch-button {
+                margin-top: 28px;
+            }
+
+            .arch-note {
+                color: #77849a;
+                font: 500 11.5px/1.5 var(--mono);
+                margin: 16px 0 0;
+            }
+
+            .arch-note a {
+                color: #a5f3fc;
+                text-decoration: underline;
+                text-underline-offset: 3px;
+            }
+
+            .arch-preview {
+                background: var(--paper);
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: 20px;
+                box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.7);
+                color: var(--ink);
+                display: block;
+                overflow: hidden;
+                transition: box-shadow 0.25s ease, transform 0.25s ease;
+            }
+
+            .arch-preview:hover {
+                box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.8);
+                transform: translateY(-4px);
+            }
+
+            .arch-top {
+                align-items: center;
+                background: #f7f2e8;
+                border-bottom: 1px solid var(--line);
+                color: var(--muted);
+                display: flex;
+                font: 500 11px/1 var(--mono);
+                gap: 10px;
+                padding: 12px 16px;
+            }
+
+            .arch-top span:last-child {
+                color: var(--faint);
+                margin-left: auto;
+            }
+
+            .arch-dot {
+                background: var(--teal);
+                border-radius: 50%;
+                height: 7px;
+                width: 7px;
+            }
+
+            .arch-bands {
+                display: grid;
+                gap: 8px;
+                padding: 18px;
+            }
+
+            .arch-band {
+                background: var(--card);
+                border-left: 3px solid var(--band);
+                border-radius: 6px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                padding: 10px 12px;
+            }
+
+            .arch-band span {
+                color: var(--ink);
+                font: 600 12px/1.2 var(--sans);
+            }
+
+            .arch-band small {
+                color: var(--muted);
+                font: 10.5px/1.3 var(--mono);
+            }
+
+            .arch-band:nth-child(1) {
+                --band: #1f6f5c;
+            }
+
+            .arch-band:nth-child(2) {
+                --band: #2563eb;
+            }
+
+            .arch-band:nth-child(3) {
+                --band: #7c3aed;
+            }
+
+            .arch-band:nth-child(4) {
+                --band: #b45309;
+            }
+
+            .arch-band:nth-child(5) {
+                --band: #0e7490;
+            }
+
+            .arch-foot {
+                align-items: center;
+                border-top: 1px solid var(--line);
+                color: var(--teal);
+                display: flex;
+                font: 600 12px/1 var(--mono);
+                justify-content: space-between;
+                padding: 12px 16px;
+            }
+
+            /* Install */
+            .install-grid {
+                align-items: start;
+                display: grid;
+                gap: clamp(28px, 5vw, 64px);
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .install-grid > * {
+                min-width: 0;
+            }
+
+            .cmd {
+                align-items: center;
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 12px;
+                display: flex;
+                gap: 12px;
+                margin-top: 24px;
+                padding: 14px 16px;
+            }
+
+            .cmd code {
+                color: var(--ink);
+                flex: 1;
+                font: 500 13.5px/1.4 var(--mono);
+                overflow-x: auto;
+            }
+
+            .cmd button {
+                background: var(--ink);
+                border: 0;
+                border-radius: 999px;
+                color: #fff;
+                cursor: pointer;
+                flex: none;
+                font: 600 11.5px/1 var(--sans);
+                padding: 8px 14px;
+                transition: background 0.2s ease;
+            }
+
+            .cmd button:hover {
+                background: #2b3038;
+            }
+
+            .code {
+                background: #0f141b;
+                border: 1px solid #1e2733;
+                border-radius: var(--radius);
+                box-shadow: 0 30px 60px -40px rgba(15, 20, 27, 0.7);
+                color: #dbe4ef;
+                font: 13.5px/1.7 var(--mono);
+                margin: 0;
+                max-width: 100%;
+                min-width: 0;
+                overflow-x: auto;
+                padding: 26px;
+            }
+
+            .tok-key {
+                color: #c4b5fd;
+            }
+
+            .tok-str {
+                color: #86efac;
+            }
+
+            .tok-var {
+                color: #93c5fd;
+            }
+
+            .tok-fn {
+                color: #5eead4;
+            }
+
+            /* Footer */
+            .footer {
+                background: #0b0e13;
+                color: #8e9aad;
+                padding: 48px 0 120px;
+            }
+
+            .footer-inner {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                display: flex;
+                gap: 32px;
+                justify-content: space-between;
+                padding-bottom: 28px;
+            }
+
+            .footer .brand {
+                color: #f8fafc;
+            }
+
+            .footer p {
+                font-size: 14px;
+                margin: 10px 0 0;
+                max-width: 38ch;
+            }
+
+            .footer-links {
+                display: flex;
+                flex-wrap: wrap;
+                font: 500 13px/1.6 var(--mono);
+                gap: 18px;
+            }
+
+            .footer-links a:hover {
+                color: #fff;
+            }
+
+            .footer-base {
+                color: #7f8b9e;
+                display: flex;
+                font: 500 11.5px/1.5 var(--mono);
+                gap: 16px;
+                justify-content: space-between;
+                padding-top: 20px;
+            }
+
+            /* Floating menu */
+            .floating-menu {
+                align-items: flex-end;
+                bottom: 0;
+                display: flex;
+                justify-content: center;
+                justify-content: safe center;
+                left: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                position: fixed;
+                right: 0;
+                scrollbar-width: none;
+                z-index: 71;
+            }
+
+            .floating-menu::-webkit-scrollbar {
+                display: none;
+            }
+
+            .floating-track {
+                align-items: center;
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                background: rgba(255, 253, 248, 0.78);
+                border: 1px solid rgba(222, 215, 202, 0.9);
+                border-radius: 54px;
+                box-shadow: 0 8px 30px -12px rgba(21, 23, 28, 0.45);
+                display: flex;
+                gap: 2px;
+                height: 54px;
+                margin: 16px 24px 24px;
+                max-width: 860px;
+                min-width: max-content;
+                padding: 0 4px;
+            }
+
+            .float-button {
+                align-items: center;
+                background: transparent;
+                border: 0;
+                border-radius: 16px;
+                color: var(--ink);
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                font: 500 10px/10px var(--sans);
+                gap: 3px;
+                height: 46px;
+                justify-content: center;
+                min-width: 62px;
+                padding: 0 6px;
+                text-align: center;
+                transition: background 0.2s ease, color 0.2s ease,
+                    gap 0.2s ease, padding 0.2s ease;
+                white-space: nowrap;
+            }
+
+            .float-button:hover {
+                background: rgba(21, 23, 28, 0.06);
+            }
+
+            .float-button svg {
+                height: 20px;
+                width: 20px;
+            }
+
+            .float-button.is-selected {
+                background: var(--ink);
+                border-radius: 54px;
+                color: #fff;
+                flex-direction: row;
+                font-size: 13px;
+                font-weight: 600;
+                gap: 8px;
+                line-height: 1;
+                padding: 0 14px;
+            }
+
+            .float-button.is-selected:hover {
+                background: #2b3038;
+            }
+
+            .float-button.is-selected svg {
+                height: 18px;
+                width: 18px;
+            }
+
+            /* Hero proof */
+            .hero-proof {
+                align-items: center;
+                color: #aab4c2;
+                display: inline-flex;
+                font: 500 12px/1.5 var(--mono);
+                gap: 8px;
+                margin-top: 18px;
+            }
+
+            .hero-proof img {
+                height: 18px;
+                width: 18px;
+            }
+
+            .hero-proof:hover {
+                color: #f8fafc;
+            }
+
+            /* Why local */
+            .why-grid {
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .why-item {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: var(--radius);
+                padding: 26px;
+            }
+
+            .why-mark {
+                color: var(--teal);
+                font: 600 11px/1 var(--mono);
+                letter-spacing: 0.08em;
+            }
+
+            .why-item h3 {
+                font: 600 24px/1.15 var(--serif);
+                letter-spacing: -0.02em;
+                margin: 14px 0 8px;
+            }
+
+            .why-item p {
+                color: var(--ink-2);
+                font-size: 15.5px;
+                margin: 0;
+            }
+
+            /* Demo challenge */
+            .challenge {
+                display: grid;
+                gap: 10px;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                list-style: none;
+                margin: 0 0 18px;
+                padding: 0;
+            }
+
+            .challenge li {
+                align-items: center;
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 12px;
+                color: var(--ink-2);
+                display: flex;
+                font-size: 14px;
+                gap: 10px;
+                padding: 12px 14px;
+            }
+
+            .challenge span {
+                color: var(--teal);
+                font: 600 10.5px/1 var(--mono);
+            }
+
+            /* Models */
+            .straight {
+                background: linear-gradient(
+                    135deg,
+                    rgba(15, 118, 110, 0.08),
+                    rgba(37, 99, 235, 0.06)
+                );
+                border: 1px solid rgba(15, 118, 110, 0.18);
+                border-left: 4px solid var(--teal);
+                border-radius: var(--radius);
+                margin-top: 18px;
+                padding: 24px 28px;
+            }
+
+            .straight h3 {
+                font: 600 18px/1.2 var(--sans);
+                margin: 0 0 8px;
+            }
+
+            .straight p {
+                color: var(--ink-2);
+                font-size: 15px;
+                margin: 0;
+            }
+
+            .specs {
+                margin-top: 18px;
+            }
+
+            .specs summary {
+                color: var(--muted);
+                cursor: pointer;
+                font: 600 11px/1 var(--mono);
+                letter-spacing: 0.08em;
+                padding: 8px 0;
+                text-transform: uppercase;
+            }
+
+            .specs .limits {
+                margin-top: 8px;
+            }
+
+            /* FAQ */
+            .faq-grid {
+                display: grid;
+                gap: 18px;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .faq-item {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: var(--radius);
+                padding: 24px 26px;
+            }
+
+            .faq-item h3 {
+                font: 600 17px/1.35 var(--sans);
+                margin: 0 0 8px;
+            }
+
+            .faq-item p {
+                color: var(--ink-2);
+                font-size: 15px;
+                margin: 0;
+            }
+
+            /* Final CTA */
+            .cta {
+                background: linear-gradient(135deg, var(--teal), var(--blue));
+                color: #f8fafc;
+                overflow: hidden;
+            }
+
+            .cta-inner {
+                margin-inline: auto;
+                max-width: 720px;
+                text-align: center;
+            }
+
+            .cta .eyebrow {
+                color: #a5f3fc;
+                justify-content: center;
+            }
+
+            .cta .lead {
+                color: #dbe4ef;
+                margin-inline: auto;
+            }
+
+            .cta .actions {
+                justify-content: center;
+            }
+
+            .cta .fine {
+                color: #dbe4ef;
+                margin-top: 22px;
+            }
+
+            .cta .button.primary {
+                background: #fff;
+                color: var(--ink);
+            }
+
+            .cta .button.ghost {
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.28);
+                color: #fff;
+            }
+
+            /* Motion */
+            .js .reveal {
+                opacity: 0;
+                transform: translateY(18px);
+                transition: opacity 0.65s ease, transform 0.65s ease;
+            }
+
+            .js .reveal.in {
+                opacity: 1;
+                transform: none;
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                html {
+                    scroll-behavior: auto;
+                }
+
+                .js .reveal {
+                    opacity: 1;
+                    transform: none;
+                    transition: none;
+                }
+
+                .live i,
+                .caret,
+                .bubble.assistant.streaming
+                    .bubble-body > :last-child::after,
+                .bubble.assistant.streaming
+                    .bubble-body > ul:last-child > li:last-child::after,
+                .bubble.assistant.streaming
+                    .bubble-body > ol:last-child > li:last-child::after,
+                .bubble.assistant.streaming
+                    .bubble-body > pre:last-child > code::after {
+                    animation: none;
+                }
+
+                .button,
+                .card,
+                .arch-preview,
+                .case-shot,
+                .float-button {
+                    transition: none;
+                }
+            }
+
+            /* Responsive */
+            @media (max-width: 980px) {
+                .hero-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .console {
+                    max-width: 620px;
+                }
+
+                .cards {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+
+                .arch-grid,
+                .case-grid,
+                .install-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .model-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .case-visual {
+                    align-items: flex-start;
+                }
+
+                .case-note {
+                    text-align: left;
+                }
+
+                .steps,
+                .why-grid,
+                .faq-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .demo-body {
+                    grid-template-columns: 1fr;
+                }
+
+                .demo-rail {
+                    border-left: 0;
+                    border-top: 1px solid var(--line);
+                }
+            }
+
+            @media (max-width: 720px) {
+                .floating-track {
+                    height: 50px;
+                    margin: 12px 14px 16px;
+                }
+
+                .float-button {
+                    height: 42px;
+                    min-width: 54px;
+                }
+
+                .float-button.is-selected {
+                    padding: 0 11px;
+                }
+
+                .hero {
+                    padding-top: 72px;
+                }
+
+                .stats {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+
+                .stats div {
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    padding: 18px 16px;
+                }
+
+                .stats div:nth-child(2n) {
+                    border-right: 0;
+                }
+
+                .stats div:nth-child(n + 3) {
+                    border-bottom: 0;
+                }
+
+                .cards,
+                .model-grid,
+                .limits,
+                .challenge {
+                    grid-template-columns: 1fr;
+                }
+
+                .model-card table,
+                .model-card tbody {
+                    display: block;
+                    min-width: 0;
+                }
+
+                .model-card thead {
+                    display: none;
+                }
+
+                .model-card tbody tr {
+                    border-top: 1px solid var(--line);
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 4px 14px;
+                    padding: 10px 0;
+                }
+
+                .model-card tbody tr:first-child {
+                    border-top: 0;
+                    padding-top: 0;
+                }
+
+                .model-card td {
+                    border: 0;
+                    font-size: 12.5px;
+                    padding: 0;
+                }
+
+                .model-card td:first-child {
+                    flex-basis: 100%;
+                }
+
+                .model-card td:last-child {
+                    text-align: left;
+                }
+
+                .model-card td:nth-child(2)::before {
+                    color: var(--muted);
+                    content: "Reasoning: ";
+                }
+
+                .model-card td:nth-child(3)::before {
+                    color: var(--muted);
+                    content: "Images: ";
+                }
+
+                .model-card td:nth-child(4)::before {
+                    color: var(--muted);
+                    content: "Weights: ";
+                }
+
+                .model-card .table-wrap {
+                    overflow: visible;
+                }
+
+                .section-head {
+                    margin-bottom: 30px;
+                }
+
+                .demo-meta {
+                    grid-template-columns: 1fr;
+                }
+
+                .demo-form {
+                    flex-wrap: wrap;
+                }
+
+                .demo-form input {
+                    flex-basis: 100%;
+                }
+
+                .demo-form .button {
+                    flex: 1;
+                }
+
+                .code {
+                    font-size: 12px;
+                    padding: 20px;
+                }
+
+                .footer-inner {
+                    flex-direction: column;
+                }
+
+                .footer-base {
+                    flex-direction: column;
+                    gap: 6px;
+                }
+
+                .case-points li {
+                    grid-template-columns: 84px 1fr;
+                }
+
+                .case-chip {
+                    bottom: 42px;
+                    right: 4px;
+                }
+
+                .thread {
+                    max-height: 340px;
+                }
+            }
+
+            @media (max-width: 420px) {
+                .bubble {
+                    max-width: 94%;
+                }
+
+                .rail-row strong {
+                    font-size: 11px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <a class="skip" href="#main">Skip to content</a>
+
+        <header class="hero" id="top">
+            <div class="shell hero-grid">
+                <div class="hero-copy">
+                    <a
+                        class="brand hero-brand"
+                        href="#top"
+                        aria-label="@degreesign/chat home"
+                    >
+                        <span class="brand-mark" aria-hidden="true">
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M5 5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9
+                                    l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1
+                                    2-2z"
+                                />
+                                <path d="M8 10h.01M12 10h.01M16 10h.01" />
+                            </svg>
+                        </span>
+                        <span>@degreesign/chat</span>
+                    </a>
+                    <p class="eyebrow">
+                        <span class="dot" aria-hidden="true"></span>
+                        On-device AI &middot; no API key
+                    </p>
+                    <h1>
+                        Runs on the GPU.<br>
+                        <span class="grad">
+                            Works on the CPU.<br>Yours offline.
+                        </span>
+                    </h1>
+                    <p class="lead">
+                        One model download, then chat that never leaves the
+                        device. WebGPU when the browser has it, automatic CPU
+                        fallback when it doesn't. No API key, no account, no
+                        server, no per-reply bill.
+                    </p>
+                    <div class="actions">
+                        <a class="button primary" href="#demo">
+                            Try the live demo
+                            <span aria-hidden="true">&rarr;</span>
+                        </a>
+                        <a class="button ghost" href="#install">
+                            Install in one command
+                        </a>
+                    </div>
+                    <a class="hero-proof" href="#case-study">
+                        <img
+                            src="dolisty-logo.svg"
+                            alt=""
+                            width="18"
+                            height="18"
+                        >
+                        In production at DoListy
+                    </a>
+                    <p class="hero-note">
+                        MIT &middot; Node 24 or newer &middot; one download:
+                        1.5 GB CPU, 2.0 GB GPU &middot; no quotas
+                    </p>
+                </div>
+
+                <div class="console reveal" aria-label="Chat preview">
+                    <div class="console-top">
+                        <span class="lights" aria-hidden="true">
+                            <i></i><i></i><i></i>
+                        </span>
+                        <span class="console-title">
+                            qwen3-vl-2b / on device
+                        </span>
+                        <span class="live">
+                            <i aria-hidden="true"></i>
+                            local
+                        </span>
+                    </div>
+                    <div class="console-chat">
+                        <p class="cmsg user">
+                            Why keep the model on the device?
+                        </p>
+                        <p class="cmsg bot">
+                            No key, no upload. One download, then it answers on
+                            a plane. The weights stay cached until you clear
+                            them.
+                            <span class="caret" aria-hidden="true"></span>
+                        </p>
+                    </div>
+                    <div class="console-chips">
+                        <span>GPU + CPU</span>
+                        <span>one download</span>
+                        <span>offline</span>
+                        <span>no key</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="shell stats reveal">
+                <div>
+                    <strong>1</strong>
+                    <span>download</span>
+                </div>
+                <div>
+                    <strong>0</strong>
+                    <span>API keys</span>
+                </div>
+                <div>
+                    <strong>0</strong>
+                    <span>uploads</span>
+                </div>
+                <div>
+                    <strong>&infin;</strong>
+                    <span>offline replies</span>
+                </div>
+            </div>
+        </header>
+
+        <main id="main">
+            <section class="section band" id="why">
+                <div class="shell">
+                    <div class="section-head reveal">
+                        <p class="eyebrow">Why local</p>
+                        <h2>The cloud is a dependency. This isn't.</h2>
+                        <p class="lead">
+                            A key, an account, a server, a signal, a bill.
+                            Local chat removes all five. The only thing left is
+                            the download.
+                        </p>
+                    </div>
+                    <div class="why-grid">
+                        <article class="why-item reveal">
+                            <span class="why-mark">01</span>
+                            <h3>No key.</h3>
+                            <p>Nothing to leak, rotate or bill.</p>
+                        </article>
+                        <article class="why-item reveal">
+                            <span class="why-mark">02</span>
+                            <h3>No server.</h3>
+                            <p>The model is the backend.</p>
+                        </article>
+                        <article class="why-item reveal">
+                            <span class="why-mark">03</span>
+                            <h3>No signal.</h3>
+                            <p>Airplane mode is a supported state.</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="demo">
+                <div class="shell">
+                    <div class="section-head reveal">
+                        <p class="eyebrow">Live demo</p>
+                        <h2>Pull the plug. Ask again.</h2>
+                        <p class="lead">
+                            The first reply downloads the model once. Then turn
+                            off Wi-Fi and keep chatting. The answer is generated
+                            in this tab.
+                        </p>
+                    </div>
+
+                    <ol class="challenge reveal">
+                        <li><span>01</span> Send a question.</li>
+                        <li><span>02</span> Turn off Wi-Fi.</li>
+                        <li><span>03</span> Ask another.</li>
+                    </ol>
+
+                    <div class="demo-system reveal">
+                        <label for="demo-system">
+                            System message
+                        </label>
+                        <textarea
+                            id="demo-system"
+                            rows="5"
+                            maxlength="280"
+                            spellcheck="false"
+                        ></textarea>
+                        <p>
+                            This is the instruction the demo sends before your
+                            question. Edit it and watch the answer change.
+                        </p>
+                    </div>
+
+                    <div class="demo-window reveal" id="demo-card">
+                        <div class="demo-bar">
+                            <span class="lights" aria-hidden="true">
+                                <i></i><i></i><i></i>
+                            </span>
+                            <span class="demo-bar-title">
+                                chat / <span id="demo-badge">nothing loaded</span>
+                            </span>
+                            <span class="live">
+                                <i aria-hidden="true"></i>
+                                on device
+                            </span>
+                        </div>
+                        <div class="demo-body">
+                            <div
+                                class="thread"
+                                id="demo-thread"
+                                role="log"
+                                aria-live="polite"
+                                aria-relevant="additions text"
+                                aria-label="Demo chat"
+                            >
+                                <p class="thread-empty" id="demo-empty">
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="1.6"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 5h14a2 2 0 0 1 2 2v7a2 2
+                                            0 0 1-2 2H9l-4 3v-3H5a2 2 0 0
+                                            1-2-2V7a2 2 0 0 1 2-2z" />
+                                    </svg>
+                                    Ask something. The first reply downloads
+                                    the model once, then answers locally.
+                                </p>
+                            </div>
+                            <aside class="demo-rail" aria-label="Session details">
+                                <p class="rail-label">Session</p>
+                                <div class="rail-row">
+                                    <span>Model</span>
+                                    <strong id="demo-model">auto</strong>
+                                </div>
+                                <div class="rail-row">
+                                    <span>Engine</span>
+                                    <strong id="demo-engine">auto</strong>
+                                </div>
+                                <div class="rail-row">
+                                    <span>Weights</span>
+                                    <strong>one download</strong>
+                                </div>
+                                <div class="rail-row">
+                                    <span>Context</span>
+                                    <strong>up to 32k</strong>
+                                </div>
+                                <p class="rail-label spaced">Avg speed</p>
+                                <p class="rail-speed" id="demo-speed">-</p>
+                                <button
+                                    class="rail-reset"
+                                    id="demo-reset"
+                                    type="button"
+                                >
+                                    Reset chat
+                                </button>
+                            </aside>
+                        </div>
+                        <div class="demo-controls">
+                            <p
+                                class="status"
+                                id="demo-status"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                Idle. No model loaded.
+                            </p>
+                            <progress
+                                id="demo-progress"
+                                max="100"
+                                value="0"
+                                aria-label="Model download progress"
+                                hidden
+                            ></progress>
+                            <div class="demo-meta">
+                                <p class="warn">
+                                    <strong>
+                                        First send downloads the weights once.
+                                    </strong>
+                                    About 1.5 GB on CPU or 2.0 GB on GPU. They
+                                    stay cached and later replies run offline.
+                                </p>
+                                <p class="network" id="demo-network">
+                                    Network: checking
+                                </p>
+                            </div>
+                            <form class="demo-form" id="demo-form">
+                                <label class="sr-only" for="demo-prompt">
+                                    Your question
+                                </label>
+                                <input
+                                    id="demo-prompt"
+                                    name="prompt"
+                                    type="text"
+                                    value="Why run the model locally?"
+                                    maxlength="280"
+                                    autocomplete="off"
+                                    placeholder="Tell me anything"
+                                >
+                                <button
+                                    class="button ink"
+                                    id="demo-send"
+                                    type="submit"
+                                >
+                                    Send
+                                </button>
+                                <button
+                                    class="button ghost"
+                                    id="demo-stop"
+                                    type="button"
+                                    hidden
+                                >
+                                    Stop
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section band" id="capabilities">
+                <div class="shell">
+                    <div class="section-head reveal">
+                        <p class="eyebrow">What you get</p>
+                        <h2>Everything handled. Nothing sent.</h2>
+                        <p class="lead">
+                            The engine, the download, the context window and
+                            the cache are the package's job. Your messages,
+                            markup and styles stay yours.
+                        </p>
+                    </div>
+                    <div class="cards">
+                        <article class="card reveal">
+                            <div class="icon" aria-hidden="true">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <rect x="4" y="4" width="16" height="16"
+                                        rx="4" />
+                                    <rect x="9" y="9" width="6" height="6"
+                                        rx="1" />
+                                    <path d="M12 4v2M12 18v2M4 12h2M18 12h2" />
+                                </svg>
+                            </div>
+                            <h3>GPU when it's there. CPU when it isn't.</h3>
+                            <p>
+                                WebGPU runs the Gemma 4 E2B build. Without an
+                                adapter, the same call falls back to the CPU
+                                build. You never branch, detect or configure.
+                            </p>
+                            <div class="tags">
+                                <span>WebGPU</span>
+                                <span>CPU fallback</span>
+                                <span>automatic</span>
+                            </div>
+                        </article>
+                        <article class="card reveal">
+                            <div class="icon" aria-hidden="true">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path d="M12 3v11m0 0 4-4m-4 4-4-4" />
+                                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0
+                                        0 0 2-2v-2" />
+                                </svg>
+                            </div>
+                            <h3>Download once. Reply forever.</h3>
+                            <p>
+                                About 1.5 GB on CPU or 2.0 GB on GPU. It
+                                resumes after a reload, stays cached until you
+                                clear it, and then every token is generated on
+                                the device.
+                            </p>
+                            <div class="tags">
+                                <span>one download</span>
+                                <span>resumable</span>
+                                <span>offline</span>
+                            </div>
+                        </article>
+                        <article class="card reveal">
+                            <div class="icon" aria-hidden="true">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+                                    <path d="m9 12 2 2 4-4" />
+                                </svg>
+                            </div>
+                            <h3>Your prompt never gets a ticket number.</h3>
+                            <p>
+                                No key to leak and no server to trust. The
+                                image, the prompt and the reply stay in the
+                                tab, the worker or the Node process. The
+                                package writes no history.
+                            </p>
+                            <div class="tags">
+                                <span>no upload</span>
+                                <span>no key</span>
+                                <span>no server</span>
+                            </div>
+                        </article>
+                        <article class="card reveal">
+                            <div class="icon" aria-hidden="true">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <rect x="3" y="4" width="18" height="16"
+                                        rx="2" />
+                                    <path d="M3 9h18M7 6.5h.01M10 6.5h.01" />
+                                </svg>
+                            </div>
+                            <h3>Your UI. Our stream.</h3>
+                            <p>
+                                Text arrives through callbacks, so React,
+                                Svelte, a worker or a terminal render the same
+                                reply. Cancel is one call.
+                            </p>
+                            <div class="tags">
+                                <span>React</span>
+                                <span>worker</span>
+                                <span>Node</span>
+                            </div>
+                        </article>
+                        <article class="card reveal">
+                            <div class="icon" aria-hidden="true">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <rect x="3" y="5" width="18" height="14"
+                                        rx="2" />
+                                    <circle cx="8.5" cy="10.5" r="1.5" />
+                                    <path d="m21 15-5-5L5 19" />
+                                </svg>
+                            </div>
+                            <h3>It can look at things.</h3>
+                            <p>
+                                Describe a photo, translate the description,
+                                build tags or turn a voice note into a task.
+                                Vision ships in the CPU build with no second
+                                download.
+                            </p>
+                            <div class="tags">
+                                <span>describeImage</span>
+                                <span>captions</span>
+                                <span>tags</span>
+                            </div>
+                        </article>
+                        <article class="card reveal">
+                            <div class="icon" aria-hidden="true">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path d="M4 7h8M16 7h4M4 17h4M12 17h8" />
+                                    <circle cx="14" cy="7" r="2" />
+                                    <circle cx="10" cy="17" r="2" />
+                                </svg>
+                            </div>
+                            <h3>The boring parts are done.</h3>
+                            <p>
+                                Engine choice, context limits, download resume,
+                                cache reuse and timeouts are handled. You pass
+                                messages and render text.
+                            </p>
+                            <div class="tags">
+                                <span>auto</span>
+                                <span>typed</span>
+                                <span>cancel</span>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="flow">
+                <div class="shell">
+                    <div class="section-head reveal">
+                        <p class="eyebrow">First run</p>
+                        <h2>The first reply downloads. The rest are local.</h2>
+                        <p class="lead">
+                            One model, one cache, no server round trip. The
+                            first send is the only one that needs the network.
+                        </p>
+                    </div>
+                    <div class="steps">
+                        <article class="step reveal">
+                            <span>01</span>
+                            <h3>Install</h3>
+                            <p>
+                                <code>npm install @degreesign/chat</code>, then
+                                call <code>createChat</code>. No key, no
+                                account, no config.
+                            </p>
+                        </article>
+                        <article class="step reveal">
+                            <span>02</span>
+                            <h3>Download once</h3>
+                            <p>
+                                The first send fetches the weights and resumes
+                                if the connection drops. 1.5 GB on CPU, 2.0 GB
+                                on GPU.
+                            </p>
+                        </article>
+                        <article class="step reveal">
+                            <span>03</span>
+                            <h3>Reply offline</h3>
+                            <p>
+                                Every later send runs on the device. Stream
+                                tokens, stop any time, keep the model warm.
+                            </p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section band" id="case-study">
+                <div class="shell case-grid">
+                    <div class="case-copy reveal">
+                        <p class="eyebrow">Proof</p>
+                        <div class="case-lockup">
+                            <img
+                                src="dolisty-logo.svg"
+                                alt="DoListy logo"
+                                width="38"
+                                height="38"
+                            >
+                            <span>DoListy</span>
+                        </div>
+                        <h2>DoListy ships chat with the network off.</h2>
+                        <p class="lead">
+                            A no-signup PWA for photos, voice notes and tasks.
+                            It captions photos, fills tags and answers questions
+                            with no account and no key. The chat is
+                            <code>@degreesign/chat</code>.
+                        </p>
+                        <ul class="case-points">
+                            <li>
+                                <span>Describe</span>
+                                Photos are captioned locally with
+                                <code>describeImage</code>.
+                            </li>
+                            <li>
+                                <span>Answer</span>
+                                Chat replies stream with no account and no API
+                                key.
+                            </li>
+                            <li>
+                                <span>Ship</span>
+                                Works in airplane mode, on a plane, in a
+                                basement.
+                            </li>
+                        </ul>
+                        <div class="case-actions">
+                            <a
+                                class="button ink"
+                                href="https://dolisty.com/#chat"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                See it live
+                                <span aria-hidden="true">&rarr;</span>
+                            </a>
+                            <span class="case-meta">
+                                Screenshot from dolisty.com
+                            </span>
+                        </div>
+                    </div>
+                    <div class="case-visual reveal">
+                        <figure class="case-shot">
+                            <img
+                                src="case-study-dolisty.png"
+                                width="390"
+                                height="285"
+                                alt="DoListy chat answering an afternoon plan question."
+                            >
+                            <figcaption>Chat in the DoListy PWA</figcaption>
+                        </figure>
+                        <span class="case-chip">
+                            <i aria-hidden="true"></i>
+                            on device
+                        </span>
+                        <p class="case-note">
+                            The network is off. The reply still arrives.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="models">
+                <div class="shell">
+                    <div class="section-head reveal">
+                        <p class="eyebrow">Models</p>
+                        <h2>You don't pick. It does.</h2>
+                        <p class="lead">
+                            With no override, the package picks the GPU build
+                            when WebGPU exists and the CPU build when it does
+                            not. Both are 2B models: small enough for a device,
+                            good enough for captions, tags and short answers.
+                        </p>
+                    </div>
+                    <div class="model-grid">
+                        <article class="card model-card reveal">
+                            <div class="model-top">
+                                <h3>Qwen3-VL 2B</h3>
+                                <span class="badge teal">CPU &middot; vision</span>
+                            </div>
+                            <p>
+                                The default on a CPU. Vision travels with the
+                                model, so image turns work without a second
+                                download.
+                            </p>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Build</th>
+                                            <th scope="col">Reasoning</th>
+                                            <th scope="col">Images</th>
+                                            <th scope="col">Weights</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>qwen3_vl_2b</code></td>
+                                            <td class="yes">Yes</td>
+                                            <td class="yes">Yes</td>
+                                            <td>about 1.5 GB</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>qwen3_vl_2b_instruct</code></td>
+                                            <td class="no">No</td>
+                                            <td class="yes">Yes</td>
+                                            <td>Q4_K_M</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>qwen3_vl_2b_instruct_q3</code></td>
+                                            <td class="no">No</td>
+                                            <td class="yes">Yes</td>
+                                            <td>Q3, 160 MB less</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="fine">
+                                4096 token context on a phone, 8192 on a
+                                desktop. The projector shares the text thread
+                                budget.
+                            </p>
+                        </article>
+                        <article class="card model-card reveal">
+                            <div class="model-top">
+                                <h3>Gemma 4 E2B</h3>
+                                <span class="badge">WebGPU</span>
+                            </div>
+                            <p>
+                                The default on a GPU. A 2.0 GB build with a
+                                large context for text turns.
+                            </p>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Build</th>
+                                            <th scope="col">Reasoning</th>
+                                            <th scope="col">Images</th>
+                                            <th scope="col">Weights</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>gemma4_e2b_limited</code></td>
+                                            <td class="yes">Yes</td>
+                                            <td class="no">No</td>
+                                            <td>2.0 GB</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="fine">
+                                16384 token context on a phone, 32768 on a
+                                desktop. The build ships without vision or audio
+                                encoders.
+                            </p>
+                        </article>
+                    </div>
+                    <div class="straight reveal">
+                        <h3>Straight talk.</h3>
+                        <p>
+                            These are 2B models. They are excellent at captions,
+                            tags, summaries, short answers and private drafts.
+                            They are not the model you ask to write a novel. The
+                            first reply on a phone can take a minute. After
+                            that, it is local.
+                        </p>
+                    </div>
+                    <details class="specs reveal">
+                        <summary>Technical details</summary>
+                        <div class="limits">
+                            <div class="limit-card">
+                                <h3>Context and budget</h3>
+                                <ul>
+                                    <li>
+                                        <span>Reply tokens</span>
+                                        <strong>250 default</strong>
+                                    </li>
+                                    <li>
+                                        <span>Images and audio</span>
+                                        <strong>2 / 1</strong>
+                                    </li>
+                                    <li>
+                                        <span>Prompt characters</span>
+                                        <strong>10000</strong>
+                                    </li>
+                                    <li>
+                                        <span>CPU threads</span>
+                                        <strong>one fifth kept free</strong>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="limit-card">
+                                <h3>Timeouts and transport</h3>
+                                <ul>
+                                    <li>
+                                        <span>First chunk</span>
+                                        <strong>5 min desktop / 50 phone</strong>
+                                    </li>
+                                    <li>
+                                        <span>Image prefill</span>
+                                        <strong>14 min</strong>
+                                    </li>
+                                    <li>
+                                        <span>Silence</span>
+                                        <strong>30 s</strong>
+                                    </li>
+                                    <li>
+                                        <span>Download range</span>
+                                        <strong>32 MB</strong>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <section class="section dark" id="architecture">
+                <div class="shell arch-grid">
+                    <div class="arch-copy reveal">
+                        <p class="eyebrow">Architecture</p>
+                        <h2>No black box.</h2>
+                        <p class="lead">
+                            Every function is on one offline HTML page: the
+                            entry, the catalog, the prompt budgets, both engines
+                            and the stores. Read it before you ship it.
+                        </p>
+                        <ul class="arch-points">
+                            <li>
+                                <span>01</span>
+                                Public entry and typed API
+                            </li>
+                            <li>
+                                <span>02</span>
+                                Chat service and model catalog
+                            </li>
+                            <li>
+                                <span>03</span>
+                                Prompt budgets and streaming
+                            </li>
+                            <li>
+                                <span>04</span>
+                                wllama and LiteRT engines
+                            </li>
+                            <li>
+                                <span>05</span>
+                                Stores, assets and weights
+                            </li>
+                        </ul>
+                        <a
+                            class="button primary arch-button"
+                            href="architecture.html"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            Open the full architecture
+                            <span aria-hidden="true">&rarr;</span>
+                        </a>
+                        <p class="arch-note">
+                            Opens in a new tab. One self-contained HTML file.
+                            <a
+                                href="https://github.com/DegreeSign/ds_chat"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                Browse the source
+                            </a>
+                            .
+                        </p>
+                    </div>
+                    <a
+                        class="arch-preview reveal"
+                        href="architecture.html"
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Open the full architecture in a new tab"
+                    >
+                        <div class="arch-top">
+                            <span class="arch-dot" aria-hidden="true"></span>
+                            <span>code structure</span>
+                            <span>full map</span>
+                        </div>
+                        <div class="arch-bands">
+                            <div class="arch-band">
+                                <span>Public entry</span>
+                                <small>
+                                    createChat / preloadModel / describeImage
+                                </small>
+                            </div>
+                            <div class="arch-band">
+                                <span>Model runtime</span>
+                                <small>service / catalog / engine choice</small>
+                            </div>
+                            <div class="arch-band">
+                                <span>Prompt and engines</span>
+                                <small>budgets / streaming / wllama / LiteRT</small>
+                            </div>
+                            <div class="arch-band">
+                                <span>Tools and assets</span>
+                                <small>descriptors / wasm / weights</small>
+                            </div>
+                            <div class="arch-band">
+                                <span>Stores and types</span>
+                                <small>storage / caches / enums</small>
+                            </div>
+                        </div>
+                        <div class="arch-foot">
+                            <span>Open full architecture</span>
+                            <span aria-hidden="true">&rarr;</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <section class="section" id="install">
+                <div class="shell install-grid">
+                    <div class="reveal">
+                        <p class="eyebrow">Install</p>
+                        <h2>One command to local.</h2>
+                        <p class="lead">
+                            No key, no account, no server. Add the package, call
+                            <code>createChat</code>, render the text. Works in
+                            React, a worker, a Node script or plain JS.
+                        </p>
+                        <div class="cmd">
+                            <code>npm install @degreesign/chat</code>
+                            <button
+                                type="button"
+                                id="copy-install"
+                                data-copy="npm install @degreesign/chat"
+                            >
+                                Copy
+                            </button>
+                        </div>
+                        <p class="fine">
+                            Node 24 or newer. Types included. The first call
+                            downloads the weights once; later calls reuse the
+                            cache.
+                        </p>
+                        <div class="tags">
+                            <span>React</span>
+                            <span>Next.js</span>
+                            <span>Vite</span>
+                            <span>Workers</span>
+                            <span>Node 24</span>
+                        </div>
+                    </div>
+                    <pre class="code reveal"><code><span class="tok-key">import</span> {
+    <span class="tok-var">LlmRole</span>,
+    <span class="tok-var">createChat</span>,
+} <span class="tok-key">from</span> <span class="tok-str">"@degreesign/chat"</span>;
+
+<span class="tok-key">const</span> cancel = <span class="tok-fn">createChat</span>({
+    messages: [
+        {
+            role: <span class="tok-var">LlmRole</span>.system,
+            content: <span class="tok-str">"Be brief."</span>,
+        },
+        {
+            role: <span class="tok-var">LlmRole</span>.user,
+            content: <span class="tok-str">"Hello"</span>,
+        },
+    ],
+    onResponse: (text) =&gt; <span class="tok-fn">render</span>(text),
+    onStatus: (state) =&gt; <span class="tok-fn">show</span>(state),
+});
+
+cancel();</code></pre>
+                </div>
+            </section>
+
+            <section class="section band" id="faq">
+                <div class="shell">
+                    <div class="section-head reveal">
+                        <p class="eyebrow">FAQ</p>
+                        <h2>The questions you're about to ask.</h2>
+                        <p class="lead">
+                            No jargon, no asterisks. Here is what it does and
+                            what it does not.
+                        </p>
+                    </div>
+                    <div class="faq-grid">
+                        <article class="faq-item reveal">
+                            <h3>Do I need a GPU?</h3>
+                            <p>
+                                No. WebGPU is used when the browser has it.
+                                Without an adapter, the CPU engine runs the
+                                same call. Phones and older laptops work.
+                            </p>
+                        </article>
+                        <article class="faq-item reveal">
+                            <h3>How big is the download?</h3>
+                            <p>
+                                About 1.5 GB on CPU or 2.0 GB on GPU. It
+                                downloads once, resumes after a reload, and
+                                stays cached until you clear it.
+                            </p>
+                        </article>
+                        <article class="faq-item reveal">
+                            <h3>Does it really work offline?</h3>
+                            <p>
+                                Yes. After the first download, the weights and
+                                the engine run locally. The package makes no
+                                network request to answer.
+                            </p>
+                        </article>
+                        <article class="faq-item reveal">
+                            <h3>What happens if I clear the cache?</h3>
+                            <p>
+                                The next send downloads it again. No hidden
+                                copy, no account.
+                            </p>
+                        </article>
+                        <article class="faq-item reveal">
+                            <h3>How is it free?</h3>
+                            <p>
+                                The package is MIT and there is no per-reply
+                                fee. You pay for the device and the one-time
+                                download, not for each answer.
+                            </p>
+                        </article>
+                        <article class="faq-item reveal">
+                            <h3>Does it collect anything?</h3>
+                            <p>
+                                No key, no server and no upload. The package
+                                writes no history; your app owns the data.
+                            </p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section cta" id="start">
+                <div class="shell cta-inner reveal">
+                    <p class="eyebrow">Start here</p>
+                    <h2>Install once. Answer offline.</h2>
+                    <p class="lead">One package. Two engines. Zero keys.</p>
+                    <div class="actions">
+                        <a class="button primary" href="#install">
+                            Get the install command
+                        </a>
+                        <a class="button ghost" href="#demo">
+                            Try the demo
+                        </a>
+                    </div>
+                    <p class="fine">
+                        MIT &middot; Types included &middot; 1.5 GB CPU / 2.0 GB
+                        GPU
+                    </p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <div class="shell footer-inner">
+                <div>
+                    <a class="brand" href="#top">@degreesign/chat</a>
+                    <p>
+                        On-device AI chat. GPU when it can, CPU when it can't.
+                    </p>
+                </div>
+                <div class="footer-links">
+                    <a href="#demo">Demo</a>
+                    <a href="#faq">FAQ</a>
+                    <a
+                        href="architecture.html"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        Architecture
+                    </a>
+                    <a href="vs_web_llm.html">vs web-llm</a>
+                    <a
+                        href="https://github.com/DegreeSign/ds_chat"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        GitHub
+                    </a>
+                    <a
+                        href="https://www.npmjs.com/package/@degreesign/chat"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        npm
+                    </a>
+                    <a
+                        href="https://github.com/DegreeSign/ds_chat/blob/main/LICENSE"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        License
+                    </a>
+                </div>
+            </div>
+            <div class="shell footer-base">
+                <span>v1.7.3</span>
+                <span>MIT &middot; Node 24 or newer</span>
+            </div>
+        </footer>
+
+        <nav class="floating-menu" aria-label="Primary">
+            <div class="floating-track">
+                <a
+                    class="float-button is-selected"
+                    href="#top"
+                    data-target="#top"
+                    aria-current="page"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M5 5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9
+                            l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+                    </svg>
+                    <span class="float-label">Overview</span>
+                </a>
+                <a class="float-button" href="#why" data-target="#why">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    </svg>
+                    <span class="float-label">Why local</span>
+                </a>
+                <a class="float-button" href="#demo" data-target="#demo">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M4 5h16v11H9l-5 4V5z" />
+                        <path d="M8 9h8M8 12h5" />
+                    </svg>
+                    <span class="float-label">Demo</span>
+                </a>
+                <a
+                    class="float-button"
+                    href="#capabilities"
+                    data-target="#capabilities"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M4 7h8M16 7h4M4 17h4M12 17h8" />
+                        <circle cx="14" cy="7" r="2" />
+                        <circle cx="10" cy="17" r="2" />
+                    </svg>
+                    <span class="float-label">What you get</span>
+                </a>
+                <a class="float-button" href="#models" data-target="#models">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="m12 3 9 5-9 5-9-5 9-5zM3 12l9 5 9-5" />
+                        <path d="m3 16 9 5 9-5" />
+                    </svg>
+                    <span class="float-label">Models</span>
+                </a>
+                <a
+                    class="float-button"
+                    href="#architecture"
+                    data-target="#architecture"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <rect x="3" y="4" width="7" height="6" rx="1" />
+                        <rect x="14" y="4" width="7" height="6" rx="1" />
+                        <rect x="8.5" y="15" width="7" height="6" rx="1" />
+                        <path d="M6.5 10v2h11v-2M12 12v3" />
+                    </svg>
+                    <span class="float-label">Architecture</span>
+                </a>
+                <a
+                    class="float-button"
+                    href="#install"
+                    data-target="#install"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M12 3v11m0 0 4-4m-4 4-4-4" />
+                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0
+                            2-2v-2" />
+                    </svg>
+                    <span class="float-label">Install</span>
+                </a>
+            </div>
+        </nav>
+
+        <script type="module">
+            const CDN = `https://cdn.jsdelivr.net/npm/` +
+                `@degreesign/chat@1.7.2/dist/browser/chat.min.mjs`;
+            const MODELS = {
+                "qwen3-vl-2b": "Qwen3-VL 2B",
+                "qwen3-vl-2b-instruct": "Qwen3-VL 2B Instruct",
+                "qwen3-vl-2b-instruct-q3": "Qwen3-VL 2B Instruct Q3",
+                "gemma4-e2b-limited": "Gemma 4 E2B",
+            };
+
+            const card = document.getElementById("demo-card");
+            const thread = document.getElementById("demo-thread");
+            const empty = document.getElementById("demo-empty");
+            const statusEl = document.getElementById("demo-status");
+            const speedEl = document.getElementById("demo-speed");
+            const badge = document.getElementById("demo-badge");
+            const modelEl = document.getElementById("demo-model");
+            const engineEl = document.getElementById("demo-engine");
+            const progress = document.getElementById("demo-progress");
+            const networkEl = document.getElementById("demo-network");
+            const systemEl = document.getElementById("demo-system");
+            const form = document.getElementById("demo-form");
+            const prompt = document.getElementById("demo-prompt");
+            const send = document.getElementById("demo-send");
+            const stop = document.getElementById("demo-stop");
+            const reset = document.getElementById("demo-reset");
+            const copy = document.getElementById("copy-install");
+
+            let bundlePromise = null;
+            let chatModule = null;
+            let cancel = null;
+            let busy = false;
+            let finished = true;
+            let sawRequesting = false;
+            let assistantBubble = null;
+            let userBubble = null;
+            let lastPrompt = ``;
+            let reply = ``;
+            let runId = 0;
+            const history = [];
+
+            systemEl.value =
+                `You are a human-like assistant to user answer anything they want ` +
+                `as a human.\n` +
+                `You are operating inside a demo page for npm package ` +
+                `@degreesign/chat.\n` +
+                `You answer briefly in markdown.`;
+
+            const modelLabel = (id) => MODELS[id] || `the model`;
+            const backendLabel = (backend) => {
+                if (backend === `gpu`) return `WebGPU`;
+                if (backend === `cpu`) return `CPU`;
+                return `none`;
+            };
+
+            const escapeHtml = (value) => value
+                .replace(/&/g, `&amp;`)
+                .replace(/</g, `&lt;`)
+                .replace(/>/g, `&gt;`)
+                .replace(/"/g, `&quot;`);
+
+            const inlineMarkdown = (value) => {
+                const pieces = [];
+                const code = /`([^`]+)`/g;
+                let last = 0;
+                let match;
+                while ((match = code.exec(value))) {
+                    pieces.push({ text: value.slice(last, match.index), code: false });
+                    pieces.push({ text: match[1], code: true });
+                    last = match.index + match[0].length;
+                }
+                pieces.push({ text: value.slice(last), code: false });
+                return pieces.map((piece) => {
+                    const text = escapeHtml(piece.text);
+                    if (piece.code) return `<code>${text}</code>`;
+                    return text
+                        .replace(/\*\*([^*]+)\*\*/g, `<strong>$1</strong>`)
+                        .replace(/(^|[^*])\*([^*]+)\*/g, `$1<em>$2</em>`)
+                        .replace(
+                            /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+                            `<a href="$2" target="_blank" rel="noreferrer">$1</a>`,
+                        );
+                }).join(``);
+            };
+
+            const renderMarkdown = (value) => {
+                const lines = value.replace(/\r\n/g, `\n`).split(`\n`);
+                const html = [];
+                let paragraph = [];
+                let list = null;
+                let listTag = ``;
+                let fence = null;
+                let codeLines = [];
+
+                const flushParagraph = () => {
+                    if (!paragraph.length) return;
+                    html.push(`<p>${inlineMarkdown(paragraph.join(` `))}</p>`);
+                    paragraph = [];
+                };
+                const flushList = () => {
+                    if (!list) return;
+                    html.push(`<${listTag}>${list.join(``)}</${listTag}>`);
+                    list = null;
+                    listTag = ``;
+                };
+                const flushCode = () => {
+                    if (fence === null) return;
+                    const code = escapeHtml(codeLines.join(`\n`));
+                    html.push(`<pre><code>${code}</code></pre>`);
+                    fence = null;
+                    codeLines = [];
+                };
+
+                for (const line of lines) {
+                    const fenceLine = line.match(/^```(.*)$/);
+                    if (fenceLine) {
+                        if (fence === null) {
+                            flushParagraph();
+                            flushList();
+                            fence = fenceLine[1];
+                        } else {
+                            flushCode();
+                        }
+                        continue;
+                    }
+                    if (fence !== null) {
+                        codeLines.push(line);
+                        continue;
+                    }
+                    if (!line.trim()) {
+                        flushParagraph();
+                        flushList();
+                        continue;
+                    }
+                    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+                    if (heading) {
+                        flushParagraph();
+                        flushList();
+                        const level = heading[1].length;
+                        const title = inlineMarkdown(heading[2]);
+                        html.push(`<h${level}>${title}</h${level}>`);
+                        continue;
+                    }
+                    if (/^\s*[-*+]\s+/.test(line)) {
+                        flushParagraph();
+                        if (listTag !== `ul`) {
+                            flushList();
+                            listTag = `ul`;
+                            list = [];
+                        }
+                        const item = line.replace(/^\s*[-*+]\s+/, ``);
+                        list.push(`<li>${inlineMarkdown(item)}</li>`);
+                        continue;
+                    }
+                    if (/^\s*\d+\.\s+/.test(line)) {
+                        flushParagraph();
+                        if (listTag !== `ol`) {
+                            flushList();
+                            listTag = `ol`;
+                            list = [];
+                        }
+                        const item = line.replace(/^\s*\d+\.\s+/, ``);
+                        list.push(`<li>${inlineMarkdown(item)}</li>`);
+                        continue;
+                    }
+                    if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) {
+                        flushParagraph();
+                        flushList();
+                        html.push(`<hr>`);
+                        continue;
+                    }
+                    if (list) {
+                        const index = list.length - 1;
+                        const tail = inlineMarkdown(line.trim());
+                        list[index] = list[index].replace(
+                            /<\/li>$/,
+                            ` ${tail}</li>`,
+                        );
+                        continue;
+                    }
+                    paragraph.push(line.trim());
+                }
+                flushParagraph();
+                flushList();
+                flushCode();
+                if (!html.length) html.push(`<p></p>`);
+                return html.join(``);
+            };
+
+            const setStatus = (text, kind = ``) => {
+                statusEl.textContent = text;
+                statusEl.dataset.kind = kind;
+            };
+
+            const setModel = (snapshot) => {
+                if (!snapshot.model) return;
+                const label = modelLabel(snapshot.model);
+                const backend = backendLabel(snapshot.backend);
+                badge.textContent = `${label} / ${backend}`;
+                modelEl.textContent = label;
+                engineEl.textContent = backend;
+            };
+
+            const setBusy = (value) => {
+                busy = value;
+                send.disabled = value;
+                stop.hidden = !value;
+                card.setAttribute(`aria-busy`, String(value));
+            };
+
+            const loadBundle = () => {
+                if (!bundlePromise) bundlePromise = import(CDN);
+                return bundlePromise;
+            };
+
+            const addBubble = (role, text) => {
+                const node = document.createElement(`div`);
+                const body = document.createElement(`div`);
+                node.className = `bubble ${role}`;
+                body.className = `bubble-body`;
+                body.textContent = text;
+                node.append(body);
+                thread.append(node);
+                empty.hidden = true;
+                thread.scrollTop = thread.scrollHeight;
+                return node;
+            };
+
+            const finish = (message) => {
+                if (finished) return;
+                finished = true;
+                sawRequesting = false;
+                cancel = null;
+                setBusy(false);
+                progress.hidden = true;
+                progress.value = 0;
+                if (assistantBubble) {
+                    assistantBubble.classList.remove(`streaming`);
+                }
+                const text = reply.trim();
+                if (text && chatModule) {
+                    history.push({ role: chatModule.LlmRole.assistant, content: text });
+                } else {
+                    if (assistantBubble) assistantBubble.remove();
+                    if (userBubble) userBubble.remove();
+                    if (chatModule && history.at(-1)?.role === chatModule.LlmRole.user) {
+                        history.pop();
+                    }
+                    if (!prompt.value.trim()) prompt.value = lastPrompt;
+                    if (!thread.querySelector(`.bubble`)) empty.hidden = false;
+                }
+                assistantBubble = null;
+                userBubble = null;
+                if (message) setStatus(message);
+            };
+
+            const fail = (message) => {
+                if (finished) return;
+                finish();
+                setStatus(message, `error`);
+                badge.textContent = `error`;
+            };
+
+            const onStatus = (snapshot) => {
+                if (finished || !chatModule) return;
+                const { LlmStatus, LlmPhase } = chatModule;
+                if (snapshot.status === LlmStatus.unsupported) {
+                    fail(
+                        `This browser cannot run the model. A supported engine ` +
+                        `and WebAssembly are required.`,
+                    );
+                    return;
+                }
+                if (snapshot.status === LlmStatus.error) {
+                    fail(snapshot.error || `The model failed to load or answer.`);
+                    return;
+                }
+                if (snapshot.requesting) sawRequesting = true;
+                setModel(snapshot);
+                if (snapshot.status === LlmStatus.downloading || snapshot.loading) {
+                    const phase = snapshot.phase === LlmPhase.download
+                        ? `Downloading`
+                        : `Loading`;
+                    progress.hidden = false;
+                    progress.value = snapshot.percent;
+                    setStatus(
+                        `${phase} ${modelLabel(snapshot.model)} / ` +
+                        `${Math.round(snapshot.percent)}%`,
+                    );
+                    return;
+                }
+                progress.hidden = true;
+                if (snapshot.status === LlmStatus.ready) {
+                    if (snapshot.requesting) {
+                        setStatus(`Generating on ${backendLabel(snapshot.backend)}`);
+                    } else if (sawRequesting) {
+                        finish(`Reply finished. The model stays in memory.`);
+                    } else {
+                        setStatus(`Model ready on ${backendLabel(snapshot.backend)}.`);
+                    }
+                    return;
+                }
+                if (snapshot.status === LlmStatus.idle && !snapshot.requesting) {
+                    setStatus(`Idle. No model loaded.`);
+                }
+            };
+
+            const submit = async (event) => {
+                event.preventDefault();
+                const text = prompt.value.trim();
+                if (!text || busy) return;
+                const id = ++runId;
+                finished = false;
+                sawRequesting = false;
+                reply = ``;
+                lastPrompt = text;
+                setBusy(true);
+                prompt.value = ``;
+                setStatus(`Loading the package bundle...`);
+                progress.hidden = true;
+                speedEl.textContent = `-`;
+                userBubble = addBubble(`user`, text);
+                assistantBubble = addBubble(`assistant`, ``);
+                assistantBubble.classList.add(`streaming`);
+
+                let mod;
+                try {
+                    mod = await loadBundle();
+                    chatModule = mod;
+                } catch {
+                    bundlePromise = null;
+                    assistantBubble.remove();
+                    assistantBubble = null;
+                    userBubble.remove();
+                    userBubble = null;
+                    prompt.value = text;
+                    if (!thread.querySelector(`.bubble`)) empty.hidden = false;
+                    finished = true;
+                    setBusy(false);
+                    setStatus(
+                        `Could not load the demo bundle from jsDelivr. ` +
+                        `Check your connection and try again.`,
+                        `error`,
+                    );
+                    return;
+                }
+
+                if (id !== runId || finished) return;
+                history.push({ role: mod.LlmRole.user, content: text });
+                const system = systemEl.value.trim();
+                const messages = system
+                    ? [{ role: mod.LlmRole.system, content: system }, ...history]
+                    : [...history];
+                setStatus(`Starting the runtime...`);
+                send.textContent = `Send`;
+                try {
+                    const call = mod.createChat({
+                        messages,
+                        limits: { maxReplyTokens: 1024 },
+                        onResponse: (value) => {
+                            reply = value;
+                            if (assistantBubble) {
+                                const body = assistantBubble.firstElementChild;
+                                body.innerHTML = renderMarkdown(value);
+                                thread.scrollTop = thread.scrollHeight;
+                            }
+                        },
+                        onSpeed: (value) => {
+                            speedEl.textContent = `${Math.round(value)} tok/s`;
+                        },
+                        onStatus,
+                    });
+                    if (!finished) cancel = call;
+                } catch (error) {
+                    history.pop();
+                    assistantBubble?.remove();
+                    assistantBubble = null;
+                    userBubble?.remove();
+                    userBubble = null;
+                    prompt.value = text;
+                    if (!thread.querySelector(`.bubble`)) empty.hidden = false;
+                    finished = true;
+                    setBusy(false);
+                    setStatus(`Could not start the runtime: ${error.message}`, `error`);
+                }
+            };
+
+            const stopReply = () => {
+                runId += 1;
+                const call = cancel;
+                cancel = null;
+                finish(`Stopped. The model unloaded.`);
+                if (call) call();
+            };
+
+            const resetDemo = () => {
+                runId += 1;
+                const call = cancel;
+                cancel = null;
+                finished = true;
+                sawRequesting = false;
+                busy = false;
+                reply = ``;
+                assistantBubble = null;
+                userBubble = null;
+                lastPrompt = ``;
+                history.length = 0;
+                thread.replaceChildren(empty);
+                empty.hidden = false;
+                setBusy(false);
+                progress.hidden = true;
+                progress.value = 0;
+                speedEl.textContent = `-`;
+                badge.textContent = `nothing loaded`;
+                modelEl.textContent = `auto`;
+                engineEl.textContent = `auto`;
+                setStatus(`Idle. No model loaded.`);
+                if (call) call();
+            };
+
+            form.addEventListener(`submit`, submit);
+            stop.addEventListener(`click`, stopReply);
+            reset.addEventListener(`click`, resetDemo);
+
+            const updateNetwork = () => {
+                const online = navigator.onLine;
+                networkEl.textContent = online
+                    ? `Network: on`
+                    : `Network: off. Still answering.`;
+                networkEl.classList.toggle(`off`, !online);
+            };
+            window.addEventListener(`online`, updateNetwork);
+            window.addEventListener(`offline`, updateNetwork);
+            updateNetwork();
+
+            copy.addEventListener(`click`, async () => {
+                const command = `npm install @degreesign/chat`;
+                let copied = false;
+                try {
+                    await navigator.clipboard.writeText(command);
+                    copied = true;
+                } catch {
+                    const area = document.createElement(`textarea`);
+                    area.value = command;
+                    area.setAttribute(`readonly`, ``);
+                    area.style.position = `fixed`;
+                    area.style.opacity = `0`;
+                    document.body.append(area);
+                    area.select();
+                    copied = document.execCommand(`copy`);
+                    area.remove();
+                }
+                copy.textContent = copied ? `Copied` : `Copy failed`;
+                setTimeout(() => {
+                    copy.textContent = `Copy`;
+                }, 1600);
+            });
+
+            const menuLinks = [...document.querySelectorAll(`.float-button`)];
+            const menu = document.querySelector(`.floating-menu`);
+            const reduceMotion = window.matchMedia(
+                `(prefers-reduced-motion: reduce)`,
+            ).matches;
+            let activeLink = null;
+            const centerMenu = (link) => {
+                if (!menu || !link) return;
+                const menuRect = menu.getBoundingClientRect();
+                const linkRect = link.getBoundingClientRect();
+                menu.scrollTo({
+                    left: linkRect.left - menuRect.left + menu.scrollLeft -
+                        (menuRect.width - linkRect.width) / 2,
+                    behavior: reduceMotion ? `auto` : `smooth`,
+                });
+            };
+            const setActive = (target) => {
+                const link = menuLinks.find(
+                    (item) => item.dataset.target === target,
+                );
+                if (!link || link === activeLink) return;
+                activeLink = link;
+                for (const item of menuLinks) {
+                    const active = item === link;
+                    item.classList.toggle(`is-selected`, active);
+                    if (active) item.setAttribute(`aria-current`, `page`);
+                    else item.removeAttribute(`aria-current`);
+                }
+                centerMenu(link);
+            };
+            const sections = menuLinks
+                .map((link) => document.querySelector(link.dataset.target))
+                .filter((node) => node && node.id !== `top`);
+            const onScroll = () => {
+                const mark = window.scrollY + window.innerHeight * 0.45;
+                let active = `#top`;
+                for (const section of sections) {
+                    if (section.offsetTop <= mark) active = `#${section.id}`;
+                }
+                setActive(active);
+            };
+            window.addEventListener(`scroll`, onScroll, { passive: true });
+            window.addEventListener(`resize`, () => centerMenu(activeLink));
+            for (const link of menuLinks) {
+                link.addEventListener(`click`, () => {
+                    setActive(link.dataset.target);
+                });
+            }
+            onScroll();
+
+            const revealItems = document.querySelectorAll(`.reveal`);
+            if (`IntersectionObserver` in window) {
+                const observer = new IntersectionObserver((entries) => {
+                    for (const entry of entries) {
+                        if (!entry.isIntersecting) continue;
+                        entry.target.classList.add(`in`);
+                        observer.unobserve(entry.target);
+                    }
+                }, { rootMargin: `0px 0px -8% 0px`, threshold: 0.08 });
+                for (const item of revealItems) observer.observe(item);
+            } else {
+                for (const item of revealItems) item.classList.add(`in`);
+            }
+        </script>
+    </body>
+</html>
