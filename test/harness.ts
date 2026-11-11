@@ -717,14 +717,14 @@ const definitions: Array<{
                 assertEqual(defaults.maxImages, 2, `images`);
                 assertEqual(defaults.maxAudio, 1, `audio`);
                 assertEqual(defaults.maxThreads, 32, `threads`);
-                assertEqual(defaults.gpuShare, 0.5, `gpu share`);
+                assertEqual(defaults.gpuShare, 1, `gpu share`);
                 assertEqual(
                     resolveLlmLimits({ gpuShare: 0.35 }).gpuShare,
                     0.35,
                     `share override`,
                 );
                 assertEqual(resolveLlmLimits({ gpuShare: 1 }).gpuShare, 1, `no rest`);
-                assertEqual(resolveLlmLimits({ gpuShare: 0 }).gpuShare, 0.5, `bad share`);
+                assertEqual(resolveLlmLimits({ gpuShare: 0 }).gpuShare, 1, `bad share`);
                 assertEqual(resolveLlmLimits({ gpuShare: 2 }).gpuShare, 1, `clamped share`);
                 assertEqual(
                     resolveLlmLimits({ gpuShare: 0.01 }).gpuShare,
@@ -1363,9 +1363,11 @@ const definitions: Array<{
                     }),
                     buffer = wrapped.createBuffer?.();
                 assertEqual(restFor(0), 0, `no rest`);
-                assertEqual(restFor(maxRestMs * 10), maxRestMs, `rest capped`);
+                assertEqual(restFor(maxRestMs * 10, 0.05), maxRestMs, `rest capped`);
                 assertEqual(restFor(40, 1), 0, `no rest share`);
-                assertEqual(restFor(200), 200, `half rest`);
+                assertEqual(restFor(40), 0, `default share rests none`);
+                assertEqual(restFor(200, 0.5), 200, `half rest`);
+                assertEqual(restFor(40, 0.5), 40, `half share rest`);
                 assertEqual(
                     Math.round(restFor(40)),
                     Math.round(40 * (1 / gpuShare - 1)),

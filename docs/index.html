@@ -3,24 +3,26 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Local AI chat, offline after one download | @degreesign/chat</title>
+        <title>Plug-and-play local AI chat, offline after one download | @degreesign/chat</title>
         <link rel="icon" href="favicon.svg" type="image/svg+xml">
         <meta
             name="description"
-            content="Local, on-device chat with WebGPU and automatic CPU
-            fallback. Download the model once, then reply offline for as long
-            as you want. No API key, no account, no per-reply cost."
+            content="Plug-and-play local, on-device chat with automatic
+            WebGPU or CPU. One download, then unlimited offline replies in any
+            UI. No API key, account or per-reply cost."
         >
         <meta name="theme-color" content="#0d1117">
         <link rel="canonical" href="https://degreesign.github.io/ds_chat/">
         <meta
             property="og:title"
-            content="Local AI chat. One download. Offline for as long as you want."
+            content="Plug and play. Unlimited offline replies. On your
+            device."
         >
         <meta
             property="og:description"
-            content="GPU-ready chat with CPU fallback. No API key, no server,
-            no per-reply bill."
+            content="Automatic GPU or CPU, one download, then unlimited
+            offline replies in any UI. No API key, no server, no per-reply
+            bill."
         >
         <meta property="og:type" content="website">
         <meta property="og:site_name" content="@degreesign/chat">
@@ -35,7 +37,7 @@
                         "name": "Do I need a GPU?",
                         "acceptedAnswer": {
                             "@type": "Answer",
-                            "text": "No. WebGPU when available, otherwise the CPU engine."
+                            "text": "No. WebGPU when available, otherwise CPU, picked for you."
                         }
                     },
                     {
@@ -161,6 +163,9 @@
                 margin-inline: auto;
                 max-width: var(--max);
                 width: 90%;
+                justify-content: center;
+                display: flex;
+                flex-direction: column;
             }
 
             .sr-only {
@@ -1011,6 +1016,32 @@
                 border-radius: 999px;
             }
 
+            progress:indeterminate {
+                animation: sweep 1.2s linear infinite;
+                background-image: linear-gradient(
+                    90deg,
+                    transparent 0,
+                    var(--teal) 12%,
+                    var(--teal) 88%,
+                    transparent 100%
+                );
+                background-repeat: no-repeat;
+                background-size: 30% 100%;
+            }
+
+            progress:indeterminate::-webkit-progress-bar {
+                background: transparent;
+            }
+
+            @keyframes sweep {
+                from {
+                    background-position: 0% 0;
+                }
+                to {
+                    background-position: 100% 0;
+                }
+            }
+
             .demo-form {
                 display: flex;
                 gap: 10px;
@@ -1050,39 +1081,20 @@
                 border-color: var(--ink);
             }
 
-            .demo-meta {
-                align-items: start;
-                display: grid;
-                gap: 14px;
-                grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-                margin-top: 16px;
-            }
-
             .warn {
+                align-self: center;
                 background: rgba(15, 118, 110, 0.07);
                 border: 1px solid rgba(15, 118, 110, 0.14);
                 border-radius: 12px;
                 color: var(--ink-2);
                 font-size: 12px;
                 line-height: 1.55;
-                margin: 0;
+                margin: 54px 0 0;
                 padding: 10px 12px;
             }
 
             .warn strong {
                 color: var(--ink);
-            }
-
-            .network {
-                color: var(--faint);
-                font: 10.5px/1.5 var(--mono);
-                letter-spacing: 0.03em;
-                margin: 0;
-                text-transform: uppercase;
-            }
-
-            .network.off {
-                color: #a33d2c;
             }
 
             .demo-system {
@@ -2174,10 +2186,6 @@
                     margin-bottom: 30px;
                 }
 
-                .demo-meta {
-                    grid-template-columns: 1fr;
-                }
-
                 .demo-form {
                     flex-wrap: wrap;
                 }
@@ -2261,19 +2269,19 @@
                     </a>
                     <p class="eyebrow">
                         <span class="dot" aria-hidden="true"></span>
-                        On-device AI &middot; no API key
+                        Plug and play &middot; automatic engine
                     </p>
                     <h1>
-                        Runs on the GPU.<br>
+                        Plug and play.<br>
                         <span class="grad">
-                            Works on the CPU.<br>Yours offline.
+                            Unlimited replies.<br>Yours offline.
                         </span>
                     </h1>
                     <p class="lead">
-                        One model download, then chat that never leaves the
-                        device. WebGPU when the browser has it, automatic CPU
-                        fallback when it doesn't. No API key, no account, no
-                        server, no per-reply bill.
+                        One download, then unlimited offline replies in any UI.
+                        It picks the engine, manages the download, fits the
+                        prompt and reuses the cache. No key, no account, no
+                        server, no bill.
                     </p>
                     <div class="actions">
                         <a class="button primary" href="#demo">
@@ -2317,17 +2325,17 @@
                             Why keep the model on the device?
                         </p>
                         <p class="cmsg bot">
-                            No key, no upload. One download, then it answers on
-                            a plane. The weights stay cached until you clear
-                            them.
+                            No key, no upload. One download, then it picks the
+                            engine, fits the prompt and answers offline. The
+                            weights stay cached until you clear them.
                             <span class="caret" aria-hidden="true"></span>
                         </p>
                     </div>
                     <div class="console-chips">
-                        <span>GPU + CPU</span>
-                        <span>one download</span>
+                        <span>auto engine</span>
+                        <span>auto prompt</span>
+                        <span>cached weights</span>
                         <span>offline</span>
-                        <span>no key</span>
                     </div>
                 </div>
             </div>
@@ -2347,7 +2355,7 @@
                 </div>
                 <div>
                     <strong>&infin;</strong>
-                    <span>offline replies</span>
+                    <span>unlimited offline replies</span>
                 </div>
             </div>
         </header>
@@ -2503,18 +2511,6 @@
                                 aria-label="Model download progress"
                                 hidden
                             ></progress>
-                            <div class="demo-meta">
-                                <p class="warn">
-                                    <strong>
-                                        First send downloads the weights once.
-                                    </strong>
-                                    About 1.5 GB on CPU or 2.0 GB on GPU. They
-                                    stay cached and later replies run offline.
-                                </p>
-                                <p class="network" id="demo-network">
-                                    Network: checking
-                                </p>
-                            </div>
                             <form class="demo-form" id="demo-form">
                                 <label class="sr-only" for="demo-prompt">
                                     Your question
@@ -2546,6 +2542,13 @@
                             </form>
                         </div>
                     </div>
+                    <p class="warn">
+                        <strong>
+                            First send downloads the weights once.
+                        </strong>
+                        About 1.5 GB on CPU or 2.0 GB on GPU. They stay cached
+                        and later replies run offline.
+                    </p>
                 </div>
             </section>
 
@@ -2555,9 +2558,10 @@
                         <p class="eyebrow">What you get</p>
                         <h2>Everything handled. Nothing sent.</h2>
                         <p class="lead">
-                            The engine, the download, the context window and
-                            the cache are the package's job. Your messages,
-                            markup and styles stay yours.
+                            Plug and play: the engine, the download, the
+                            context window and the cache are the package's job.
+                            Bring any UI; your messages, markup and styles stay
+                            yours.
                         </p>
                     </div>
                     <div class="cards">
@@ -2736,10 +2740,11 @@
                 <div class="shell">
                     <div class="section-head reveal">
                         <p class="eyebrow">First run</p>
-                        <h2>The first reply downloads. The rest are local.</h2>
+                        <h2>The first reply downloads. The rest are unlimited.</h2>
                         <p class="lead">
-                            One model, one cache, no server round trip. The
-                            first send is the only one that needs the network.
+                            One download, one cache, no server round trip.
+                            Every reply after the first is local, offline and
+                            unlimited.
                         </p>
                     </div>
                     <div class="steps">
@@ -2763,10 +2768,11 @@
                         </article>
                         <article class="step reveal">
                             <span>03</span>
-                            <h3>Reply offline</h3>
+                            <h3>Reply offline, unlimited</h3>
                             <p>
                                 Every later send runs on the device. Stream
                                 tokens, stop any time, keep the model warm.
+                                There is no reply quota.
                             </p>
                         </article>
                     </div>
@@ -3107,7 +3113,7 @@
                         <h2>One command to local.</h2>
                         <p class="lead">
                             No key, no account, no server. Add the package, call
-                            <code>createChat</code>, render the text. Works in
+                            <code>createChat</code>, render in any UI. Works in
                             React, a worker, a Node script or plain JS.
                         </p>
                         <div class="cmd">
@@ -3121,9 +3127,8 @@
                             </button>
                         </div>
                         <p class="fine">
-                            Node 24 or newer. Types included. The first call
-                            downloads the weights once; later calls reuse the
-                            cache.
+                            No config, no key. The first call downloads the
+                            weights once; later calls reuse the cache.
                         </p>
                         <div class="tags">
                             <span>React</span>
@@ -3222,7 +3227,10 @@ cancel();</code></pre>
                 <div class="shell cta-inner reveal">
                     <p class="eyebrow">Start here</p>
                     <h2>Install once. Answer offline.</h2>
-                    <p class="lead">One package. Two engines. Zero keys.</p>
+                    <p class="lead">
+                        One package. Two engines. Zero keys. Unlimited offline
+                        replies.
+                    </p>
                     <div class="actions">
                         <a class="button primary" href="#install">
                             Get the install command
@@ -3244,7 +3252,8 @@ cancel();</code></pre>
                 <div>
                     <a class="brand" href="#top">@degreesign/chat</a>
                     <p>
-                        On-device AI chat. GPU when it can, CPU when it can't.
+                        Plug-and-play on-device AI chat. GPU when it can, CPU
+                        when it can't.
                     </p>
                 </div>
                 <div class="footer-links">
@@ -3282,7 +3291,7 @@ cancel();</code></pre>
                 </div>
             </div>
             <div class="shell footer-base">
-                <span>v1.7.3</span>
+                <span>v1.7.4</span>
                 <span>MIT &middot; Node 24 or newer</span>
             </div>
         </footer>
@@ -3439,7 +3448,6 @@ cancel();</code></pre>
             const modelEl = document.getElementById("demo-model");
             const engineEl = document.getElementById("demo-engine");
             const progress = document.getElementById("demo-progress");
-            const networkEl = document.getElementById("demo-network");
             const systemEl = document.getElementById("demo-system");
             const form = document.getElementById("demo-form");
             const prompt = document.getElementById("demo-prompt");
@@ -3450,6 +3458,8 @@ cancel();</code></pre>
 
             let bundlePromise = null;
             let chatModule = null;
+            let preloading = false;
+            let preloadBackend = ``;
             let cancel = null;
             let busy = false;
             let finished = true;
@@ -3635,6 +3645,52 @@ cancel();</code></pre>
                 return bundlePromise;
             };
 
+            /** Draw preload progress */
+            const preloadStatus = (snapshot) => {
+                if (!preloading) return;
+                if (snapshot.status === chatModule.LlmStatus.error) {
+                    preloading = false;
+                    progress.hidden = true;
+                    progress.value = 0;
+                    setStatus(`The model did not load.`, `error`);
+                    return;
+                }
+                const
+                    model = modelLabel(snapshot.model),
+                    percent = Math.round(snapshot.percent),
+                    downloading = snapshot.phase
+                        === chatModule.LlmPhase.download && percent > 0;
+                preloadBackend = snapshot.backend || ``;
+                setModel(snapshot);
+                progress.hidden = false;
+                if (downloading) progress.value = snapshot.percent;
+                else progress.removeAttribute(`value`);
+                setStatus(downloading
+                    ? `Downloading ${model} / ${percent}%`
+                    : `Loading ${model}`);
+            };
+
+            /** Preload the model on open */
+            const autoLoad = async () => {
+                const mod = await loadBundle().catch(() => undefined);
+                if (!mod) return;
+                chatModule = mod;
+                preloading = true;
+                const loaded = await mod.preloadModel({
+                    limits: { gpuShare: 1 },
+                    onStatus: preloadStatus,
+                }).catch(() => false);
+                if (!preloading) return;
+                preloading = false;
+                progress.hidden = true;
+                progress.value = 0;
+                if (!loaded) {
+                    setStatus(`Idle. No model loaded.`);
+                    return;
+                }
+                setStatus(`Model ready on ${backendLabel(preloadBackend)}. Ask anything.`);
+            };
+
             const addBubble = (role, text) => {
                 const node = document.createElement(`div`);
                 const body = document.createElement(`div`);
@@ -3700,15 +3756,17 @@ cancel();</code></pre>
                 if (snapshot.requesting) sawRequesting = true;
                 setModel(snapshot);
                 if (snapshot.status === LlmStatus.downloading || snapshot.loading) {
-                    const phase = snapshot.phase === LlmPhase.download
-                        ? `Downloading`
-                        : `Loading`;
+                    const
+                        model = modelLabel(snapshot.model),
+                        percent = Math.round(snapshot.percent),
+                        downloading = snapshot.phase === LlmPhase.download;
                     progress.hidden = false;
-                    progress.value = snapshot.percent;
-                    setStatus(
-                        `${phase} ${modelLabel(snapshot.model)} / ` +
-                        `${Math.round(snapshot.percent)}%`,
-                    );
+                    // load has no real percent
+                    if (downloading) progress.value = snapshot.percent;
+                    else progress.removeAttribute(`value`);
+                    setStatus(downloading
+                        ? `Downloading ${model} / ${percent}%`
+                        : `Loading ${model}`);
                     return;
                 }
                 progress.hidden = true;
@@ -3732,6 +3790,8 @@ cancel();</code></pre>
                 const text = prompt.value.trim();
                 if (!text || busy) return;
                 const id = ++runId;
+                // reply owns the status line
+                preloading = false;
                 finished = false;
                 sawRequesting = false;
                 reply = ``;
@@ -3778,7 +3838,7 @@ cancel();</code></pre>
                 try {
                     const call = mod.createChat({
                         messages,
-                        limits: { maxReplyTokens: 1024 },
+                        limits: { maxReplyTokens: 1024, gpuShare: 1 },
                         onResponse: (value) => {
                             reply = value;
                             if (assistantBubble) {
@@ -3843,17 +3903,6 @@ cancel();</code></pre>
             form.addEventListener(`submit`, submit);
             stop.addEventListener(`click`, stopReply);
             reset.addEventListener(`click`, resetDemo);
-
-            const updateNetwork = () => {
-                const online = navigator.onLine;
-                networkEl.textContent = online
-                    ? `Network: on`
-                    : `Network: off. Still answering.`;
-                networkEl.classList.toggle(`off`, !online);
-            };
-            window.addEventListener(`online`, updateNetwork);
-            window.addEventListener(`offline`, updateNetwork);
-            updateNetwork();
 
             copy.addEventListener(`click`, async () => {
                 const command = `npm install @degreesign/chat`;
@@ -3941,6 +3990,8 @@ cancel();</code></pre>
             } else {
                 for (const item of revealItems) item.classList.add(`in`);
             }
+
+            void autoLoad();
         </script>
     </body>
 </html>

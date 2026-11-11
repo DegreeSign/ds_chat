@@ -30,7 +30,7 @@ const
         maxContentLength: 1000,
         promptCharBudget: 10000,
         maxThreads: 32,
-        gpuShare: 0.5,
+        gpuShare: 1,
     },
     /** GPU reasoning and answer budget */
     gpuReasoningTokens = 1200,

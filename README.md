@@ -149,7 +149,7 @@ already loaded skips the download and the load. One model stays resident, and
 
 The budget defaults are 250 reply tokens, 128 CPU thinking tokens, 1200 GPU
 reasoning tokens (320 on the CPU), 2 images, 1 audio clip, 1000 characters per
-message, 10000 prompt characters, 32 CPU threads and a 0.5 GPU busy share. The
+message, 10000 prompt characters, 32 CPU threads and a full GPU busy share. The
 CPU engine ignores `gpuShare`; the GPU engine applies it after prefill.
 
 `CancelChat` is `() => void`:
@@ -421,10 +421,11 @@ google-chrome --enable-features=Vulkan --use-angle=vulkan
 `--enable-features=Vulkan,WebGPU` and `--use-angle=vulkan`.
 
 The GPU engine keeps the model and KV cache in GPU memory and rests after every
-token readback, so the card stays near 50% of wall time. `limits.gpuShare`
-overrides that for one reply, from 0.05 to 1; `1` disables the rest, and prefill
-runs unpaced. A busy card can lose the device (`VK_ERROR_DEVICE_LOST`); close
-other GPU tabs or use the CPU model.
+token readback only when `limits.gpuShare` asks for it. The default is `1`, no
+rest, so the card sits at the full decode rate; lower it, from 0.05 to 1, to
+leave the card time between tokens, and prefill always runs unpaced. A busy card
+can lose the device (`VK_ERROR_DEVICE_LOST`); close other GPU tabs or use the
+CPU model.
 
 ## Engines and assets
 

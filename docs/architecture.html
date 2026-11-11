@@ -969,7 +969,7 @@ n(`models`, `supportsAudio`, 121, `supportsAudio`,
 n(`engine`, `limits`, 23, `defaultLlmLimits`, `LlmLimits`,
     `Reply 250 tokens, thinking 128, reasoning total 320, 2 images,`
     + ` 1 audio clip, 1000 chars each, 10000 prompt chars, 32 CPU threads`
-    + ` and a 0.5 GPU busy share`);
+    + ` and a full GPU busy share`);
 n(`engine`, `gpuReasoning`, 36, `gpuReasoningTokens`, `1200`,
     `Reasoning budget of the GPU engine, thought plus answer`);
 n(`engine`, `estimate`, 44, `promptTokenEstimate`,
@@ -1138,8 +1138,8 @@ n(`litert`, `gpuThrottle`, 75,
     `WeakSet · number · boolean · number · ({ device, pace }) => GpuDevice`
     + ` · () => Promise<void> · (share) => void · () => void`,
     `Wrap the WebGPU device so every buffer readback waits for the GPU and`
-    + ` then rests it, keeping the card at the reply share of wall time, 50`
-    + ` percent by default, and start and stop that pacing around the decode`);
+    + ` then rests it, keeping the card at the reply share of wall time, full`
+    + ` by default, and start and stop that pacing around the decode`);
 n(`litert`, `releaseDevice`, 138, `releaseDevice`, `(mod) => void`,
     `Destroy the WebGPU device, clear the wasm device id and unload the wasm`
     + ` module, because a deleted engine wedges them`);
@@ -1439,7 +1439,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.3`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.4`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`

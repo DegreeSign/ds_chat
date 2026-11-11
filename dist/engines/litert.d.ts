@@ -4,7 +4,7 @@ declare const
 /** Smallest Gemma 4 vision budget */
 visionTokens = 70, 
 /** GPU busy share of time */
-gpuShare = 0.5, 
+gpuShare = 1, 
 /** Most rest per readback */
 maxRestMs = 500;
 declare const 
