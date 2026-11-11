@@ -10,7 +10,7 @@ and a LiteRT-LM WebGPU engine run it all locally, and every export is typed.
 [![node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](#faq)
 [![types](https://img.shields.io/badge/types-included-brightgreen.svg)](#faq)
 [![architecture](https://img.shields.io/badge/architecture-view-blue.svg)](https://degreesign.github.io/ds_chat/architecture.html)
-[![comparison](https://img.shields.io/badge/comparison-web--llm-blue.svg)](https://degreesign.github.io/ds_chat/vs_web_llm.html)
+[![comparison](https://img.shields.io/badge/comparison-web--llm-blue.svg)](https://degreesign.github.io/ds_chat/#vs-web-llm)
 
 ## Demo
 
@@ -532,7 +532,7 @@ fake-engine harness needs no server. `yarn verify:node` checks the Node entry.
 The [interactive map](https://degreesign.github.io/ds_chat/architecture.html)
 covers the two entries, every source module with line numbers, the helper edges
 and the send flow. A
-[comparison with `@mlc-ai/web-llm`](https://degreesign.github.io/ds_chat/vs_web_llm.html)
+[comparison with `@mlc-ai/web-llm`](https://degreesign.github.io/ds_chat/#vs-web-llm)
 covers Gemma 4 E2B on WebGPU.
 
 ## FAQ
