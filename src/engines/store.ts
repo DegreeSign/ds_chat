@@ -333,6 +333,7 @@ const
     downloadInto = async (
         dir: FileSystemDirectoryHandle,
         url: string,
+        sourceUrl: string,
         signal: AbortSignal | undefined,
         onProgress: StartLlmParams[`onProgress`],
     ): Promise<StoredModel> => {
@@ -380,7 +381,7 @@ const
                 response: Response;
             signal?.addEventListener(`abort`, leave, { once: true });
             try {
-                response = await fetch(url, {
+                response = await fetch(sourceUrl, {
                     signal: request.signal,
                     headers: { Range: `bytes=${size}-${end}` },
                 });
@@ -487,6 +488,7 @@ const
             /** Download file, resuming stored parts */
             download: async ({
                 url,
+                sourceUrl,
                 signal,
                 onProgress,
             }: StoreDownloadParams): Promise<StoredModel | undefined> => {
@@ -499,7 +501,13 @@ const
                 if (running) return await running;
                 const root = await dir();
                 if (!root) return undefined;
-                const pending = downloadInto(root, url, signal, onProgress)
+                const pending = downloadInto(
+                    root,
+                    url,
+                    sourceUrl || url,
+                    signal,
+                    onProgress,
+                )
                     .catch(error => {
                         if (isQuotaError(error)) quotaFaults.add(url);
                         throw error;

@@ -37,6 +37,8 @@ const
     gpuProbeLog = `ggml_webgpu: Failed to get an adapter`,
     /** Resumable store of CPU engine */
     store = createModelStore(`wllama-store`),
+    /** Idle range read time, ms */
+    rangeIdleMs = 30000,
     /** Ids with instruct vision window */
     instructIds = [
         ChatModelId.qwen3_vl_2b_instruct,
@@ -112,11 +114,18 @@ const
         const cpu = model.cpu;
         if (!cpu) return [];
         return [
-            { name: cpu.file, url: modelUrl(cpu.repo, cpu.file) },
+            {
+                name: cpu.file,
+                url: modelUrl(cpu.repo, cpu.file, cpu.revision),
+            },
             ...(cpu.mmproj
                 ? [{
                     name: cpu.mmproj.file,
-                    url: modelUrl(cpu.mmproj.repo ?? cpu.repo, cpu.mmproj.file),
+                    url: modelUrl(
+                        cpu.mmproj.repo ?? cpu.repo,
+                        cpu.mmproj.file,
+                        cpu.mmproj.revision ?? cpu.revision,
+                    ),
                 }]
                 : []),
         ];
@@ -140,7 +149,10 @@ const
             files = cpuFiles(model),
             models = await instance.modelManager.getModels()
                 .catch(() => []);
-        return !!files.length && models.some(entry => entry.url == files[0].url);
+        // mmproj must be cached too
+        return !!files.length && models.some(entry =>
+            entry.url == files[0].url
+            && (!files[1] || entry.mmprojUrl == files[1].url));
     },
     /** Complete legacy cache blobs */
     cachedBlobs = async (
@@ -162,27 +174,70 @@ const
         end: number,
         signal?: AbortSignal,
     ): Promise<ArrayBuffer> => {
-        const response = await fetch(url, {
-            signal,
-            headers: { Range: `bytes=${start}-${end - 1}` },
-        });
-        // range keeps memory flat
-        if (response.status != 206) {
-            await response.body?.cancel().catch(() => { });
-            throw new Error(`Model range failed`);
+        const
+            request = new AbortController(),
+            leave = () => request.abort();
+        let idle = setTimeout(leave, rangeIdleMs);
+        signal?.addEventListener(`abort`, leave, { once: true });
+        try {
+            const response = await fetch(url, {
+                signal: request.signal,
+                headers: { Range: `bytes=${start}-${end - 1}` },
+            });
+            // range keeps memory flat
+            if (response.status != 206) {
+                await response.body?.cancel().catch(() => { });
+                throw new Error(`Model range failed`);
+            };
+            const
+                reader = response.body?.getReader(),
+                chunks: Uint8Array[] = [];
+            let size = 0;
+            if (!reader) throw new Error(`Model range failed`);
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                // moved bytes extend idle time
+                clearTimeout(idle);
+                idle = setTimeout(leave, rangeIdleMs);
+                chunks.push(value);
+                size += value.byteLength;
+            };
+            const merged = new Uint8Array(size);
+            let offset = 0;
+            for (const chunk of chunks) {
+                merged.set(chunk, offset);
+                offset += chunk.byteLength;
+            };
+            return merged.buffer;
+        } finally {
+            clearTimeout(idle);
+            signal?.removeEventListener(`abort`, leave);
         };
-        return await response.arrayBuffer();
     },
     /** Remote file size in bytes */
     remoteSize = async (
         url: string,
         signal?: AbortSignal,
     ): Promise<number> => {
-        const response = await fetch(url, { method: `HEAD`, signal });
-        await response.body?.cancel().catch(() => { });
-        const size = Number(response.headers.get(`content-length`)) || 0;
-        if (!response.ok || !size) throw new Error(`Model size unknown`);
-        return size;
+        const
+            request = new AbortController(),
+            leave = () => request.abort(),
+            idle = setTimeout(leave, rangeIdleMs);
+        signal?.addEventListener(`abort`, leave, { once: true });
+        try {
+            const response = await fetch(url, {
+                method: `HEAD`,
+                signal: request.signal,
+            });
+            await response.body?.cancel().catch(() => { });
+            const size = Number(response.headers.get(`content-length`)) || 0;
+            if (!response.ok || !size) throw new Error(`Model size unknown`);
+            return size;
+        } finally {
+            clearTimeout(idle);
+            signal?.removeEventListener(`abort`, leave);
+        };
     },
     /** Stored prefix and network blob */
     tailBlob = ({
@@ -191,12 +246,14 @@ const
         storedSize,
         total,
         signal,
+        onBytes,
     }: {
         url: string,
         stored?: Blob,
         storedSize: number,
         total: number,
         signal?: AbortSignal,
+        onBytes?: (bytes: number) => void,
     }): Blob => {
         const limit = Math.max(0, Math.min(storedSize, total));
         return {
@@ -209,22 +266,27 @@ const
                         first = Math.max(0, Math.min(start ?? 0, total)),
                         last = Math.max(first, Math.min(end ?? total, total));
                     if (last <= first) return new ArrayBuffer(0);
-                    // stored prefix holds the range
+                    let buffer: ArrayBuffer;
+                    // stored prefix holds range
                     if (stored && last <= limit)
-                        return await stored.slice(first, last).arrayBuffer();
-                    // range starts past the prefix
-                    if (!stored || first >= limit)
-                        return await fetchRange(url, first, last, signal);
-                    // range crosses the prefix end
-                    const
-                        head = await stored.slice(first, limit).arrayBuffer(),
-                        tail = await fetchRange(url, limit, last, signal),
-                        merged = new Uint8Array(
-                            head.byteLength + tail.byteLength,
-                        );
-                    merged.set(new Uint8Array(head));
-                    merged.set(new Uint8Array(tail), head.byteLength);
-                    return merged.buffer;
+                        buffer = await stored.slice(first, last).arrayBuffer();
+                    // range starts past prefix
+                    else if (!stored || first >= limit)
+                        buffer = await fetchRange(url, first, last, signal);
+                    else {
+                        // range crosses prefix end
+                        const
+                            head = await stored.slice(first, limit).arrayBuffer(),
+                            tail = await fetchRange(url, limit, last, signal),
+                            merged = new Uint8Array(
+                                head.byteLength + tail.byteLength,
+                            );
+                        merged.set(new Uint8Array(head));
+                        merged.set(new Uint8Array(tail), head.byteLength);
+                        buffer = merged.buffer;
+                    };
+                    onBytes?.(buffer.byteLength);
+                    return buffer;
                 },
             }),
         } as unknown as Blob;
@@ -233,8 +295,11 @@ const
     streamBlobs = async (
         model: ChatModel,
         signal?: AbortSignal,
+        onBytes?: (bytes: number) => void,
+        onTotal?: (bytes: number) => void,
     ): Promise<Blob[]> => {
         const blobs: Blob[] = [];
+        let totalSize = 0;
         for (const file of cpuFiles(model)) {
             if (signal?.aborted) throw new Error(`Cancelled`);
             const
@@ -242,14 +307,18 @@ const
                 // metadata may know the total
                 total = stored?.total || await remoteSize(file.url, signal);
             if (!total) throw new Error(`Model size unknown`);
+            totalSize += total;
             blobs.push(tailBlob({
                 url: file.url,
                 stored: stored?.file,
                 storedSize: Math.min(stored?.size || 0, total),
                 total,
                 signal,
+                onBytes,
             }));
         };
+        // total known before reads
+        onTotal?.(totalSize);
         return blobs;
     },
     /** CPU files as stored blobs */
@@ -407,6 +476,13 @@ const
             n_keep: Math.max(64, Math.round(contextSize / 16)),
             ...visionLimits(model),
         };
+        let
+            /** Streamed bytes served */
+            streamedBytes = 0,
+            /** Streamed total bytes */
+            streamTotal = 0,
+            /** Whether network stream owns progress */
+            streamLoad = false;
         try {
             // complete store skips network
             let blobs = complete
@@ -419,14 +495,40 @@ const
                 blobs = await storedBlobs({ model, signal, onProgress })
                     .catch(error => {
                         if (signal?.aborted) throw new Error(`Cancelled`);
-                        // failed store streams its tail
+                        // failed store reports download
                         if (logging) console.log(`Local model store failed`, error);
                         return undefined;
                     });
             // no copy reads stored tail
-            if (!blobs) blobs = await streamBlobs(model, signal);
-            onProgress(1, LlmPhase.load);
+            if (!blobs) {
+                streamLoad = true;
+                blobs = await streamBlobs(
+                    model,
+                    signal,
+                    bytes => {
+                        if (!streamTotal) return;
+                        streamedBytes = Math.min(
+                            streamTotal,
+                            streamedBytes + bytes,
+                        );
+                        // last byte starts load
+                        if (streamedBytes >= streamTotal) {
+                            onProgress(1, LlmPhase.load);
+                            return;
+                        };
+                        onProgress(
+                            streamedBytes / streamTotal,
+                            LlmPhase.download,
+                        );
+                    },
+                    total => { streamTotal = total; },
+                );
+                // stream starts from zero
+                onProgress(0, LlmPhase.download);
+            } else onProgress(1, LlmPhase.load);
             await instance.loadModel(blobs, loadParams);
+            // streamed read may end first
+            if (streamLoad) onProgress(1, LlmPhase.load);
         } catch (error) {
             // failed download leaves worker unusable
             await dropWllama();

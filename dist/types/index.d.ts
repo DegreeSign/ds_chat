@@ -168,11 +168,15 @@ interface ChatModel {
     cpu?: {
         repo: string;
         file: string;
+        /** Optional pinned repository revision */
+        revision?: string;
         /** Optional CPU vision projector */
         mmproj?: {
             /** Projector repository override */
             repo?: string;
             file: string;
+            /** Optional pinned projector revision */
+            revision?: string;
             /** Projector audio support */
             audio?: boolean;
         };
@@ -182,6 +186,8 @@ interface ChatModel {
         repo: string;
         /** Model repository file name */
         file: string;
+        /** Optional pinned repository revision */
+        revision?: string;
         /** Whether the build accepts images */
         vision: boolean;
         /** Whether the build accepts audio */
@@ -545,7 +551,10 @@ interface ResumePlan {
 }
 /** Model download into store */
 interface StoreDownloadParams {
+    /** Stable cache key */
     url: string;
+    /** Pinned fetch URL */
+    sourceUrl?: string;
     /** Stop download, keep bytes */
     signal?: AbortSignal;
     onProgress: StartLlmParams[`onProgress`];

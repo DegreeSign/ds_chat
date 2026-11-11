@@ -14,15 +14,16 @@ cpuFiles: (model: ChatModel) => Array<{
     url: string;
 }>, 
 /** Stored prefix and network blob */
-tailBlob: ({ url, stored, storedSize, total, signal, }: {
+tailBlob: ({ url, stored, storedSize, total, signal, onBytes, }: {
     url: string;
     stored?: Blob;
     storedSize: number;
     total: number;
     signal?: AbortSignal;
+    onBytes?: (bytes: number) => void;
 }) => Blob, 
 /** Stored tails and network blobs */
-streamBlobs: (model: ChatModel, signal?: AbortSignal) => Promise<Blob[]>, 
+streamBlobs: (model: ChatModel, signal?: AbortSignal, onBytes?: (bytes: number) => void, onTotal?: (bytes: number) => void) => Promise<Blob[]>, 
 /** CPU files as stored blobs */
 storedBlobs: ({ model, signal, onProgress, }: {
     model: ChatModel;

@@ -55,6 +55,8 @@ const
             litert: {
                 repo: `litert-community/gemma-4-E2B-it-litert-lm`,
                 file: `gemma-4-E2B-it-gpu.litertlm`,
+                // pinned before web build
+                revision: `3d48132a00cf76de57d926de30f5c5c5ed9b8c0d`,
                 vision: false,
                 audio: false,
             },

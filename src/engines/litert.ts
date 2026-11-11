@@ -159,11 +159,16 @@ const
         const litert = model.litert;
         if (!litert) return false;
         const
-            url = modelUrl(litert.repo, litert.file),
-            [cache, stored] = await Promise.all([cacheOpen(), store.stored(url)]);
+            url = modelUrl(litert.repo, litert.file, litert.revision),
+            key = modelUrl(litert.repo, litert.file),
+            [cache, stored] = await Promise.all([
+                cacheOpen(),
+                store.stored(key),
+            ]);
         if (stored?.complete) return true;
         try {
-            return !!(cache && await cache.match(url));
+            return !!(cache
+                && (await cache.match(url) || await cache.match(key)));
         } catch { return false; };
     },
     /** Downloads in flight, shared */
@@ -559,18 +564,26 @@ const
             /** Full storage skips the cache */
             quotaFull = false;
         const
-            url = modelUrl(litert.repo, litert.file),
+            url = modelUrl(litert.repo, litert.file, litert.revision),
+            key = modelUrl(litert.repo, litert.file),
             cache = await cacheOpen(),
             // complete file needs no network
-            legacy = cache ? await cache.match(url) : undefined;
+            legacy = cache
+                ? await cache.match(url) || await cache.match(key)
+                : undefined;
         if (legacy?.body) source = legacy.body;
         else {
-            const stored = await store.stored(url);
+            const stored = await store.stored(key);
             if (stored?.complete) source = stored.file.stream();
         };
         if (!source) {
             // file store keeps fetched parts
-            const saved = await store.download({ url, signal, onProgress })
+            const saved = await store.download({
+                url: key,
+                sourceUrl: url,
+                signal,
+                onProgress,
+            })
                 .catch(error => {
                     if (signal?.aborted) throw new Error(`Cancelled`);
                     // stream when the store fails

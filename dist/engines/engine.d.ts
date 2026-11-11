@@ -11,7 +11,7 @@ replyOptions: (limits: LlmLimits, reasoning: boolean, temperature?: number, maxT
     max_tokens: number;
 }, 
 /** Resolve one model file URL */
-modelUrl: (repo: string, file: string) => string, 
+modelUrl: (repo: string, file: string, revision?: string) => string, 
 /** Declared download size or zero */
 contentLength: (response: Response) => number, 
 /** Any turn carries an image */

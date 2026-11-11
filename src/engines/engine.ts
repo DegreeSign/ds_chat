@@ -197,8 +197,8 @@ const
     /** Model host */
     hfBase = `https://huggingface.co`,
     /** Resolve one model file URL */
-    modelUrl = (repo: string, file: string): string =>
-        `${hfBase}/${repo}/resolve/main/${file}`,
+    modelUrl = (repo: string, file: string, revision?: string): string =>
+        `${hfBase}/${repo}/resolve/${revision || `main`}/${file}`,
     /** Declared download size or zero */
     contentLength = (response: Response): number =>
         Number(response.headers.get(`content-length`)) || 0,
