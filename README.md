@@ -349,6 +349,7 @@ passes `logging: true`.
 | `qwen3_vl_2b_instruct` | Qwen3-VL 2B Instruct | No | Yes | No | Yes | No |
 | `qwen3_vl_2b_instruct_q3` | Qwen3-VL 2B Instruct Q3 | No | Yes | No | Yes | No |
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
+| `gemma4_e2b_web` | Gemma 4 E2B web | Yes | No | No | No | Yes |
 
 `qwen3_vl_2b` is the general and vision model: a 445 MB projector with the
 model, about 1.5 GB in total, and a 4096 token context on a phone or 8192 on a
@@ -362,6 +363,11 @@ with the same Q8_0 projector and no reasoning pass; the Q3_K_M variant is about
 32768 token context on a desktop and 16384 on a phone, without vision or audio
 encoders. A first call downloads it and later calls reuse it; an interrupted
 download resumes from the last committed part.
+
+`gemma4_e2b_web` loads the older 2.0 GB `gemma-4-E2B-it-web.litertlm` web
+build, text-only like the limited build and pinned to the same revision. Use it
+when a GPU produces incoherent replies with the current file, as an A/B test on
+the same device; the default pick stays `gemma4_e2b_limited`.
 
 ## Prompt assembly
 

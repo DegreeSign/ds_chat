@@ -428,6 +428,11 @@ const definitions: Array<{
                     `gemma4-e2b-limited`,
                     `limited gemma id`,
                 );
+                assertEqual(
+                    ChatModelId.gemma4_e2b_web,
+                    `gemma4-e2b-web`,
+                    `web gemma id`,
+                );
                 assertEqual(BuiltinTool.websearch, `websearch`, `websearch tool`);
                 assertEqual(BuiltinTool.calculate, `calculate`, `calculate tool`);
                 assertEqual(BuiltinTool.currency, `currency`, `currency tool`);
@@ -446,7 +451,7 @@ const definitions: Array<{
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 4, `catalog size`);
+                assertEqual(llmModels.length, 5, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
                 assertEqual(litertContextWindow, 32768, `gpu window`);
                 assertEqual(
@@ -536,6 +541,22 @@ const definitions: Array<{
                 assertEqual(limited.litert?.audio, false, `limited audio`);
                 assertEqual(supportsImages(limited), false, `limited images`);
                 assertEqual(supportsAudio(limited), false, `limited audio support`);
+                const web = modelOf(ChatModelId.gemma4_e2b_web);
+                assertEqual(web.reasoning, true, `web reasoning`);
+                assertEqual(
+                    web.litert?.repo,
+                    `litert-community/gemma-4-E2B-it-litert-lm`,
+                    `web repo`,
+                );
+                assertEqual(
+                    web.litert?.file,
+                    `gemma-4-E2B-it-web.litertlm`,
+                    `web file`,
+                );
+                assertEqual(web.litert?.vision, false, `web vision`);
+                assertEqual(web.litert?.audio, false, `web audio`);
+                assertEqual(supportsImages(web), false, `web images`);
+                assertEqual(supportsAudio(web), false, `web audio support`);
                 const textOnly: ChatModel = {
                     id: ChatModelId.qwen3_vl_2b,
                     reasoning: false,

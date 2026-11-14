@@ -73,17 +73,6 @@ const
             return await navigator.storage.getDirectory();
         } catch { return undefined; };
     },
-    /** Remaining storage bytes, undefined unknown */
-    storageRoom = async (): Promise<number | undefined> => {
-        try {
-            if (typeof navigator == `undefined` || !navigator.storage?.estimate)
-                return undefined;
-            const estimate = await navigator.storage.estimate();
-            return typeof estimate.quota == `number` && estimate.quota > 0
-                ? estimate.quota - (estimate.usage || 0)
-                : undefined;
-        } catch { return undefined; };
-    },
     /** Open model directory if present */
     modelDir = async (
         dir: FileSystemDirectoryHandle,
@@ -350,8 +339,7 @@ const
         };
         let
             high = 0,
-            stalls = 0,
-            roomChecked = false;
+            stalls = 0;
         while (true) {
             if (signal?.aborted) throw new Error(`Cancelled`);
             const stored = await readStored(dir, name);
@@ -417,15 +405,6 @@ const
                     // full body replays stored prefix
                     skip = plan.start == 0 ? size : 0,
                     start = plan.start + skip;
-                if (!roomChecked && plan.total > start) {
-                    roomChecked = true;
-                    const room = await storageRoom();
-                    // full storage keeps parts
-                    if (room != undefined && room < plan.total - start) {
-                        await response.body.cancel().catch(() => { });
-                        throw new DOMException(`Storage is full`, StoreFault.quota);
-                    };
-                };
                 const written = await storeBody({
                     dir: sub,
                     start,

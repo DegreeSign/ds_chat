@@ -61,6 +61,19 @@ const
                 audio: false,
             },
         },
+        {
+            // text-only web build
+            id: ChatModelId.gemma4_e2b_web,
+            reasoning: true,
+            litert: {
+                repo: `litert-community/gemma-4-E2B-it-litert-lm`,
+                file: `gemma-4-E2B-it-web.litertlm`,
+                // pinned web build
+                revision: `3d48132a00cf76de57d926de30f5c5c5ed9b8c0d`,
+                vision: false,
+                audio: false,
+            },
+        },
     ],
     /** CPU context window, 8k tokens */
     cpuContextWindow = 8192, // max 262_400

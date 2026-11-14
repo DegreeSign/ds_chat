@@ -1,6 +1,6 @@
 {
     "name": "@degreesign/chat",
-    "version": "1.7.6",
+    "version": "1.7.7",
     "description": "Headless on-device AI chat for browsers and Node with wllama CPU and LiteRT WebGPU engines",
     "main": "dist/node/chat.node.min.js",
     "module": "dist/browser/chat.min.mjs",
@@ -22,7 +22,7 @@
     "sideEffects": false,
     "scripts": {
         "prebuild": "node scripts/patch-wllama.cjs",
-        "build": "tsc --emitDeclarationOnly && webpack && node scripts/banner-wllama.cjs && node scripts/patch-litert.cjs",
+        "build": "rm -rf dist && tsc --emitDeclarationOnly && webpack && node scripts/banner-wllama.cjs && node scripts/patch-litert.cjs",
         "typecheck": "tsc --noEmit",
         "verify:node": "node test/node.cjs",
         "test:instruct": "cd test && chmod +x llama_setup.sh && ./llama_setup.sh",

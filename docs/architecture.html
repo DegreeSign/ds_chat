@@ -521,7 +521,7 @@ const step = (ids, text) => ({ ids, text });
 
 f(`host`, `host`, `host app`, `host app`, 0, true);
 f(`entry`, `entry`, `index.ts`, `src/index.ts`, 56);
-f(`enums`, `entry`, `enums.ts`, `src/types/enums.ts`, 105);
+f(`enums`, `entry`, `enums.ts`, `src/types/enums.ts`, 106);
 f(`types`, `entry`, `types.ts`, `src/types/index.ts`, 1009);
 f(`chat`, `entry`, `chat.ts`, `src/chat/chat.ts`, 304);
 f(`describe`, `entry`, `describe.ts`, `src/describe/describe.ts`, 595);
@@ -530,7 +530,7 @@ f(`estimate`, `entry`, `estimate.ts`, `src/describe/estimate.ts`, 55);
 f(`deprecated`, `entry`, `deprecated.ts`, `src/describe/deprecated.ts`, 155);
 f(`log`, `runtime`, `log.ts`, `src/core/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/chat/service.ts`, 362);
-f(`models`, `runtime`, `models.ts`, `src/core/models.ts`, 137);
+f(`models`, `runtime`, `models.ts`, `src/core/models.ts`, 162);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 645);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 501);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
@@ -550,7 +550,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5378);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5457);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 558);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 224);
@@ -751,7 +751,8 @@ n(`enums`, `enums`, 2, `enums`, `11 exported enums`,
     + ` EstimateOperation (analyze, describe, translate, tags,`
     + ` translateTags), DescriptionEnhancedStage (translate, tags,`
     + ` translateTags), ChatPreloadField (model, limits, logging, onStatus),`
-    + ` ChatModelId (qwen, qwen instruct, instruct q3, gemma limited),`
+    + ` ChatModelId (qwen, qwen instruct, instruct q3,`
+    + ` gemma limited, gemma web),`
     + ` BuiltinTool and WebSearchProvider`);
 n(`types`, `tools`, 34, `tool records`,
     `ChatTool · ChatToolSchema · ChatToolValue · ChatToolCall`
@@ -916,51 +917,51 @@ n(`llm`, `runtime`, 360, `runtime`, `createRuntime()`,
     `The process-wide loaded models`);
 
 // model catalog
-n(`models`, `llmModels`, 14, `llmModels`, `ChatModel[4]`,
+n(`models`, `llmModels`, 14, `llmModels`, `ChatModel[5]`,
     `qwen3_vl_2b on the CPU, the qwen3_vl_2b_instruct describer and its`
     + ` Q3_K_M twin with their Q8_0 mmproj, and the text-only`
-    + ` gemma4_e2b_limited build on WebGPU`);
+    + ` gemma4_e2b_limited and pinned gemma4_e2b_web builds on WebGPU`);
 n(`models`, `defaultModel`, 9, `defaultModel`,
     `Promise<ChatModelId | undefined> | undefined`,
     `The device default probed once per session, shared by every caller`);
 n(`models`, `gpuProbeTimeout`, 13, `gpuProbeTimeout`, `1500`,
     `Milliseconds a WebGPU adapter probe may hang before the CPU wins`);
-n(`models`, `snapshots`, 64, `size`,
+n(`models`, `snapshots`, 79, `size`,
     `cpuContextWindow`,
     `8k context on the CPU engine, the desktop default`);
-n(`models`, `mobileWindow`, 66, `size`,
+n(`models`, `mobileWindow`, 81, `size`,
     `mobileCpuContextWindow`,
     `4k context on a phone, the smaller cache keeps the tab alive`);
-n(`models`, `litertWindow`, 68, `size`,
+n(`models`, `litertWindow`, 83, `size`,
     `litertContextWindow`,
     `32k context on the desktop GPU engine, the wasm heap holds the model`);
-n(`models`, `mobileLitertWindow`, 70, `size`,
+n(`models`, `mobileLitertWindow`, 85, `size`,
     `mobileLitertContextWindow`,
     `16k context on a phone, half the desktop GPU cache`);
-n(`models`, `mobileDevice`, 72, `mobileDevice`,
+n(`models`, `mobileDevice`, 87, `mobileDevice`,
     `(nav?) => boolean`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
-n(`models`, `contextWindow`, 84, `contextWindow`,
+n(`models`, `contextWindow`, 99, `contextWindow`,
     `(model) => number`,
     `The CPU or LiteRT window of one catalog entry, smaller on a phone`);
-n(`models`, `findLlmModel`, 84, `findLlmModel`,
+n(`models`, `findLlmModel`, 108, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
-n(`models`, `gpuAdapter`, 87, `gpuAdapter`,
+n(`models`, `gpuAdapter`, 111, `gpuAdapter`,
     `() => Promise<boolean>`,
     `True when the browser hands out a WebGPU adapter within the timeout,`
     + ` false in Node`);
-n(`models`, `defaultLlmModel`, 107, `defaultLlmModel`,
+n(`models`, `defaultLlmModel`, 131, `defaultLlmModel`,
     `() => Promise<ChatModelId | undefined>`,
     `The Gemma build when an adapter exists, else the CPU model, memoized`);
-n(`models`, `resolveLlmModel`, 115, `resolveLlmModel`,
+n(`models`, `resolveLlmModel`, 139, `resolveLlmModel`,
     `(id?) => Promise<ChatModel | undefined>`,
     `The requested model, or the device default`);
-n(`models`, `supportsImages`, 118, `supportsImages`,
+n(`models`, `supportsImages`, 142, `supportsImages`,
     `(model) => boolean`,
     `The CPU projector or the LiteRT file of that catalog entry decides`
     + ` vision`);
-n(`models`, `supportsAudio`, 121, `supportsAudio`,
+n(`models`, `supportsAudio`, 145, `supportsAudio`,
     `(model) => boolean`,
     `The projector audio flag or the LiteRT file of that catalog entry`
     + ` decides audio`);
@@ -1198,7 +1199,7 @@ n(`litertLoader`, `loadLitert`, 3, `loadLitert`,
     `import() of the bundled engine-litert chunk, fetched on demand`);
 
 // model file store
-n(`store`, `dir`, 17, `partBytes · maxStalls · idleTimeout`
+n(`store`, `dir`, 454, `partBytes · maxStalls · idleTimeout`
     + ` · storeFaults · downloads · quotaFaults · unsupported`,
     `32 MiB · 4 · 30000 · Set<StoreFault> · Map<string, Promise>`
     + ` · Set<string> · boolean`,
@@ -1214,55 +1215,52 @@ n(`store`, `parts`, 47, `partName · partOffset · chainParts`,
 n(`store`, `storeRoot`, 66, `storeRoot`,
     `() => Promise<FileSystemDirectoryHandle | undefined>`,
     `Open the origin private file system, absent in Node`);
-n(`store`, `storageRoom`, 77, `storageRoom`,
-    `() => Promise<number | undefined>`,
-    `Remaining quota from the storage estimate, undefined when unknown`);
-n(`store`, `meta`, 87, `modelDir · parseMeta · readMeta · writeMeta`,
+n(`store`, `meta`, 77, `modelDir · parseMeta · readMeta · writeMeta`,
     `(dir, name) => Promise<FileSystemDirectoryHandle?>`
     + ` · (handle) => Promise<StoredModelMeta?>`,
     `Open one model directory, parse its metadata file, read and write the`
     + ` size and entity tag beside the parts`);
-n(`store`, `parthandling`, 131, `storeEntries · removeParts · readParts`,
+n(`store`, `parthandling`, 120, `storeEntries · removeParts · readParts`,
     `(dir) => AsyncIterable · Promise<void> · Promise<Blob?>`,
     `Iterate one directory, delete stale parts, and compose the contiguous`
     + ` prefix into one Blob`);
-n(`store`, `readLegacy`, 173, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
+n(`store`, `readLegacy`, 162, `readLegacy`, `(dir, name) => Promise<StoredModel?>`,
     `Read a model an older version stored as one file and metadata`);
-n(`store`, `removeFrom`, 195, `removeFrom`, `(dir, name) => Promise<void>`,
+n(`store`, `removeFrom`, 184, `removeFrom`, `(dir, name) => Promise<void>`,
     `Delete one model directory, its parts and its metadata`);
-n(`store`, `readStored`, 203, `readStored`, `(dir, name) => Promise<StoredModel?>`,
+n(`store`, `readStored`, 192, `readStored`, `(dir, name) => Promise<StoredModel?>`,
     `Stored bytes plus metadata, complete once the parts reach the total`);
-n(`store`, `resumePlan`, 226, `resumePlan`, `(response, part) => ResumePlan?`,
+n(`store`, `resumePlan`, 215, `resumePlan`, `(response, part) => ResumePlan?`,
     `Accept a 206 that continues the parts and matches their size and entity`
     + ` tag, trust the request when the host hides the range`);
-n(`store`, `storeBody`, 255, `storeBody`,
+n(`store`, `storeBody`, 244, `storeBody`,
     `({ dir, start, skip, total, body, onProgress, onChunk }) => Promise<number>`,
     `Write one response body into 32 MiB parts, skip a replayed prefix, commit`
     + ` every part, cancel the reader on failure, report absolute progress and`
     + ` reset the idle timer on each chunk`);
-n(`store`, `downloadInto`, 333, `downloadInto`,
+n(`store`, `downloadInto`, 322, `downloadInto`,
     `(dir, url, signal, onProgress) => Promise<StoredModel>`,
     `Request a bounded range of the missing bytes, stop early when the room`
     + ` cannot hold them, retry a stalled or cut connection from the last`
     + ` committed part, check size and etag, replay a full body over stored`
     + ` parts and keep every part on any failure`);
-n(`store`, `isStoreError`, 465, `isStoreError`, `(error) => boolean`,
+n(`store`, `isStoreError`, 445, `isStoreError`, `(error) => boolean`,
     `A write the browser refuses means this host cannot use a file store`);
-n(`store`, `isQuotaError`, 469, `isQuotaError`, `(error) => boolean`,
+n(`store`, `isQuotaError`, 449, `isQuotaError`, `(error) => boolean`,
     `A quota failure means the load streams and skips the cache`);
-n(`store`, `createModelStore`, 472, `createModelStore`,
+n(`store`, `createModelStore`, 452, `createModelStore`,
     `(dirName) => ModelStore`,
     `Open one engine's directory and return stored, download, remove and`
     + ` purge over it`);
-n(`store`, `stored`, 483, `store.stored`, `(url) => Promise<StoredModel?>`,
+n(`store`, `stored`, 463, `store.stored`, `(url) => Promise<StoredModel?>`,
     `Bytes and metadata of one stored model file`);
-n(`store`, `download`, 488, `store.download`,
+n(`store`, `download`, 468, `store.download`,
     `({ url, signal, onProgress }) => Promise<StoredModel?>`,
     `Share one download per store and URL, undefined without a file system,`
     + ` remember a full storage so the next call streams`);
-n(`store`, `remove`, 514, `store.remove`, `(url) => Promise<void>`,
+n(`store`, `remove`, 501, `store.remove`, `(url) => Promise<void>`,
     `Delete one stored model file and its metadata`);
-n(`store`, `purge`, 521, `store.purge`, `() => Promise<void>`,
+n(`store`, `purge`, 508, `store.purge`, `() => Promise<void>`,
     `Delete the whole engine store directory and every model file in it`);
 
 // image resizing
@@ -1377,7 +1375,7 @@ n(`vfixtures`, `createFakeEngine`, 4, `createFakeEngine`, `(options?) => fake`,
 n(`harness`, `definitions`, 322, `definitions`, `111 deferred cases`,
     `exports, limits, prompt, media, stream, runtime, preload, describe, chat,`
     + ` speed, threads, square`);
-n(`harness`, `main`, 5364, `main`, `() => Promise<void>`,
+n(`harness`, `main`, 5444, `main`, `() => Promise<void>`,
     `Runs definitions, logs TESTS_RESULT, never appends a second #results`);
 n(`vnode`, `main`, 40, `main`, `() => Promise<void>`,
     `Requires both node entries, proves createChat, preloadModel,`
@@ -1439,7 +1437,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.6`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.7`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`
@@ -1825,7 +1823,6 @@ e(`store.downloadInto`, `store.readStored`, `call`);
 e(`store.downloadInto`, `store.readLegacy`, `call`);
 e(`store.downloadInto`, `store.meta`, `call`);
 e(`store.downloadInto`, `store.resumePlan`, `call`);
-e(`store.downloadInto`, `store.storageRoom`, `call`);
 e(`store.downloadInto`, `store.storeBody`, `call`);
 e(`store.downloadInto`, `store.parthandling`, `call`);
 e(`store.downloadInto`, `store.storeName`, `call`);

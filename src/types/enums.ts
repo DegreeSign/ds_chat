@@ -74,6 +74,7 @@ enum ChatModelId {
     qwen3_vl_2b_instruct = `qwen3-vl-2b-instruct`,
     qwen3_vl_2b_instruct_q3 = `qwen3-vl-2b-instruct-q3`,
     gemma4_e2b_limited = `gemma4-e2b-limited`,
+    gemma4_e2b_web = `gemma4-e2b-web`,
 }
 
 /** Built-in tools the package ships */
