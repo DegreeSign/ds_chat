@@ -530,7 +530,7 @@ f(`estimate`, `entry`, `estimate.ts`, `src/describe/estimate.ts`, 55);
 f(`deprecated`, `entry`, `deprecated.ts`, `src/describe/deprecated.ts`, 155);
 f(`log`, `runtime`, `log.ts`, `src/core/log.ts`, 7);
 f(`llm`, `runtime`, `service.ts`, `src/chat/service.ts`, 362);
-f(`models`, `runtime`, `models.ts`, `src/core/models.ts`, 162);
+f(`models`, `runtime`, `models.ts`, `src/core/models.ts`, 168);
 f(`engine`, `engines`, `engine.ts`, `src/engines/engine.ts`, 645);
 f(`wllama`, `engines`, `wllama.ts`, `src/engines/wllama.ts`, 501);
 f(`threads`, `engines`, `threads.ts`, `src/engines/threads.ts`, 7);
@@ -550,7 +550,7 @@ f(`assetsNode`, `assets`, `node.js`, `src/assets/node.js`, 13);
 f(`assetsNodeEsm`, `assets`, `nodeEsm.js`, `src/assets/nodeEsm.js`, 16);
 f(`assetsNodePaths`, `assets`, `nodePaths.js`, `src/assets/nodePaths.js`, 17);
 f(`external`, `assets`, `model weights`, `huggingface.co`, 0, true);
-f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5457);
+f(`harness`, `test`, `harness.ts`, `test/harness.ts`, 5467);
 f(`live`, `test`, `live.cjs`, `test/live.cjs`, 558);
 f(`vfixtures`, `test`, `fixtures.js`, `test/fixtures.js`, 74);
 f(`vnode`, `test`, `node.cjs`, `test/node.cjs`, 224);
@@ -920,48 +920,49 @@ n(`llm`, `runtime`, 360, `runtime`, `createRuntime()`,
 n(`models`, `llmModels`, 14, `llmModels`, `ChatModel[5]`,
     `qwen3_vl_2b on the CPU, the qwen3_vl_2b_instruct describer and its`
     + ` Q3_K_M twin with their Q8_0 mmproj, and the text-only`
-    + ` gemma4_e2b_limited and pinned gemma4_e2b_web builds on WebGPU`);
+    + ` gemma4_e2b_limited and gemma4_e2b_web builds on WebGPU, every`
+    + ` artifact pinned to a commit`);
 n(`models`, `defaultModel`, 9, `defaultModel`,
     `Promise<ChatModelId | undefined> | undefined`,
     `The device default probed once per session, shared by every caller`);
 n(`models`, `gpuProbeTimeout`, 13, `gpuProbeTimeout`, `1500`,
     `Milliseconds a WebGPU adapter probe may hang before the CPU wins`);
-n(`models`, `snapshots`, 79, `size`,
+n(`models`, `snapshots`, 85, `size`,
     `cpuContextWindow`,
     `8k context on the CPU engine, the desktop default`);
-n(`models`, `mobileWindow`, 81, `size`,
+n(`models`, `mobileWindow`, 87, `size`,
     `mobileCpuContextWindow`,
     `4k context on a phone, the smaller cache keeps the tab alive`);
-n(`models`, `litertWindow`, 83, `size`,
+n(`models`, `litertWindow`, 89, `size`,
     `litertContextWindow`,
     `32k context on the desktop GPU engine, the wasm heap holds the model`);
-n(`models`, `mobileLitertWindow`, 85, `size`,
+n(`models`, `mobileLitertWindow`, 91, `size`,
     `mobileLitertContextWindow`,
     `16k context on a phone, half the desktop GPU cache`);
-n(`models`, `mobileDevice`, 87, `mobileDevice`,
+n(`models`, `mobileDevice`, 93, `mobileDevice`,
     `(nav?) => boolean`,
     `Client hints first, then the user agent, a touch Mac counts as iPad`);
-n(`models`, `contextWindow`, 99, `contextWindow`,
+n(`models`, `contextWindow`, 105, `contextWindow`,
     `(model) => number`,
     `The CPU or LiteRT window of one catalog entry, smaller on a phone`);
-n(`models`, `findLlmModel`, 108, `findLlmModel`,
+n(`models`, `findLlmModel`, 114, `findLlmModel`,
     `(id?) => ChatModel | undefined`,
     `Catalog lookup by stable id`);
-n(`models`, `gpuAdapter`, 111, `gpuAdapter`,
+n(`models`, `gpuAdapter`, 117, `gpuAdapter`,
     `() => Promise<boolean>`,
     `True when the browser hands out a WebGPU adapter within the timeout,`
     + ` false in Node`);
-n(`models`, `defaultLlmModel`, 131, `defaultLlmModel`,
+n(`models`, `defaultLlmModel`, 137, `defaultLlmModel`,
     `() => Promise<ChatModelId | undefined>`,
     `The Gemma build when an adapter exists, else the CPU model, memoized`);
-n(`models`, `resolveLlmModel`, 139, `resolveLlmModel`,
+n(`models`, `resolveLlmModel`, 145, `resolveLlmModel`,
     `(id?) => Promise<ChatModel | undefined>`,
     `The requested model, or the device default`);
-n(`models`, `supportsImages`, 142, `supportsImages`,
+n(`models`, `supportsImages`, 148, `supportsImages`,
     `(model) => boolean`,
     `The CPU projector or the LiteRT file of that catalog entry decides`
     + ` vision`);
-n(`models`, `supportsAudio`, 145, `supportsAudio`,
+n(`models`, `supportsAudio`, 151, `supportsAudio`,
     `(model) => boolean`,
     `The projector audio flag or the LiteRT file of that catalog entry`
     + ` decides audio`);
@@ -1437,7 +1438,7 @@ n(`scripts`, `patchLitert`, 1, `patch-litert`, `node script`,
 n(`scripts`, `patchWllama`, 1, `patch-wllama`, `node script`,
     `Sizes the installed wllama worker pool at twice the thread count so the`
     + ` projector and the model both find workers, once per build`);
-n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.7`,
+n(`package`, `package`, 1, `package.json`, `@degreesign/chat 1.7.8`,
     `prebuild = wllama pool patch; build = tsc declarations, webpack, banner,`
     + ` glue filter; typecheck = tsc --noEmit; test:instruct = live Qwen3-VL`
     + ` server; wllama and LiteRT are build-time dependencies; exports point at`

@@ -351,6 +351,10 @@ passes `logging: true`.
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 | `gemma4_e2b_web` | Gemma 4 E2B web | Yes | No | No | No | Yes |
 
+Every artifact is pinned to a repository revision, so a download always yields
+the exact file that was validated. A projector may live in another repository
+and carries its own revision.
+
 `qwen3_vl_2b` is the general and vision model: a 445 MB projector with the
 model, about 1.5 GB in total, and a 4096 token context on a phone or 8192 on a
 desktop. Its projector shares the text thread budget, so image turns wait.

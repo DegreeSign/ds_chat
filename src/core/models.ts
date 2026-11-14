@@ -18,8 +18,10 @@ const
             cpu: {
                 repo: `Qwen/Qwen3-VL-2B-Thinking-GGUF`,
                 file: `Qwen3VL-2B-Thinking-Q4_K_M.gguf`,
+                revision: `76646427920e08bd278e46af11c5db8532e6a657`,
                 mmproj: {
                     file: `mmproj-Qwen3VL-2B-Thinking-Q8_0.gguf`,
+                    revision: `76646427920e08bd278e46af11c5db8532e6a657`,
                 },
             },
         },
@@ -29,9 +31,11 @@ const
             cpu: {
                 repo: `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
                 file: `Qwen3-VL-2B-Instruct-Q4_K_M.gguf`,
+                revision: `8dcb98e52a1d1d02dce9249e5ab15bae8121c666`,
                 mmproj: {
                     repo: `Qwen/Qwen3-VL-2B-Instruct-GGUF`,
                     file: `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
+                    revision: `52d6c8ffea26cc873ac5ad116f8631268d7eb503`,
                 },
             },
         },
@@ -42,9 +46,11 @@ const
             cpu: {
                 repo: `unsloth/Qwen3-VL-2B-Instruct-GGUF`,
                 file: `Qwen3-VL-2B-Instruct-Q3_K_M.gguf`,
+                revision: `8dcb98e52a1d1d02dce9249e5ab15bae8121c666`,
                 mmproj: {
                     repo: `Qwen/Qwen3-VL-2B-Instruct-GGUF`,
                     file: `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
+                    revision: `52d6c8ffea26cc873ac5ad116f8631268d7eb503`,
                 },
             },
         },

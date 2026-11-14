@@ -557,6 +557,16 @@ const definitions: Array<{
                 assertEqual(web.litert?.audio, false, `web audio`);
                 assertEqual(supportsImages(web), false, `web images`);
                 assertEqual(supportsAudio(web), false, `web audio support`);
+                const artifacts = llmModels.flatMap(model => model.cpu
+                    ? [model.cpu, ...(model.cpu.mmproj ? [model.cpu.mmproj] : [])]
+                    : model.litert ? [model.litert] : []);
+                assertEqual(artifacts.length, 8, `artifact count`);
+                for (const artifact of artifacts)
+                    assertEqual(
+                        artifact.revision?.length,
+                        40,
+                        `pinned ${artifact.file}`,
+                    );
                 const textOnly: ChatModel = {
                     id: ChatModelId.qwen3_vl_2b,
                     reasoning: false,
