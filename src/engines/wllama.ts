@@ -116,7 +116,7 @@ const
         return [
             {
                 name: cpu.file,
-                url: modelUrl(cpu.repo, cpu.file, cpu.revision),
+                url: cpu.url ?? modelUrl(cpu.repo, cpu.file, cpu.revision),
             },
             ...(cpu.mmproj
                 ? [{

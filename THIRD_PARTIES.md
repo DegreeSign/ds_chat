@@ -28,7 +28,9 @@ MIT License. See [LICENSE](LICENSE).
 
 ## Model weights
 
-The weights download at runtime and are not part of this package.
+The weights download at runtime.
+Every model used by the package is to be also kept
+in the [`models`](models) directory for reference.
 
 ### Qwen3-VL 2B Thinking
 
@@ -49,6 +51,12 @@ The weights download at runtime and are not part of this package.
 - License: Apache License 2.0
 - Source: https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm
 - Contents: the Gemma 4 E2B multimodal checkpoint in `.litertlm` form.
+
+### Gemma 4 E2B QAT
+
+- License: Apache License 2.0
+- Source: https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF
+- Contents: the Gemma 4 E2B QAT checkpoint in UD-Q4_K_XL GGUF form.
 
 ## Attribution
 

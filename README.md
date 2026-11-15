@@ -348,6 +348,7 @@ passes `logging: true`.
 | `qwen3_vl_2b` | Qwen3-VL 2B | Yes | Yes | No | Yes | No |
 | `qwen3_vl_2b_instruct` | Qwen3-VL 2B Instruct | No | Yes | No | Yes | No |
 | `qwen3_vl_2b_instruct_q3` | Qwen3-VL 2B Instruct Q3 | No | Yes | No | Yes | No |
+| `gemma4_e2b_qat` | Gemma 4 E2B QAT | Yes | No | No | Yes | No |
 | `gemma4_e2b_limited` | Gemma 4 E2B limited | Yes | No | No | No | Yes |
 | `gemma4_e2b_web` | Gemma 4 E2B web | Yes | No | No | No | Yes |
 
@@ -367,6 +368,10 @@ with the same Q8_0 projector and no reasoning pass; the Q3_K_M variant is about
 32768 token context on a desktop and 16384 on a phone, without vision or audio
 encoders. A first call downloads it and later calls reuse it; an interrupted
 download resumes from the last committed part.
+
+`gemma4_e2b_qat` is the Unsloth QAT build in `UD-Q4_K_XL` GGUF form, text-only
+and 2.6 GB. It is the CPU companion to the Gemma 4 WebGPU builds; a host that
+already ships the file can set the optional `cpu.url` to skip the download.
 
 `gemma4_e2b_web` loads the older 2.0 GB `gemma-4-E2B-it-web.litertlm` web
 build, text-only like the limited build and pinned to the same revision. Use it
@@ -403,9 +408,10 @@ user:      {next turn}
 ## Enable WebGPU
 
 A request without `model` picks `gemma4_e2b_limited` when the browser exposes a
-WebGPU adapter and `qwen3_vl_2b` when it does not. `gpuAdapter()` runs the same
-probe, and every snapshot reports the running build in `model`. Check before
-blaming the package:
+usable WebGPU adapter and `qwen3_vl_2b` when it does not. `gpuAdapter()` rejects
+adapters that hide their vendor or architecture, report `google`, or are
+software fallbacks; pass `true` to force the probe. Every snapshot reports the
+running build in `model`. Check before blaming the package:
 
 ```js
 const adapter = await navigator.gpu?.requestAdapter();

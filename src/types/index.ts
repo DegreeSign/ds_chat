@@ -208,6 +208,8 @@ interface ChatModel {
     cpu?: {
         repo: string,
         file: string,
+        /** Optional local file URL */
+        url?: string,
         /** Optional pinned repository revision */
         revision?: string,
         /** Optional CPU vision projector */
@@ -506,8 +508,23 @@ interface GpuNavigator extends Navigator {
         /** Request WebGPU adapter */
         requestAdapter: (options?: {
             powerPreference?: `low-power` | `high-performance`,
-        }) => Promise<unknown>,
+        }) => Promise<GpuAdapter | null | undefined>,
     },
+}
+
+/** Minimal WebGPU adapter */
+interface GpuAdapter {
+    /** Adapter identity */
+    info?: {
+        /** Adapter vendor */
+        vendor?: string,
+        /** Adapter architecture */
+        architecture?: string,
+        /** Software adapter flag */
+        isFallbackAdapter?: boolean,
+    },
+    /** Software adapter flag */
+    isFallbackAdapter?: boolean,
 }
 
 /** Minimal WebGPU buffer */
@@ -980,6 +997,7 @@ export type {
     GpuWasm,
     GpuThrottleParams,
     GpuNavigator,
+    GpuAdapter,
     MobileNavigator,
     ActiveCall,
     RuntimeDeps,

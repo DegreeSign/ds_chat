@@ -295,7 +295,7 @@ const
     /** Test with stubbed WebGPU adapter */
     withGpu = async (
         run: () => Promise<void>,
-        adapter: unknown = {},
+        adapter: unknown = { info: { vendor: `test`, architecture: `test` } },
     ): Promise<void> => {
         const
             nav = navigator as Navigator & {
@@ -451,7 +451,7 @@ const definitions: Array<{
         {
             name: `models/catalog`,
             run: () => {
-                assertEqual(llmModels.length, 5, `catalog size`);
+                assertEqual(llmModels.length, 6, `catalog size`);
                 assertEqual(cpuContextWindow, 8192, `cpu window`);
                 assertEqual(litertContextWindow, 32768, `gpu window`);
                 assertEqual(
@@ -560,7 +560,7 @@ const definitions: Array<{
                 const artifacts = llmModels.flatMap(model => model.cpu
                     ? [model.cpu, ...(model.cpu.mmproj ? [model.cpu.mmproj] : [])]
                     : model.litert ? [model.litert] : []);
-                assertEqual(artifacts.length, 8, `artifact count`);
+                assertEqual(artifacts.length, 9, `artifact count`);
                 for (const artifact of artifacts)
                     assertEqual(
                         artifact.revision?.length,
@@ -678,6 +678,21 @@ const definitions: Array<{
                         });
                     else delete nav.gpu;
                 };
+            },
+        },
+        {
+            name: `models/gpu usable`,
+            run: async () => {
+                await withGpu(async () => {
+                    assertEqual(await gpuAdapter(), false, `sparse adapter`);
+                    assertEqual(await gpuAdapter(true), true, `forced adapter`);
+                }, { info: {} });
+                await withGpu(async () => {
+                    assertEqual(await gpuAdapter(), true, `complete adapter`);
+                }, { info: { vendor: `intel`, architecture: `gen-12lp` } });
+                await withGpu(async () => {
+                    assertEqual(await gpuAdapter(), false, `software adapter`);
+                }, { info: { vendor: `google`, architecture: `swiftshader` }, isFallbackAdapter: true });
             },
         },
         {

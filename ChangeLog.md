@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0
+
+- Add `gemma4_e2b_qat`, text-only CPU QAT build.
+- Add `ChatModel.cpu.url`, optional local weights URL.
+- Add `GpuAdapter`, minimal WebGPU adapter shape.
+- Change `gpuAdapter` to take `force`, skip weak adapters.
+
 ## 1.7.0
 
 - Add `describeImage`, describes one image in English.

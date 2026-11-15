@@ -168,6 +168,8 @@ interface ChatModel {
     cpu?: {
         repo: string;
         file: string;
+        /** Optional local file URL */
+        url?: string;
         /** Optional pinned repository revision */
         revision?: string;
         /** Optional CPU vision projector */
@@ -430,8 +432,22 @@ interface GpuNavigator extends Navigator {
         /** Request WebGPU adapter */
         requestAdapter: (options?: {
             powerPreference?: `low-power` | `high-performance`;
-        }) => Promise<unknown>;
+        }) => Promise<GpuAdapter | null | undefined>;
     };
+}
+/** Minimal WebGPU adapter */
+interface GpuAdapter {
+    /** Adapter identity */
+    info?: {
+        /** Adapter vendor */
+        vendor?: string;
+        /** Adapter architecture */
+        architecture?: string;
+        /** Software adapter flag */
+        isFallbackAdapter?: boolean;
+    };
+    /** Software adapter flag */
+    isFallbackAdapter?: boolean;
 }
 /** Minimal WebGPU buffer */
 interface GpuBuffer {
@@ -845,4 +861,4 @@ interface ImageSize {
     width: number;
     height: number;
 }
-export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, CallOptions, EstimateEntry, EstimateReport, DescribeImageInput, DescriptionEnhancedInput, DescriptionEnhancedStage, DescriptionEnhanced, ImageTag, TranslateTagsInput, ImageDescription, DescribeImagesInput, DescribeTranslatedInput, WllamaAssets, LitertAssets, GpuBuffer, GpuDevice, GpuWasm, GpuThrottleParams, GpuNavigator, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, ImageSize, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineTimings, EnginePromptProgress, EngineChunk, StreamReplyParams, EngineRunParams, };
+export type { ChatMessage, ChatTool, ChatToolCall, ChatToolResult, ChatToolSchema, ChatToolValue, WebSearchConfig, WebSearchResult, WebSearchSettings, FiatSnapshot, CryptoSnapshot, PriceSnapshot, PriceSections, PriceCoin, PriceFeed, CurrencyResult, CalculationResult, WikipediaPage, WikipediaResponse, DuckDuckGoTopic, DuckDuckGoResponse, ChatModel, LlmLimits, ChatStatusSnapshot, ChatInput, ChatPreloadInput, ChatState, CancelChat, CallOptions, EstimateEntry, EstimateReport, DescribeImageInput, DescriptionEnhancedInput, DescriptionEnhancedStage, DescriptionEnhanced, ImageTag, TranslateTagsInput, ImageDescription, DescribeImagesInput, DescribeTranslatedInput, WllamaAssets, LitertAssets, GpuBuffer, GpuDevice, GpuWasm, GpuThrottleParams, GpuNavigator, GpuAdapter, MobileNavigator, ActiveCall, RuntimeDeps, RuntimeLoadParams, RuntimeLoadWaiter, RuntimeChatParams, StoredPart, StoredFilePart, StoredModel, StoredModelMeta, ResumePlan, StoreDownloadParams, ModelStore, Runtime, EngineChatParams, StartLlmParams, LlmRuntime, LlmEngine, EngineMessage, ImageSize, EngineContentPart, WllamaContentPart, WllamaMessage, LitertContentPart, LitertMessage, LitertEngine, LitertModule, LitertSettings, LitertSettingsParams, LitertSession, LitertChatParams, StreamLitertParams, EngineDelta, EngineTimings, EnginePromptProgress, EngineChunk, StreamReplyParams, EngineRunParams, };

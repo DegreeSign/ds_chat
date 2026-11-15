@@ -1,6 +1,7 @@
 import { ChatModelId } from '../types/enums';
 import type {
     ChatModel,
+    GpuAdapter,
     GpuNavigator,
     MobileNavigator,
 } from '../types';
@@ -52,6 +53,16 @@ const
                     file: `mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf`,
                     revision: `52d6c8ffea26cc873ac5ad116f8631268d7eb503`,
                 },
+            },
+        },
+        {
+            // text-only CPU QAT build
+            id: ChatModelId.gemma4_e2b_qat,
+            reasoning: true,
+            cpu: {
+                repo: `unsloth/gemma-4-E2B-it-qat-GGUF`,
+                file: `gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf`,
+                revision: `66a399f68ddd113b06dff02fca9523e55465d11d`,
             },
         },
         {
@@ -113,8 +124,15 @@ const
     /** Find catalog entry by id */
     findLlmModel = (id?: string): ChatModel | undefined =>
         id ? llmModels.find(model => model.id == id) : undefined,
+    /** Whether adapter data is usable */
+    usableGpu = (adapter: GpuAdapter): boolean =>
+        !!adapter.info?.vendor?.trim()
+        && !!adapter.info?.architecture?.trim()
+        && adapter.info?.vendor != `google`
+        && adapter.info?.isFallbackAdapter !== true
+        && adapter.isFallbackAdapter !== true,
     /** Whether browser has WebGPU adapter */
-    gpuAdapter = async (): Promise<boolean> => {
+    gpuAdapter = async (force = false): Promise<boolean> => {
         const gpu = typeof navigator == `undefined`
             ? undefined
             : (navigator as GpuNavigator).gpu;
@@ -128,8 +146,8 @@ const
                 new Promise<undefined>(resolve => {
                     timer = setTimeout(() => resolve(undefined), gpuProbeTimeout);
                 }),
-            ]);
-            return !!adapter;
+            ]) as GpuAdapter | null | undefined;
+            return !!adapter && (force || usableGpu(adapter));
         } catch { return false; }
         finally { if (timer) clearTimeout(timer); };
     },

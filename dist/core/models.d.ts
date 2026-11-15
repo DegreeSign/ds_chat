@@ -16,7 +16,7 @@ contextWindow: (model: ChatModel) => number,
 /** Find catalog entry by id */
 findLlmModel: (id?: string) => ChatModel | undefined, 
 /** Whether browser has WebGPU adapter */
-gpuAdapter: () => Promise<boolean>, 
+gpuAdapter: (force?: boolean) => Promise<boolean>, 
 /** Default model, GPU when available */
 defaultLlmModel: () => Promise<ChatModelId | undefined>, 
 /** Resolve requested model or default */
